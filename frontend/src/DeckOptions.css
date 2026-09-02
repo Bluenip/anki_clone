@@ -1,0 +1,207 @@
+/* ─── Deck Options Layout & Glassmorphism ─────────────────────────────── */
+
+.options-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 2rem 1rem;
+}
+
+.options-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 2rem;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.options-breadcrumb {
+  font-size: 1.1rem;
+  font-weight: 500;
+}
+
+.options-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.options-select-sm {
+  background: var(--surface);
+  color: var(--text-primary);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  padding: 0.4rem 0.8rem;
+  font-family: inherit;
+  font-size: 0.9rem;
+  outline: none;
+  cursor: pointer;
+}
+
+.options-select-sm:focus {
+  border-color: var(--accent-cyan);
+}
+
+.options-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem;
+  align-items: start;
+}
+
+.options-col {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.options-card {
+  padding: 1.5rem;
+}
+
+.options-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1.25rem;
+}
+
+.options-card-header h3 {
+  font-size: 1.2rem;
+  font-weight: 600;
+  margin: 0;
+}
+
+.help-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--surface-hover);
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  font-weight: bold;
+  cursor: help;
+}
+
+.options-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.75rem;
+  font-size: 0.9rem;
+}
+
+.options-row:last-child {
+  margin-bottom: 0;
+}
+
+.options-row label {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.options-row input[type="text"],
+.options-row input[type="number"],
+.options-row select {
+  width: 140px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  padding: 0.4rem 0.5rem;
+  font-family: inherit;
+  font-size: 0.85rem;
+  outline: none;
+  transition: var(--transition);
+}
+
+.options-row input:focus,
+.options-row select:focus {
+  border-color: var(--accent-cyan);
+}
+
+.options-row select {
+  width: 220px;
+  cursor: pointer;
+}
+
+.options-row select option {
+  background: var(--bg-secondary);
+}
+
+/* Custom Toggle Switch */
+.toggle-switch {
+  width: 40px;
+  height: 22px;
+  background: var(--surface-hover);
+  border-radius: 12px;
+  position: relative;
+  cursor: pointer;
+  transition: var(--transition);
+  border: 1px solid var(--glass-border);
+}
+
+.toggle-switch::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  background: #aaa;
+  border-radius: 50%;
+  transition: var(--transition);
+}
+
+.toggle-switch.active {
+  background: var(--info);
+  border-color: var(--info);
+}
+
+.toggle-switch.active::after {
+  left: 20px;
+  background: #fff;
+}
+
+/* Glass Slider for Easy Days */
+.slider-row {
+  display: grid;
+  grid-template-columns: 40px 1fr;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.day-label {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.glass-slider {
+  -webkit-appearance: none;
+  width: 100%;
+  height: 4px;
+  background: var(--surface-hover);
+  border-radius: 2px;
+  outline: none;
+}
+
+.glass-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #8cb4f5; /* Light blue thumb to match Anki */
+  cursor: pointer;
+  box-shadow: 0 0 8px rgba(140, 180, 245, 0.5);
+}
+
+@media (max-width: 900px) {
+  .options-grid {
+    grid-template-columns: 1fr;
+  }
+}
