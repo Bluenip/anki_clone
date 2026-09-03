@@ -200,6 +200,29 @@
   box-shadow: 0 0 8px rgba(140, 180, 245, 0.5);
 }
 
+/* Easy Days Header */
+.easy-days-header {
+  display: grid;
+  grid-template-columns: 40px 1fr;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.easy-days-header span:first-child {
+  /* spacer for day label column */
+}
+
+.easy-days-header span:not(:first-child) {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.easy-days-label-min { text-align: left; }
+.easy-days-label-mid { text-align: center; }
+.easy-days-label-max { text-align: right; }
+
 @media (max-width: 900px) {
   .options-grid {
     grid-template-columns: 1fr;

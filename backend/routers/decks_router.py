@@ -3,11 +3,13 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 from datetime import datetime, timezone
 from typing import List
+import json
 
 from database import get_db
 from models import User, Deck, Card, StudyProgress, ReviewLog
 from schemas import DeckCreate, DeckUpdate, DeckResponse
 from auth import get_current_user
+from sm2 import parse_settings_to_config
 
 router = APIRouter(prefix="/api/decks", tags=["Decks"])
 
@@ -18,27 +20,29 @@ def get_deck_with_stats(deck: Deck, user_id: int, db: Session) -> DeckResponse:
 
     now = datetime.now(timezone.utc)
 
-    # Due cards: studied, interval > 0, and review time is reached
+    # Due review cards (graduated, interval > 0, and review time is reached)
     due_cards = (
         db.query(StudyProgress)
         .join(Card, Card.id == StudyProgress.card_id)
         .filter(
             Card.deck_id == deck.id,
             StudyProgress.user_id == user_id,
+            StudyProgress.is_suspended == False,
+            StudyProgress.card_state == "review",
             StudyProgress.next_review <= now,
-            StudyProgress.interval_days > 0,
         )
         .count()
     )
 
-    # Learn cards: studied, but interval == 0 (still in learning phase)
+    # Learn cards: in learning or relearning state
     learn_cards = (
         db.query(StudyProgress)
         .join(Card, Card.id == StudyProgress.card_id)
         .filter(
             Card.deck_id == deck.id,
             StudyProgress.user_id == user_id,
-            StudyProgress.interval_days == 0,
+            StudyProgress.is_suspended == False,
+            StudyProgress.card_state.in_(["learning", "relearning"]),
         )
         .count()
     )
@@ -59,16 +63,15 @@ def get_deck_with_stats(deck: Deck, user_id: int, db: Session) -> DeckResponse:
         .count()
     )
 
-    import json
+    # Load config for daily limits
     settings = {}
     if deck.settings:
         try:
             settings = json.loads(deck.settings)
-        except:
+        except (json.JSONDecodeError, TypeError):
             pass
-    
-    new_limit = int(settings.get("new_cards_per_day", 20))
-    rev_limit = int(settings.get("maximum_reviews_per_day", 200))
+
+    config = parse_settings_to_config(settings)
 
     # Calculate studied today from ReviewLog
     start_of_today = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
@@ -97,8 +100,8 @@ def get_deck_with_stats(deck: Deck, user_id: int, db: Session) -> DeckResponse:
         .count()
     )
 
-    remaining_new_limit = max(0, new_limit - new_studied_today)
-    remaining_rev_limit = max(0, rev_limit - rev_studied_today)
+    remaining_new_limit = max(0, config.new_cards_per_day - new_studied_today)
+    remaining_rev_limit = max(0, config.maximum_reviews_per_day - rev_studied_today)
 
     new_cards = min(new_cards, remaining_new_limit)
     due_cards = min(due_cards, remaining_rev_limit)
@@ -107,7 +110,7 @@ def get_deck_with_stats(deck: Deck, user_id: int, db: Session) -> DeckResponse:
         id=deck.id,
         name=deck.name,
         description=deck.description,
-        settings=deck.settings,
+        settings=deck.settings or "{}",
         is_shared=deck.is_shared,
         created_at=deck.created_at,
         updated_at=deck.updated_at,

@@ -150,6 +150,9 @@ class StudyCardResponse(BaseModel):
     back: str
     deck_name: str
     is_new: bool = False
+    card_state: str = "new"
+    learning_step: int = 0
+    intervals: Optional[dict] = None
 
     class Config:
         from_attributes = True
@@ -170,6 +173,9 @@ class ReviewResponse(BaseModel):
     interval_days: int
     ease_factor: float
     message: str
+    card_state: str = "review"
+    is_leech: bool = False
+    lapse_count: int = 0
 
 
 # ─── Shared Decks ───────────────────────────────────────

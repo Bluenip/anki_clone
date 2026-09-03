@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_BASE = 'http://localhost:8000';
+const API_BASE = import.meta.env.VITE_API_URL || '/api';
 
 const client = axios.create({
   baseURL: API_BASE,
@@ -19,9 +19,15 @@ client.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
-      window.location.href = '/login';
+      // Don't redirect on auth endpoints — let the login/register page handle the error
+      const url = error.config?.url || '';
+      const isAuthEndpoint = url.includes('/auth/login') || url.includes('/auth/register');
+      
+      if (!isAuthEndpoint) {
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        window.location.href = '/login';
+      }
     }
     return Promise.reject(error);
   }

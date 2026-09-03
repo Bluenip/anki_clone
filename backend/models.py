@@ -63,6 +63,15 @@ class StudyProgress(Base):
     next_review = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     last_reviewed = Column(DateTime, nullable=True)
 
+    # Learning steps tracking
+    learning_step = Column(Integer, default=0)        # Current step index in learning/relearning
+    card_state = Column(String(20), default="new")    # "new", "learning", "review", "relearning"
+
+    # Lapse & leech tracking
+    lapse_count = Column(Integer, default=0)           # Number of times card lapsed
+    is_leech = Column(Boolean, default=False)          # Marked as leech
+    is_suspended = Column(Boolean, default=False)      # Suspended (leech action)
+
     user = relationship("User", back_populates="study_progress")
     card = relationship("Card", back_populates="study_progress")
 

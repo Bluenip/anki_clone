@@ -1,0 +1,31 @@
+services:
+  backend:
+    build: ./backend
+    container_name: anki-backend
+    restart: unless-stopped
+    environment:
+      - DATABASE_DIR=/data
+      - CORS_ORIGINS=*
+    volumes:
+      - anki-data:/data
+    networks:
+      - anki-network
+
+  frontend:
+    build: ./frontend
+    container_name: anki-frontend
+    restart: unless-stopped
+    ports:
+      - "3456:80"
+    depends_on:
+      - backend
+    networks:
+      - anki-network
+
+volumes:
+  anki-data:
+    driver: local
+
+networks:
+  anki-network:
+    driver: bridge

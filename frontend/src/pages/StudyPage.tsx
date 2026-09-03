@@ -11,6 +11,7 @@ const StudyPage = () => {
   const [done, setDone] = useState(false);
   const [reviewedCards, setReviewedCards] = useState<Set<number>>(new Set());
   const [animating, setAnimating] = useState(false);
+  const [leechToast, setLeechToast] = useState<string | null>(null);
 
   const fetchCard = async () => {
     setLoading(true);
@@ -27,11 +28,25 @@ const StudyPage = () => {
 
   useEffect(() => { fetchCard(); }, [deckId]);
 
+  // Auto-hide leech toast
+  useEffect(() => {
+    if (leechToast) {
+      const timer = setTimeout(() => setLeechToast(null), 4000);
+      return () => clearTimeout(timer);
+    }
+  }, [leechToast]);
+
   const handleReview = async (rating: number) => {
     if (!card) return;
     setAnimating(true);
     try {
-      await reviewCard(card.card_id, rating);
+      const res = await reviewCard(card.card_id, rating);
+      
+      // Check for leech
+      if (res.data?.is_leech) {
+        setLeechToast(`⚠️ Leech detected! (${res.data.lapse_count} lapses)`);
+      }
+
       setReviewedCards(prev => {
         const next = new Set(prev);
         next.add(card.card_id);
@@ -55,8 +70,20 @@ const StudyPage = () => {
     </div>
   );
 
+  const cardState = card?.card_state || 'new';
+  const isLearning = cardState === 'learning' || cardState === 'relearning';
+
   return (
     <div className="page-container study-container">
+      {/* Leech Toast Notification */}
+      {leechToast && (
+        <div className="leech-toast">
+          <div className="leech-toast-content">
+            {leechToast}
+          </div>
+        </div>
+      )}
+
       <div className="study-header">
         <Link to={`/decks/${deckId}`} className="btn btn-ghost btn-sm">← Back</Link>
         <span className="study-deck-name">{card?.deck_name}</span>
@@ -72,7 +99,12 @@ const StudyPage = () => {
           <div className="card-face card-front">
             <div className="card-label">Question</div>
             <div className="card-content" dangerouslySetInnerHTML={{ __html: card?.front || '' }} />
-            {card?.is_new && <span className="badge badge-new">NEW</span>}
+            <div className="card-badges">
+              {card?.is_new && <span className="badge badge-new">NEW</span>}
+              {isLearning && <span className="badge badge-learning">
+                {cardState === 'learning' ? 'LEARNING' : 'RELEARNING'}
+              </span>}
+            </div>
           </div>
           {showAnswer && (
             <div className="card-face card-back">
