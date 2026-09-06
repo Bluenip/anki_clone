@@ -1,10 +1,12 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import client from '../api/client';
+import { useAuth } from '../context/AuthContext';
 
 const AccountPage = () => {
   const [activeTab, setActiveTab] = useState<'email' | 'password'>('email');
   const navigate = useNavigate();
+  const { logout } = useAuth();
   
   // Email Form State
   const [newEmail, setNewEmail] = useState('');
@@ -46,7 +48,7 @@ const AccountPage = () => {
     if (window.confirm("Are you sure you want to completely remove your account? This action cannot be undone.")) {
       try {
         await client.delete('/api/auth/me');
-        localStorage.removeItem('token');
+        logout();
         navigate('/login');
       } catch (err) {
         alert('Failed to delete account');
