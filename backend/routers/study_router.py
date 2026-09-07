@@ -34,6 +34,11 @@ def _start_of_today() -> datetime:
     return datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
 
 
+def _start_of_target_day(now: datetime, days: int) -> datetime:
+    """Return the start of the target day in UTC."""
+    return (now + timedelta(days=days)).replace(hour=0, minute=0, second=0, microsecond=0)
+
+
 def _count_studied_today(db: Session, deck_id: int, user_id: int):
     """Count new and review cards studied today."""
     sot = _start_of_today()
@@ -331,7 +336,7 @@ def _handle_learning(progress: StudyProgress, rating: int, config: DeckSchedulin
         progress.ease_factor = result.ease_factor
         progress.interval_days = max(result.interval_days, config.graduating_interval)
         progress.repetitions = result.repetitions
-        progress.next_review = now + timedelta(days=progress.interval_days)
+        progress.next_review = _start_of_target_day(now, progress.interval_days)
         return
 
     # Card enters learning on first review
@@ -381,7 +386,7 @@ def _graduate(progress: StudyProgress, config: DeckSchedulingConfig, now: dateti
 
     progress.interval_days = min(progress.interval_days, config.maximum_interval)
     progress.repetitions = 1
-    progress.next_review = now + timedelta(days=progress.interval_days)
+    progress.next_review = _start_of_target_day(now, progress.interval_days)
 
 
 def _handle_review(progress: StudyProgress, rating: int, config: DeckSchedulingConfig, now: datetime):
@@ -397,7 +402,7 @@ def _handle_review(progress: StudyProgress, rating: int, config: DeckSchedulingC
     progress.ease_factor = result.ease_factor
     progress.interval_days = result.interval_days
     progress.repetitions = result.repetitions
-    progress.next_review = now + timedelta(days=result.interval_days)
+    progress.next_review = _start_of_target_day(now, result.interval_days)
 
 
 def _handle_lapse(progress: StudyProgress, config: DeckSchedulingConfig, now: datetime):
@@ -430,7 +435,7 @@ def _handle_lapse(progress: StudyProgress, config: DeckSchedulingConfig, now: da
         new_ivl = min(new_ivl, config.maximum_interval)
         progress.interval_days = new_ivl
         progress.repetitions = 0
-        progress.next_review = now + timedelta(days=new_ivl)
+        progress.next_review = _start_of_target_day(now, new_ivl)
 
 
 def _handle_relearning(progress: StudyProgress, rating: int, config: DeckSchedulingConfig, now: datetime):
@@ -477,7 +482,7 @@ def _graduate_from_relearning(progress: StudyProgress, config: DeckSchedulingCon
     new_ivl = min(new_ivl, config.maximum_interval)
     progress.interval_days = new_ivl
     progress.repetitions = 0
-    progress.next_review = now + timedelta(days=new_ivl)
+    progress.next_review = _start_of_target_day(now, new_ivl)
 
 
 @router.get("/{deck_id}/stats", response_model=StudyStatsResponse)

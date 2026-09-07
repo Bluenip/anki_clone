@@ -154,7 +154,7 @@ const DecksPage = () => {
       </div>
 
       <div style={{ textAlign: 'center', marginTop: '3rem', display: 'flex', gap: '1rem', justifyContent: 'center' }}>
-        <button className="btn btn-pill" onClick={() => navigate('/shared')}>Get Shared</button>
+        <button className="btn btn-pill" onClick={() => window.open('https://ankiweb.net/shared/decks', '_blank')}>Get Shared</button>
         <button className="btn btn-pill" onClick={() => setShowCreateModal(true)}>Create Deck</button>
         <button className="btn btn-pill" onClick={() => fileInputRef.current?.click()}>Import File</button>
         <input 
