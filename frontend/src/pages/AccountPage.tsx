@@ -57,9 +57,9 @@ const AccountPage = () => {
   };
 
   return (
-    <div className="page-container" style={{ maxWidth: '900px', margin: '2rem auto' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
-        <h1 style={{ fontSize: '2rem', margin: 0 }}>Account Settings</h1>
+    <div className="page-container account-page">
+      <div className="account-header">
+        <h1>Account Settings</h1>
         <button className="btn btn-ghost" style={{ color: 'var(--accent-cyan)' }} onClick={handleRemoveAccount}>
           Remove Account
         </button>
@@ -68,8 +68,8 @@ const AccountPage = () => {
       {error && <div className="error-message" style={{ marginBottom: '1rem' }}>{error}</div>}
       {success && <div className="success-message" style={{ color: 'var(--success)', marginBottom: '1rem' }}>{success}</div>}
 
-      <div style={{ display: 'flex', gap: '2rem', background: 'var(--surface-light)', borderRadius: '12px', padding: '2rem' }}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', minWidth: '200px' }}>
+      <div className="account-layout glass-card">
+        <div className="account-tabs">
           <button 
             className={`btn ${activeTab === 'email' ? 'btn-primary' : 'btn-ghost'}`}
             style={{ textAlign: 'left', justifyContent: 'flex-start' }}
@@ -86,7 +86,7 @@ const AccountPage = () => {
           </button>
         </div>
 
-        <div style={{ flex: 1 }}>
+        <div className="account-content">
           {activeTab === 'email' && (
             <form onSubmit={handleUpdateEmail} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               <div className="form-group">
