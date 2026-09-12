@@ -582,10 +582,11 @@ a:hover { color: #33dfff; }
   .page-header { flex-direction: column; align-items: flex-start; }
   .page-header h1 { font-size: 1.5rem; }
 
-  /* Deck list - hide stats, show only name + gear */
+  /* Deck list - compact but keep stats visible */
   .deck-list-header { display: none; }
-  .deck-row { grid-template-columns: 1fr auto; gap: 0.5rem; }
-  .col-stat { display: none; }
+  .deck-row { grid-template-columns: 1fr 36px 36px 36px auto; gap: 0.25rem; }
+  .col-stat { font-size: 0.8rem; }
+  .col-name { font-size: 0.95rem; }
   .desktop-deck-table { padding: 1rem; }
 
   /* Deck bottom buttons */
