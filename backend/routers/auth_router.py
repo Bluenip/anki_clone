@@ -118,6 +118,10 @@ def delete_account(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
+    from media_utils import cleanup_user_media
+    # Delete all media files for this user
+    cleanup_user_media(current_user.id)
+    
     db.delete(current_user)
     db.commit()
     return {"detail": "Account deleted successfully"}

@@ -6,6 +6,7 @@ from database import get_db
 from models import User, Deck, Card, StudyProgress
 from schemas import CardCreate, CardUpdate, CardResponse, BrowseCardResponse
 from auth import get_current_user
+from media_utils import cleanup_orphaned_media
 
 router = APIRouter(prefix="/api", tags=["Cards"])
 
@@ -129,3 +130,7 @@ def delete_card(
 
     db.delete(card)
     db.commit()
+
+    # After DB delete, remove any orphaned media files from disk
+    cleanup_orphaned_media(current_user.id, db)
+

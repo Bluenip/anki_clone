@@ -10,6 +10,7 @@ from models import User, Deck, Card, StudyProgress, ReviewLog
 from schemas import DeckCreate, DeckUpdate, DeckResponse
 from auth import get_current_user
 from sm2 import parse_settings_to_config
+from media_utils import get_card_media_filenames, get_orphaned_media, cleanup_media_files, cleanup_orphaned_media
 
 router = APIRouter(prefix="/api/decks", tags=["Decks"])
 
@@ -204,14 +205,19 @@ def delete_deck(
     if not deck:
         raise HTTPException(status_code=404, detail="Deck not found")
 
-    # Explicitly delete related ReviewLog entries
-    card_ids = db.query(Card.id).filter(Card.deck_id == deck.id).all()
-    card_ids = [c[0] for c in card_ids]
+    # Delete related ReviewLog entries first
+    card_ids = [c.id for c in db.query(Card.id).filter(Card.deck_id == deck.id).all()]
     if card_ids:
         db.query(ReviewLog).filter(ReviewLog.card_id.in_(card_ids)).delete(synchronize_session=False)
 
+    # Delete the deck (cascades to cards and study progress)
     db.delete(deck)
     db.commit()
+
+    # After DB delete, scan disk and remove ALL orphaned media files
+    # This catches both referenced files AND unreferenced files (e.g. images
+    # that were copied during .apkg import but not linked in card HTML)
+    cleanup_orphaned_media(current_user.id, db)
 
 from schemas import ImportRequest
 @router.post("/{deck_id}/import", response_model=dict)

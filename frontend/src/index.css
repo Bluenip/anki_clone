@@ -337,6 +337,12 @@ a:hover { color: #33dfff; }
   color: var(--text-muted); margin-bottom: 1rem; font-weight: 600;
 }
 .card-content { font-size: 1.25rem; line-height: 1.8; }
+.card-content audio {
+  display: block; width: 100%; max-width: 320px; margin: 0.75rem auto;
+  height: 40px; border-radius: var(--radius-sm);
+  filter: invert(1) hue-rotate(180deg) brightness(0.85);
+}
+.card-content img { max-width: 100%; height: auto; border-radius: var(--radius-sm); margin: 0.5rem 0; }
 .card-divider {
   width: 60px; height: 2px; margin: 2rem auto;
   background: var(--accent-gradient-h); border-radius: 1px;

@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { getNextCard, reviewCard, getStudyStats } from '../api/study';
+import { playFlipSound, playRatingSound, playCompleteSound } from '../sounds';
 
 const StudyPage = () => {
   const { deckId } = useParams<{ deckId: string }>();
@@ -12,6 +13,29 @@ const StudyPage = () => {
   const [reviewedCards, setReviewedCards] = useState<Set<number>>(new Set());
   const [animating, setAnimating] = useState(false);
   const [leechToast, setLeechToast] = useState<string | null>(null);
+  const cardWrapperRef = useRef<HTMLDivElement>(null);
+
+  // Play all audio elements inside the card wrapper
+  const playCardAudio = useCallback((section?: 'front' | 'back') => {
+    if (!cardWrapperRef.current) return;
+    
+    // Stop any currently playing audio first
+    const allAudio = cardWrapperRef.current.querySelectorAll('audio');
+    allAudio.forEach(a => { a.pause(); a.currentTime = 0; });
+    
+    // Play audio in the specified section, or all if not specified
+    let container: Element | null = cardWrapperRef.current;
+    if (section === 'front') {
+      container = cardWrapperRef.current.querySelector('.card-front');
+    } else if (section === 'back') {
+      container = cardWrapperRef.current.querySelector('.card-back');
+    }
+    
+    if (container) {
+      const audioElements = container.querySelectorAll('audio');
+      audioElements.forEach(a => a.play().catch(() => { /* browser autoplay policy */ }));
+    }
+  }, []);
 
   const fetchCard = async () => {
     setLoading(true);
@@ -21,12 +45,32 @@ const StudyPage = () => {
         getStudyStats(+deckId!)
       ]);
       setStats(statsRes.data);
-      if (!cardRes.data) { setDone(true); } else { setCard(cardRes.data); setDone(false); }
+      if (!cardRes.data) {
+        setDone(true);
+        if (reviewedCards.size > 0) playCompleteSound();
+      } else { setCard(cardRes.data); setDone(false); }
     } catch { setDone(true); }
     finally { setLoading(false); setShowAnswer(false); }
   };
 
   useEffect(() => { fetchCard(); }, [deckId]);
+
+  // Auto-play front audio when a new card appears
+  useEffect(() => {
+    if (card && !loading && !done) {
+      // Small delay to let DOM render the audio elements
+      const timer = setTimeout(() => playCardAudio('front'), 100);
+      return () => clearTimeout(timer);
+    }
+  }, [card, loading, done, playCardAudio]);
+
+  // Auto-play back audio when answer is revealed
+  useEffect(() => {
+    if (showAnswer) {
+      const timer = setTimeout(() => playCardAudio('back'), 100);
+      return () => clearTimeout(timer);
+    }
+  }, [showAnswer, playCardAudio]);
 
   // Auto-hide leech toast
   useEffect(() => {
@@ -38,6 +82,7 @@ const StudyPage = () => {
 
   const handleReview = async (rating: number) => {
     if (!card) return;
+    playRatingSound(rating);
     setAnimating(true);
     try {
       const res = await reviewCard(card.card_id, rating);
@@ -94,7 +139,7 @@ const StudyPage = () => {
         </div>
       </div>
 
-      <div className={`study-card-wrapper ${animating ? 'slide-out' : 'slide-in'}`}>
+      <div ref={cardWrapperRef} className={`study-card-wrapper ${animating ? 'slide-out' : 'slide-in'}`}>
         <div className={`study-card glass-card ${showAnswer ? 'flipped' : ''}`}>
           <div className="card-face card-front">
             <div className="card-label">Question</div>
@@ -118,7 +163,7 @@ const StudyPage = () => {
 
       <div className="study-actions">
         {!showAnswer ? (
-          <button className="btn btn-primary btn-lg btn-show-answer" onClick={() => setShowAnswer(true)}>
+          <button className="btn btn-primary btn-lg btn-show-answer" onClick={() => { playFlipSound(); setShowAnswer(true); }}>
             Show Answer
           </button>
         ) : (

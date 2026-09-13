@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { listDecks, createDeck, deleteDeck, updateDeck, importCards } from '../api/decks';
+import { listDecks, createDeck, deleteDeck, updateDeck, importCards, importApkg, exportApkg } from '../api/decks';
 
 const DecksPage = () => {
   const [decks, setDecks] = useState<any[]>([]);
@@ -14,22 +14,53 @@ const DecksPage = () => {
   const [importDeckId, setImportDeckId] = useState<number | null>(null);
   const [importSeparator, setImportSeparator] = useState('\t');
   
+  // Export modal state
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [exportDeckId, setExportDeckId] = useState<number | null>(null);
+  const [exportDeckName, setExportDeckName] = useState('');
+  const [includeScheduling, setIncludeScheduling] = useState(false);
+  const [exporting, setExporting] = useState(false);
+
+  // Import .apkg state
+  const [importingApkg, setImportingApkg] = useState(false);
+
   // Dropdown state
   const [activeDropdown, setActiveDropdown] = useState<number | null>(null);
   
   const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      setImportText(ev.target?.result as string);
-      setImportDeckId(decks.length > 0 ? decks[0].id : null);
-      setShowImportModal(true);
-    };
-    reader.readAsText(file);
+    
+    if (file.name.endsWith('.apkg')) {
+      // Handle .apkg import
+      setImportingApkg(true);
+      try {
+        const res = await importApkg(file);
+        const data = res.data;
+        let message = `Imported ${data.cards_imported} cards into deck "${data.deck_name}"`;
+        if (data.media_imported > 0) {
+          message += ` + ${data.media_imported} media files`;
+        }
+        alert(message);
+        fetchDecks();
+      } catch {
+        alert('Failed to import .apkg file.');
+      } finally {
+        setImportingApkg(false);
+      }
+    } else {
+      // Handle text file import (existing behavior)
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        setImportText(ev.target?.result as string);
+        setImportDeckId(decks.length > 0 ? decks[0].id : null);
+        setShowImportModal(true);
+      };
+      reader.readAsText(file);
+    }
     e.target.value = '';
   };
 
@@ -86,6 +117,34 @@ const DecksPage = () => {
     setShowImportModal(true);
   };
 
+  const openExportModal = (deckId: number, deckName: string) => {
+    setExportDeckId(deckId);
+    setExportDeckName(deckName);
+    setIncludeScheduling(false);
+    setShowExportModal(true);
+  };
+
+  const handleExport = async () => {
+    if (!exportDeckId) return;
+    setExporting(true);
+    try {
+      const res = await exportApkg(exportDeckId, includeScheduling);
+      const url = window.URL.createObjectURL(new Blob([res.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `${exportDeckName}.apkg`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      setShowExportModal(false);
+    } catch {
+      alert('Failed to export deck.');
+    } finally {
+      setExporting(false);
+    }
+  };
+
   const handleImport = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!importDeckId || !importText) return;
@@ -138,7 +197,7 @@ const DecksPage = () => {
                   <div className="gear-dropdown" onClick={(e) => e.stopPropagation()}>
                     <button className="gear-dropdown-item" onClick={() => { setActiveDropdown(null); handleRename(deck.id, deck.name); }}>Rename</button>
                     <button className="gear-dropdown-item" onClick={() => { setActiveDropdown(null); navigate(`/decks/${deck.id}/options`); }}>Options</button>
-                    <button className="gear-dropdown-item" onClick={() => { setActiveDropdown(null); alert('Export is coming soon!'); }}>Export</button>
+                    <button className="gear-dropdown-item" onClick={() => { setActiveDropdown(null); openExportModal(deck.id, deck.name); }}>Export</button>
                     <button className="gear-dropdown-item" onClick={() => { setActiveDropdown(null); openImportModal(deck.id); }}>Import Cards</button>
                     <button className="gear-dropdown-item" style={{ color: '#ef4444' }} onClick={() => { setActiveDropdown(null); handleDelete(deck.id); }}>Delete</button>
                   </div>
@@ -156,10 +215,12 @@ const DecksPage = () => {
       <div style={{ textAlign: 'center', marginTop: '3rem', display: 'flex', gap: '1rem', justifyContent: 'center' }}>
         <button className="btn btn-pill" onClick={() => window.open('https://ankiweb.net/shared/decks', '_blank')}>Get Shared</button>
         <button className="btn btn-pill" onClick={() => setShowCreateModal(true)}>Create Deck</button>
-        <button className="btn btn-pill" onClick={() => fileInputRef.current?.click()}>Import File</button>
+        <button className="btn btn-pill" onClick={() => fileInputRef.current?.click()} disabled={importingApkg}>
+          {importingApkg ? 'Importing...' : 'Import File'}
+        </button>
         <input 
           type="file" 
-          accept=".txt,.csv" 
+          accept=".txt,.csv,.apkg" 
           style={{ display: 'none' }} 
           ref={fileInputRef} 
           onChange={handleFileUpload} 
@@ -226,6 +287,39 @@ const DecksPage = () => {
                 <button type="submit" className="btn btn-primary">Import</button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {showExportModal && (
+        <div className="modal-overlay" onClick={() => setShowExportModal(false)}>
+          <div className="modal glass-card" onClick={e => e.stopPropagation()}>
+            <h2>Export Deck</h2>
+            <div className="form-group">
+              <label>Deck</label>
+              <input type="text" value={exportDeckName} readOnly style={{ opacity: 0.7 }} />
+            </div>
+            <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <input 
+                type="checkbox" 
+                id="include-scheduling" 
+                checked={includeScheduling} 
+                onChange={e => setIncludeScheduling(e.target.checked)} 
+                style={{ width: 'auto' }}
+              />
+              <label htmlFor="include-scheduling" style={{ margin: 0 }}>Include scheduling information</label>
+            </div>
+            <div className="modal-actions">
+              <button type="button" className="btn btn-ghost" onClick={() => setShowExportModal(false)}>Cancel</button>
+              <button 
+                type="button" 
+                className="btn btn-primary" 
+                onClick={handleExport} 
+                disabled={exporting}
+              >
+                {exporting ? 'Exporting...' : 'Export'}
+              </button>
+            </div>
           </div>
         </div>
       )}

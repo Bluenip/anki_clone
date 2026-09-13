@@ -1,8 +1,9 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from database import engine, Base
-from routers import auth_router, decks_router, cards_router, study_router, shared_router
+from routers import auth_router, decks_router, cards_router, study_router, shared_router, apkg_router
 
 # Create all tables
 Base.metadata.create_all(bind=engine)
@@ -14,6 +15,9 @@ app = FastAPI(
 )
 
 import os
+
+# Create media/ directory if it doesn't exist
+os.makedirs(os.path.join(os.path.dirname(__file__), "media"), exist_ok=True)
 
 # CORS
 allowed_origins = os.getenv(
@@ -35,7 +39,10 @@ app.include_router(decks_router.router)
 app.include_router(cards_router.router)
 app.include_router(study_router.router)
 app.include_router(shared_router.router)
+app.include_router(apkg_router.router)
 
+# Mount static files
+app.mount("/api/media", StaticFiles(directory=os.path.join(os.path.dirname(__file__), "media")), name="media")
 
 @app.get("/")
 def root():
