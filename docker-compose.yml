@@ -8,6 +8,7 @@ services:
       - CORS_ORIGINS=*
     volumes:
       - anki-data:/data
+      - anki-media:/app/media
     networks:
       - anki-network
 
@@ -24,6 +25,8 @@ services:
 
 volumes:
   anki-data:
+    driver: local
+  anki-media:
     driver: local
 
 networks:
