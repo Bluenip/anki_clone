@@ -1,0 +1,22 @@
+.note-types-page label { display: flex; flex-direction: column; gap: .5rem; margin-block: 1rem; font-weight: 500; }
+.note-types-page input, .note-types-page select, .note-types-page textarea,
+.card-face-container input, .media-tools input, .flag-selector select {
+  box-sizing: border-box; width: 100%; min-width: 0; max-width: 100%;
+  background: #25252b; color: #ededf2; border: 1px solid #55555e;
+  border-radius: 6px; padding: .65rem .8rem; font: inherit;
+}
+.note-types-page textarea { font-family: ui-monospace, monospace; resize: vertical; }
+.note-types-page button, .media-tools button, .formatting-tools button,
+.fsrs-optimizer button, .fsrs-parameters button {
+  background: #35353f; color: #ededf2; border: 1px solid #62626d;
+  border-radius: 6px; padding: .5rem .8rem; margin: .2rem .3rem .2rem 0;
+  font: inherit; cursor: pointer;
+}
+.note-types-page button:hover, .media-tools button:hover, .formatting-tools button:hover { background: #464654; }
+.note-types-page :disabled, .media-tools :disabled, .formatting-tools :disabled { opacity: .55; cursor: wait; }
+.note-types-page input:focus, .note-types-page textarea:focus, .card-face-container input:focus { outline: 2px solid #66bfff; outline-offset: 2px; }
+.media-tools label { display: block; font-size: .85rem; }
+.media-tools input { margin-block: .4rem; font-size: .85rem; }
+.formatting-tools button { font-size: .8rem; padding: .3rem .55rem; }
+.flag-selector { display: flex; align-items: center; gap: .75rem; flex-wrap: wrap; margin-block: .75rem; }
+.flag-selector select { width: auto; }

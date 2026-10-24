@@ -1,25 +1,55 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { browseSharedDecks, getCategories } from '../api/shared';
+import type { SharedDeck } from '../api/shared';
 
 const SharedDecksPage = () => {
-  const [decks, setDecks] = useState<any[]>([]);
+  const [decks, setDecks] = useState<SharedDeck[]>([]);
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState('');
   const [categories, setCategories] = useState<any>({});
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => { getCategories().then(r => setCategories(r.data)).catch(() => {}); }, []);
+  useEffect(() => {
+    void getCategories().then(r => setCategories(r.data)).catch(() => {});
+  }, []);
 
-  const fetchDecks = async () => {
+  useEffect(() => {
+    let ignore = false;
+    browseSharedDecks(search, category)
+      .then((res) => {
+        if (!ignore) {
+          setDecks(res.data);
+          setLoading(false);
+        }
+      })
+      .catch(() => {
+        if (!ignore) {
+          setLoading(false);
+        }
+      });
+
+    return () => {
+      ignore = true;
+    };
+  }, [search, category]);
+
+  const fetchDecks = useCallback(async () => {
     setLoading(true);
-    try { const res = await browseSharedDecks(search, category); setDecks(res.data); }
-    catch { /* */ } finally { setLoading(false); }
+    try {
+      const res = await browseSharedDecks(search, category);
+      setDecks(res.data);
+    } catch {
+      /* ignore */
+    } finally {
+      setLoading(false);
+    }
+  }, [search, category]);
+
+  const handleSearch = (e: React.FormEvent) => {
+    e.preventDefault();
+    void fetchDecks();
   };
-
-  useEffect(() => { fetchDecks(); }, [category]);
-
-  const handleSearch = (e: React.FormEvent) => { e.preventDefault(); fetchDecks(); };
 
   const renderStars = (rating: number) => {
     const stars = [];

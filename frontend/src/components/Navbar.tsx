@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, NavLink, useNavigate } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../context/useAuth';
 
 const Navbar = () => {
   const { user, logout } = useAuth();
@@ -27,6 +27,8 @@ const Navbar = () => {
               <NavLink to="/decks" className={({ isActive }) => isActive ? "menu-item active" : "menu-item"}>Decks</NavLink>
               <NavLink to="/add" className={({ isActive }) => isActive ? "menu-item active" : "menu-item"}>Add</NavLink>
               <NavLink to="/browse" className={({ isActive }) => isActive ? "menu-item active" : "menu-item"}>Browse</NavLink>
+              <NavLink to="/stats" className={({ isActive }) => isActive ? "menu-item active" : "menu-item"}>Stats</NavLink>
+              <NavLink to="/custom-study" className={({ isActive }) => isActive ? "menu-item active" : "menu-item"}>Custom Study</NavLink>
             </div>
           )}
         </div>
@@ -34,7 +36,7 @@ const Navbar = () => {
           {user ? (
             <>
               <NavLink to="/account" className={({ isActive }) => isActive ? "menu-item active" : "menu-item"}>Account</NavLink>
-              <span className="menu-item" onClick={handleLogout} style={{ cursor: 'pointer' }}>Log Out</span>
+              <button className="menu-item" onClick={handleLogout} style={{ cursor: 'pointer', background: 'none', border: 'none', color: 'inherit', font: 'inherit', padding: 0 }}>Log Out</button>
             </>
           ) : (
             <>
@@ -58,6 +60,8 @@ const Navbar = () => {
               <NavLink to="/decks" className={({ isActive }) => isActive ? "mobile-nav-item active" : "mobile-nav-item"} onClick={closeMenu}>Decks</NavLink>
               <NavLink to="/add" className={({ isActive }) => isActive ? "mobile-nav-item active" : "mobile-nav-item"} onClick={closeMenu}>Add</NavLink>
               <NavLink to="/browse" className={({ isActive }) => isActive ? "mobile-nav-item active" : "mobile-nav-item"} onClick={closeMenu}>Browse</NavLink>
+              <NavLink to="/stats" className={({ isActive }) => isActive ? "mobile-nav-item active" : "mobile-nav-item"} onClick={closeMenu}>Stats</NavLink>
+              <NavLink to="/custom-study" className={({ isActive }) => isActive ? "mobile-nav-item active" : "mobile-nav-item"} onClick={closeMenu}>Custom Study</NavLink>
               <NavLink to="/account" className={({ isActive }) => isActive ? "mobile-nav-item active" : "mobile-nav-item"} onClick={closeMenu}>Account</NavLink>
               <span className="mobile-nav-item" onClick={handleLogout}>Log Out</span>
             </>

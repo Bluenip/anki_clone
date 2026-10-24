@@ -1,41 +1,35 @@
-import { createContext, useContext, useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import type { ReactNode } from 'react';
 import { getMeApi } from '../api/auth';
-
-interface User {
-  id: number;
-  email: string;
-  username: string;
-}
-
-interface AuthContextType {
-  user: User | null;
-  token: string | null;
-  login: (token: string, user: User) => void;
-  logout: () => void;
-  loading: boolean;
-}
-
-const AuthContext = createContext<AuthContextType>({
-  user: null, token: null, login: () => {}, logout: () => {}, loading: true,
-});
-
-export const useAuth = () => useContext(AuthContext);
+import { AuthContext } from './auth-context-base';
+import type { User } from './auth-context-base';
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
+  const [token, setToken] = useState<string | null>(() => localStorage.getItem('token'));
   const [user, setUser] = useState<User | null>(null);
-  const [token, setToken] = useState<string | null>(localStorage.getItem('token'));
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState<boolean>(() => Boolean(localStorage.getItem('token')));
 
   useEffect(() => {
-    if (token) {
-      getMeApi()
-        .then((res) => setUser(res.data))
-        .catch(() => { localStorage.removeItem('token'); setToken(null); })
-        .finally(() => setLoading(false));
-    } else {
-      setLoading(false);
-    }
+    if (!token) return;
+    let isMounted = true;
+    getMeApi()
+      .then((res) => {
+        if (isMounted) setUser(res.data);
+      })
+      .catch(() => {
+        if (isMounted) {
+          localStorage.removeItem('token');
+          setToken(null);
+          setUser(null);
+        }
+      })
+      .finally(() => {
+        if (isMounted) setLoading(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
   }, [token]);
 
   const login = (newToken: string, newUser: User) => {

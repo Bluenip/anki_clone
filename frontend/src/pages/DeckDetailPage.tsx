@@ -1,13 +1,15 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { getDeck, deleteDeck } from '../api/decks';
+import type { Deck } from '../api/decks';
 import { getStudyStats } from '../api/study';
+import type { StudyStats } from '../api/study';
 import { shareDeck } from '../api/shared';
 
 const DeckDetailPage = () => {
   const { id } = useParams<{ id: string }>();
-  const [deck, setDeck] = useState<any>(null);
-  const [stats, setStats] = useState<any>(null);
+  const [deck, setDeck] = useState<Deck | null>(null);
+  const [stats, setStats] = useState<StudyStats | null>(null);
   const [showShare, setShowShare] = useState(false);
   const [shareTitle, setShareTitle] = useState('');
   const [shareCategory, setShareCategory] = useState('Other');
@@ -21,7 +23,7 @@ const DeckDetailPage = () => {
   }, [id]);
 
   const handleDelete = async () => {
-    if (!confirm(`Delete "${deck.name}"?`)) return;
+    if (!deck || !confirm(`Delete "${deck.name}"?`)) return;
     await deleteDeck(+id!);
     navigate('/decks');
   };
@@ -52,6 +54,7 @@ const DeckDetailPage = () => {
           </div>
           <div className="deck-detail-actions">
             <Link to={`/study/${id}`} className="btn btn-primary btn-lg">▶ Study Now</Link>
+            <Link to="/custom-study" className="btn btn-ghost">Custom Study</Link>
             <Link to={`/decks/${id}/cards`} className="btn btn-ghost">Browse Cards</Link>
             {!deck.is_shared && <button className="btn btn-ghost" onClick={() => setShowShare(true)}>Share</button>}
             <button className="btn btn-danger" onClick={handleDelete}>Delete</button>

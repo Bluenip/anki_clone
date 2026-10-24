@@ -4,6 +4,8 @@ from sqlalchemy import func
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 import json
+from pydantic import BaseModel, Field
+from typing import Literal
 
 from database import get_db
 from models import User, Deck, Card, StudyProgress, ReviewLog
@@ -12,7 +14,7 @@ from auth import get_current_user
 from sm2 import (
     sm2_algorithm, get_next_intervals, parse_steps,
     parse_settings_to_config, DeckSchedulingConfig,
-    get_interval_display,
+    get_interval_display, learning_hard_seconds,
 )
 
 router = APIRouter(prefix="/api/study", tags=["Study"])
@@ -20,13 +22,8 @@ router = APIRouter(prefix="/api/study", tags=["Study"])
 
 def _load_deck_config(deck: Deck) -> DeckSchedulingConfig:
     """Load deck settings and return a DeckSchedulingConfig."""
-    settings = {}
-    if deck.settings:
-        try:
-            settings = json.loads(deck.settings)
-        except (json.JSONDecodeError, TypeError):
-            pass
-    return parse_settings_to_config(settings)
+    from study_queue import config_for
+    return config_for(deck)
 
 
 def _start_of_today() -> datetime:
@@ -56,6 +53,28 @@ def _count_studied_today(db: Session, deck_id: int, user_id: int):
     return new_studied, rev_studied
 
 
+@router.get('/summary/today')
+def today_summary(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    from scheduling import study_day, utc
+    now = datetime.now(timezone.utc)
+    decks = db.query(Deck).filter_by(user_id=current_user.id).all()
+    starts = {deck.id: study_day(now, _load_deck_config(deck)) for deck in decks}
+    if not starts:
+        return {'reviews': 0, 'seconds': 0, 'seconds_per_card': 0}
+    logs = db.query(ReviewLog).join(Card).filter(
+        ReviewLog.user_id == current_user.id, Card.deck_id.in_(starts),
+        ReviewLog.review_date >= min(starts.values()), ReviewLog.rating.in_([1,2,3,4])).all()
+    count = duration = 0
+    for log in logs:
+        if utc(log.review_date) < starts[log.card.deck_id]:
+            continue
+        count += 1
+        payload = json.loads(log.record.payload) if log.record else {}
+        duration += payload.get('duration_ms', 0)
+    seconds = round(duration / 1000, 1)
+    return {'reviews': count, 'seconds': seconds, 'seconds_per_card': round(seconds/count, 1) if count else 0}
+
+
 @router.get("/{deck_id}", response_model=Optional[StudyCardResponse])
 def get_next_study_card(
     deck_id: int,
@@ -71,146 +90,37 @@ def get_next_study_card(
     if not deck:
         raise HTTPException(status_code=404, detail="Deck not found")
 
-    config = _load_deck_config(deck)
+    from study_queue import snapshot, config_for
+    from scheduling import fsrs_preview
+    from note_rendering import css_for_web, media_for_web, render_cards
+    from deck_options import effective_settings
+    view = snapshot(db, deck, current_user.id, datetime.now(timezone.utc))
+    card = view['card']
+    if card is None:
+        return None
+    progress = view['progress'].get(card.id)
+    config = config_for(card.deck)
     now = datetime.now(timezone.utc)
-
-    new_studied_today, rev_studied_today = _count_studied_today(db, deck_id, current_user.id)
-    remaining_new_limit = max(0, config.new_cards_per_day - new_studied_today)
-    remaining_rev_limit = max(0, config.maximum_reviews_per_day - rev_studied_today)
-
-    # ── Priority 1: Learning/relearning cards that are due ──
-    # These always take priority (like Anki), and don't count against review limit
-    learning_due = (
-        db.query(StudyProgress)
-        .join(Card, Card.id == StudyProgress.card_id)
-        .filter(
-            Card.deck_id == deck_id,
-            StudyProgress.user_id == current_user.id,
-            StudyProgress.is_suspended == False,
-            StudyProgress.card_state.in_(["learning", "relearning"]),
-            StudyProgress.next_review <= now,
-        )
-        .order_by(StudyProgress.next_review.asc())
-        .first()
-    )
-
-    if learning_due:
-        card = db.query(Card).filter(Card.id == learning_due.card_id).first()
-        intervals = get_next_intervals(
-            learning_due.repetitions, learning_due.ease_factor, learning_due.interval_days,
-            config=config, card_state=learning_due.card_state, learning_step=learning_due.learning_step,
-        )
-        return {
-            "card_id": card.id,
-            "front": card.front,
-            "back": card.back,
-            "deck_name": deck.name,
-            "is_new": False,
-            "card_state": learning_due.card_state,
-            "learning_step": learning_due.learning_step,
-            "intervals": intervals,
-        }
-
-    # ── Priority 2: Review cards that are due ──
-    if remaining_rev_limit > 0:
-        due_review = (
-            db.query(StudyProgress)
-            .join(Card, Card.id == StudyProgress.card_id)
-            .filter(
-                Card.deck_id == deck_id,
-                StudyProgress.user_id == current_user.id,
-                StudyProgress.is_suspended == False,
-                StudyProgress.card_state == "review",
-                StudyProgress.next_review <= now,
-            )
-            .order_by(StudyProgress.next_review.asc())
-            .first()
-        )
-
-        if due_review:
-            card = db.query(Card).filter(Card.id == due_review.card_id).first()
-            intervals = get_next_intervals(
-                due_review.repetitions, due_review.ease_factor, due_review.interval_days,
-                config=config, card_state="review", learning_step=0,
-            )
-            return {
-                "card_id": card.id,
-                "front": card.front,
-                "back": card.back,
-                "deck_name": deck.name,
-                "is_new": False,
-                "card_state": "review",
-                "learning_step": 0,
-                "intervals": intervals,
-            }
-
-    # ── Priority 3: New cards ──
-    if remaining_new_limit > 0:
-        studied_card_ids = (
-            db.query(StudyProgress.card_id)
-            .join(Card, Card.id == StudyProgress.card_id)
-            .filter(
-                Card.deck_id == deck_id,
-                StudyProgress.user_id == current_user.id,
-            )
-        )
-        new_card = (
-            db.query(Card)
-            .filter(Card.deck_id == deck_id, ~Card.id.in_(studied_card_ids))
-            .order_by(Card.created_at.asc())
-            .first()
-        )
-
-        if new_card:
-            intervals = get_next_intervals(
-                0, config.starting_ease, 0,
-                config=config, card_state="new", learning_step=0,
-            )
-            return {
-                "card_id": new_card.id,
-                "front": new_card.front,
-                "back": new_card.back,
-                "deck_name": deck.name,
-                "is_new": True,
-                "card_state": "new",
-                "learning_step": 0,
-                "intervals": intervals,
-            }
-
-    # ── Priority 4: Learning cards not yet due (fallback) ──
-    # Prevents user from being stuck if they pressed Again and have nothing else
-    learning_not_due = (
-        db.query(StudyProgress)
-        .join(Card, Card.id == StudyProgress.card_id)
-        .filter(
-            Card.deck_id == deck_id,
-            StudyProgress.user_id == current_user.id,
-            StudyProgress.is_suspended == False,
-            StudyProgress.card_state.in_(["learning", "relearning"]),
-        )
-        .order_by(StudyProgress.next_review.asc())
-        .first()
-    )
-
-    if learning_not_due:
-        card = db.query(Card).filter(Card.id == learning_not_due.card_id).first()
-        intervals = get_next_intervals(
-            learning_not_due.repetitions, learning_not_due.ease_factor,
-            learning_not_due.interval_days, config=config,
-            card_state=learning_not_due.card_state, learning_step=learning_not_due.learning_step,
-        )
-        return {
-            "card_id": card.id,
-            "front": card.front,
-            "back": card.back,
-            "deck_name": deck.name,
-            "is_new": False,
-            "card_state": learning_not_due.card_state,
-            "learning_step": learning_not_due.learning_step,
-            "intervals": intervals,
-        }
-
-    return None  # No cards to study
+    intervals = fsrs_preview(db, card, progress, config, now) if config.fsrs else get_next_intervals(
+        progress.repetitions if progress else 0, progress.ease_factor if progress else config.starting_ease,
+        progress.interval_days if progress else 0, config=config,
+        card_state=progress.card_state if progress else 'new', learning_step=progress.learning_step if progress else 0)
+    rendered=bool(card.note_link and card.note_link.note.package_data and json.loads(card.note_link.note.package_data.payload).get('_web_rendered'))
+    front,back=media_for_web(card.front,current_user.id),media_for_web(card.back,current_user.id)
+    if rendered:
+        note=card.note_link.note
+        faces=render_cards(note.note_type,json.loads(note.fields_json),current_user.id,json.loads(note.tags_json),card.deck.name)
+        if card.note_link.template_ord not in faces:
+            raise HTTPException(status_code=409,detail='This card has an empty or changed template; inspect its note before studying')
+        front,back=faces[card.note_link.template_ord]
+    return {'card_id':card.id,'front':front,'back':back,'deck_name':card.deck.name,
+            'is_new':progress is None or progress.card_state=='new', 'card_state':progress.card_state if progress else 'new',
+            'learning_step':progress.learning_step if progress else 0, 'intervals':intervals,
+            'version':card.scheduling.version if card.scheduling else 0,
+            'note_id':card.note_link.note_id if card.note_link else None,
+            'card_css':css_for_web(card.note_link.note.note_type.css, current_user.id) if card.note_link else '',
+            'rendered':rendered,
+            'settings':effective_settings(card.deck)}
 
 
 @router.post("/{card_id}/review", response_model=ReviewResponse)
@@ -224,101 +134,66 @@ def review_card(
     if data.rating not in (1, 2, 3, 4):
         raise HTTPException(status_code=400, detail="Rating must be 1-4")
 
-    card = db.query(Card).filter(Card.id == card_id).first()
+    # P0.2: Kiểm tra card tồn tại VÀ thuộc deck của user hiện tại
+    card = (
+        db.query(Card)
+        .join(Deck, Deck.id == Card.deck_id)
+        .filter(Card.id == card_id, Deck.user_id == current_user.id)
+        .first()
+    )
     if not card:
         raise HTTPException(status_code=404, detail="Card not found")
 
-    # Load deck config
-    deck = db.query(Deck).filter(Deck.id == card.deck_id).first()
-    config = _load_deck_config(deck)
+    from review_service import review
+    try:
+        return review(db,card,current_user.id,data)
+    except HTTPException:
+        db.rollback()
+        raise
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(status_code=400,detail=str(exc)) from None
 
-    # Get or create study progress
-    progress = (
-        db.query(StudyProgress)
-        .filter(
-            StudyProgress.card_id == card_id,
-            StudyProgress.user_id == current_user.id,
-        )
-        .first()
-    )
 
-    was_new = False
+@router.post('/undo/latest')
+def undo_review(db: Session=Depends(get_db), current_user: User=Depends(get_current_user)):
+    from review_service import undo
+    try:
+        return undo(db,current_user.id)
+    except HTTPException:
+        db.rollback()
+        raise
 
-    if not progress:
-        progress = StudyProgress(
-            user_id=current_user.id,
-            card_id=card_id,
-            ease_factor=config.starting_ease,
-            interval_days=0,
-            repetitions=0,
-            card_state="new",
-            learning_step=0,
-            lapse_count=0,
-        )
-        db.add(progress)
-        was_new = True
-    else:
-        was_new = progress.card_state == "new"
 
-    now = datetime.now(timezone.utc)
-    is_leech = False
+class StudyActionRequest(BaseModel):
+    action: Literal['bury', 'suspend', 'unbury', 'unsuspend']
+    expected_version: Optional[int] = Field(default=None, ge=0)
 
-    # ── Handle based on current card state ──
 
-    if progress.card_state in ("new", "learning"):
-        _handle_learning(progress, data.rating, config, now)
-
-    elif progress.card_state == "relearning":
-        _handle_relearning(progress, data.rating, config, now)
-
-    elif progress.card_state == "review":
-        if data.rating == 1:
-            # Lapse! Enter relearning
-            _handle_lapse(progress, config, now)
-            is_leech = progress.is_leech
+@router.post('/{card_id}/action')
+def study_action(card_id: int, data: StudyActionRequest,
+                 db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    from review_service import state_for, claim_version
+    from scheduling import next_study_day
+    card = db.query(Card).join(Deck).filter(Card.id == card_id, Deck.user_id == current_user.id).first()
+    if card is None:
+        raise HTTPException(status_code=404, detail='Card not found')
+    try:
+        state = state_for(db, card)
+        claim_version(db, state, data.expected_version)
+        if data.action in ('bury', 'unbury'):
+            state.buried_until = next_study_day(datetime.now(timezone.utc), _load_deck_config(card.deck)) if data.action == 'bury' else None
         else:
-            # Normal review
-            _handle_review(progress, data.rating, config, now)
-
-    else:
-        # Unknown state — treat as review
-        _handle_review(progress, data.rating, config, now)
-
-    progress.last_reviewed = now
-
-    # Log the review
-    review_log = ReviewLog(
-        user_id=current_user.id,
-        card_id=card_id,
-        rating=data.rating,
-        was_new=was_new,
-        review_date=now,
-    )
-    db.add(review_log)
-
-    db.commit()
-    db.refresh(progress)
-
-    rating_labels = {1: "Again", 2: "Hard", 3: "Good", 4: "Easy"}
-    
-    # Build message
-    if progress.card_state in ("learning", "relearning"):
-        msg = f"Rated '{rating_labels[data.rating]}'. Card is in {progress.card_state}."
-    else:
-        msg = f"Rated '{rating_labels[data.rating]}'. Next review in {progress.interval_days} day(s)."
-
-    if is_leech:
-        msg += " ⚠️ This card is a leech!"
-
-    return ReviewResponse(
-        next_review=progress.next_review,
-        interval_days=progress.interval_days,
-        ease_factor=progress.ease_factor,
-        message=msg,
-        card_state=progress.card_state,
-        is_leech=is_leech,
-        lapse_count=progress.lapse_count,
-    )
+            progress = db.query(StudyProgress).filter_by(card_id=card_id, user_id=current_user.id).first()
+            if progress is None:
+                progress = StudyProgress(card_id=card_id, user_id=current_user.id)
+                db.add(progress)
+            progress.is_suspended = data.action == 'suspend'
+        db.commit()
+        return {'card_id': card_id, 'version': state.version, 'action': data.action}
+    except HTTPException:
+        db.rollback()
+        raise
 
 
 def _handle_learning(progress: StudyProgress, rating: int, config: DeckSchedulingConfig, now: datetime):
@@ -351,11 +226,7 @@ def _handle_learning(progress: StudyProgress, rating: int, config: DeckSchedulin
     elif rating == 2:
         # Hard → repeat current step (or slightly longer)
         current_step = min(progress.learning_step, len(steps) - 1)
-        step_time = steps[current_step]
-        # Anki gives 50% between current and next for Hard during learning
-        if current_step + 1 < len(steps):
-            next_time = steps[current_step + 1]
-            step_time = (step_time + next_time) // 2
+        step_time = learning_hard_seconds(steps, current_step)
         progress.next_review = now + timedelta(seconds=step_time)
 
     elif rating == 3:
@@ -455,7 +326,7 @@ def _handle_relearning(progress: StudyProgress, rating: int, config: DeckSchedul
     elif rating == 2:
         # Hard → repeat current step
         current_step = min(progress.learning_step, len(steps) - 1)
-        progress.next_review = now + timedelta(seconds=steps[current_step])
+        progress.next_review = now + timedelta(seconds=learning_hard_seconds(steps, current_step))
 
     elif rating == 3:
         # Good → advance to next step
@@ -500,80 +371,20 @@ def get_study_stats(
     if not deck:
         raise HTTPException(status_code=404, detail="Deck not found")
 
-    config = _load_deck_config(deck)
-    now = datetime.now(timezone.utc)
-    total_cards = db.query(Card).filter(Card.deck_id == deck_id).count()
-
-    # Cards never studied
-    studied_card_ids = (
-        db.query(StudyProgress.card_id)
-        .join(Card, Card.id == StudyProgress.card_id)
-        .filter(
-            Card.deck_id == deck_id,
-            StudyProgress.user_id == current_user.id,
-        )
-    )
-
-    new_cards = (
-        db.query(Card)
-        .filter(Card.deck_id == deck_id, ~Card.id.in_(studied_card_ids))
-        .count()
-    )
-
-    # Due review cards
-    due_cards = (
-        db.query(StudyProgress)
-        .join(Card, Card.id == StudyProgress.card_id)
-        .filter(
-            Card.deck_id == deck_id,
-            StudyProgress.user_id == current_user.id,
-            StudyProgress.card_state == "review",
-            StudyProgress.is_suspended == False,
-            StudyProgress.next_review <= now,
-        )
-        .count()
-    )
-
-    # Learning + relearning cards
-    learn_cards = (
-        db.query(StudyProgress)
-        .join(Card, Card.id == StudyProgress.card_id)
-        .filter(
-            Card.deck_id == deck_id,
-            StudyProgress.user_id == current_user.id,
-            StudyProgress.is_suspended == False,
-            StudyProgress.card_state.in_(["learning", "relearning"]),
-        )
-        .count()
-    )
-
-    learned_cards = total_cards - new_cards - learn_cards
-
-    # Average ease factor
-    avg_ease_result = (
-        db.query(func.avg(StudyProgress.ease_factor))
-        .join(Card, Card.id == StudyProgress.card_id)
-        .filter(
-            Card.deck_id == deck_id,
-            StudyProgress.user_id == current_user.id,
-        )
-        .scalar()
-    )
-    avg_ease = round(avg_ease_result, 2) if avg_ease_result else config.starting_ease
-
-    # Apply daily limits
-    new_studied_today, rev_studied_today = _count_studied_today(db, deck_id, current_user.id)
-    remaining_new = max(0, config.new_cards_per_day - new_studied_today)
-    remaining_rev = max(0, config.maximum_reviews_per_day - rev_studied_today)
-
-    new_cards = min(new_cards, remaining_new)
-    due_cards = min(due_cards, remaining_rev)
-
-    return StudyStatsResponse(
-        total_cards=total_cards,
-        new_cards=new_cards,
-        learn_cards=learn_cards,
-        due_cards=due_cards,
-        learned_cards=learned_cards,
-        avg_ease=avg_ease,
-    )
+    from study_queue import snapshot
+    from scheduling import study_day
+    from zoneinfo import ZoneInfo
+    view=snapshot(db,deck,current_user.id,datetime.now(timezone.utc))
+    progress=list(view['progress'].values())
+    ease=sum(p.ease_factor for p in progress)/len(progress) if progress else view['config'].starting_ease
+    dates={study_day(date,view['config']).astimezone(ZoneInfo(view['config'].timezone)).date()
+           for (date,) in db.query(ReviewLog.review_date).filter(ReviewLog.user_id==current_user.id,ReviewLog.card_id.in_([c.id for c in view['cards']]))}
+    today=study_day(datetime.now(timezone.utc),view['config']).astimezone(ZoneInfo(view['config'].timezone)).date()
+    day=today if today in dates else today-timedelta(days=1)
+    streak=0
+    while day in dates:
+        streak+=1
+        day-=timedelta(days=1)
+    return StudyStatsResponse(total_cards=len(view['cards']),new_cards=view['new_cards'],learn_cards=view['learn_cards'],
+        due_cards=view['due_cards'],learned_cards=sum(1 for p in progress if p.card_state=='review'),avg_ease=round(ease,2),
+        streak_days=streak,next_learning_at=view['next_learning_at'])

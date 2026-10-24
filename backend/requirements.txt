@@ -1,8 +1,14 @@
-fastapi==0.115.0
-uvicorn[standard]==0.30.6
-sqlalchemy==2.0.35
-python-jose[cryptography]==3.3.0
-passlib[bcrypt]==1.7.4
-python-multipart==0.0.12
-pydantic==2.9.2
-bcrypt==4.0.1
+# Runtime dependencies verified on CPython 3.14.
+fastapi==0.143.0
+uvicorn[standard]==0.54.0
+sqlalchemy==2.0.54
+python-jose[cryptography]==3.5.0
+python-multipart==0.0.32
+pydantic==2.14.1
+bcrypt==5.0.0
+email-validator==2.3.0
+
+# Pinned scheduler/format adapters.
+fsrs==6.3.2
+zstandard==0.25.0
+anki==26.9.3

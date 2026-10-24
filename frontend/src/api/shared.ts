@@ -1,4 +1,5 @@
 import client from './client';
+export type { SharedDeck } from './types';
 
 export const getCategories = () => client.get('/api/shared/categories');
 export const browseSharedDecks = (search?: string, category?: string) =>

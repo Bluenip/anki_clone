@@ -1,4 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import Response
+from sqlalchemy.exc import IntegrityError
+from typing import Literal
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from datetime import datetime, timezone
@@ -15,111 +18,30 @@ from media_utils import get_card_media_filenames, get_orphaned_media, cleanup_me
 router = APIRouter(prefix="/api/decks", tags=["Decks"])
 
 
+def ensure_parents(db, user_id, name):
+    from models import DeckOptionsBinding
+    parent = None
+    parts = name.split('::')
+    for index in range(1,len(parts)):
+        prefix='::'.join(parts[:index])
+        found=db.query(Deck).filter_by(user_id=user_id,name=prefix).first()
+        if not found:
+            found=Deck(user_id=user_id,name=prefix,settings=parent.settings if parent else '{}')
+            if parent and parent.options_binding and parent.options_binding.preset:
+                found.options_binding=DeckOptionsBinding(preset=parent.options_binding.preset,overrides_json='{}',today_json='{}')
+            db.add(found);db.flush()
+        parent=found
+    return parent
+
+
 def get_deck_with_stats(deck: Deck, user_id: int, db: Session) -> DeckResponse:
-    """Build a DeckResponse with computed card counts."""
-    total_cards = db.query(Card).filter(Card.deck_id == deck.id).count()
-
-    now = datetime.now(timezone.utc)
-
-    # Due review cards (graduated, interval > 0, and review time is reached)
-    due_cards = (
-        db.query(StudyProgress)
-        .join(Card, Card.id == StudyProgress.card_id)
-        .filter(
-            Card.deck_id == deck.id,
-            StudyProgress.user_id == user_id,
-            StudyProgress.is_suspended == False,
-            StudyProgress.card_state == "review",
-            StudyProgress.next_review <= now,
-        )
-        .count()
-    )
-
-    # Learn cards: in learning or relearning state
-    learn_cards = (
-        db.query(StudyProgress)
-        .join(Card, Card.id == StudyProgress.card_id)
-        .filter(
-            Card.deck_id == deck.id,
-            StudyProgress.user_id == user_id,
-            StudyProgress.is_suspended == False,
-            StudyProgress.card_state.in_(["learning", "relearning"]),
-        )
-        .count()
-    )
-
-    # New cards: never studied
-    studied_card_ids = (
-        db.query(StudyProgress.card_id)
-        .join(Card, Card.id == StudyProgress.card_id)
-        .filter(
-            Card.deck_id == deck.id,
-            StudyProgress.user_id == user_id,
-        )
-        .subquery()
-    )
-    new_cards = (
-        db.query(Card)
-        .filter(Card.deck_id == deck.id, ~Card.id.in_(studied_card_ids))
-        .count()
-    )
-
-    # Load config for daily limits
-    settings = {}
-    if deck.settings:
-        try:
-            settings = json.loads(deck.settings)
-        except (json.JSONDecodeError, TypeError):
-            pass
-
-    config = parse_settings_to_config(settings)
-
-    # Calculate studied today from ReviewLog
-    start_of_today = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
-    
-    new_studied_today = (
-        db.query(ReviewLog)
-        .join(Card, Card.id == ReviewLog.card_id)
-        .filter(
-            Card.deck_id == deck.id,
-            ReviewLog.user_id == user_id,
-            ReviewLog.was_new == True,
-            ReviewLog.review_date >= start_of_today
-        )
-        .count()
-    )
-    
-    rev_studied_today = (
-        db.query(ReviewLog)
-        .join(Card, Card.id == ReviewLog.card_id)
-        .filter(
-            Card.deck_id == deck.id,
-            ReviewLog.user_id == user_id,
-            ReviewLog.was_new == False,
-            ReviewLog.review_date >= start_of_today
-        )
-        .count()
-    )
-
-    remaining_new_limit = max(0, config.new_cards_per_day - new_studied_today)
-    remaining_rev_limit = max(0, config.maximum_reviews_per_day - rev_studied_today)
-
-    new_cards = min(new_cards, remaining_new_limit)
-    due_cards = min(due_cards, remaining_rev_limit)
-
-    return DeckResponse(
-        id=deck.id,
-        name=deck.name,
-        description=deck.description,
-        settings=deck.settings or "{}",
-        is_shared=deck.is_shared,
-        created_at=deck.created_at,
-        updated_at=deck.updated_at,
-        total_cards=total_cards,
-        new_cards=new_cards,
-        learn_cards=learn_cards,
-        due_cards=due_cards,
-    )
+    """Counts and reviewer share the same queue/limit rules."""
+    from study_queue import snapshot
+    from deck_options import effective_settings
+    view=snapshot(db,deck,user_id,datetime.now(timezone.utc))
+    return DeckResponse(id=deck.id,name=deck.name,description=deck.description,settings=json.dumps(effective_settings(deck)),
+        is_shared=deck.is_shared,created_at=deck.created_at,updated_at=deck.updated_at,
+        total_cards=len(view['cards']),new_cards=view['new_cards'],learn_cards=view['learn_cards'],due_cards=view['due_cards'])
 
 
 @router.get("", response_model=List[DeckResponse])
@@ -137,11 +59,18 @@ def create_deck(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    if db.query(Deck).filter_by(user_id=current_user.id,name=data.name).first():
+        raise HTTPException(status_code=409,detail='A deck with this name already exists')
+    parent=ensure_parents(db,current_user.id,data.name)
     deck = Deck(
         user_id=current_user.id,
         name=data.name,
         description=data.description or "",
+        settings=parent.settings if parent else '{}',
     )
+    if parent and parent.options_binding and parent.options_binding.preset:
+        from models import DeckOptionsBinding
+        deck.options_binding=DeckOptionsBinding(preset=parent.options_binding.preset,overrides_json='{}',today_json='{}')
     db.add(deck)
     db.commit()
     db.refresh(deck)
@@ -179,8 +108,20 @@ def update_deck(
     if not deck:
         raise HTTPException(status_code=404, detail="Deck not found")
 
+    if data.settings is not None and deck.options_binding and deck.options_binding.preset:
+        raise HTTPException(status_code=409, detail='This deck uses a shared preset; save through its Options page with the current preset version')
     if data.name is not None:
-        deck.name = data.name
+        if data.name.startswith(deck.name+'::'):
+            raise HTTPException(status_code=400,detail='A deck cannot be moved inside itself')
+        owned=db.query(Deck).filter_by(user_id=current_user.id).all()
+        subtree=[d for d in owned if d.id==deck.id or d.name.startswith(deck.name+'::')]
+        renames={d.id:data.name+d.name[len(deck.name):] for d in subtree}
+        if any(len(name)>255 for name in renames.values()):
+            raise HTTPException(status_code=400,detail='A descendant deck name would exceed 255 characters')
+        if any(d.id not in renames and d.name in renames.values() for d in owned):
+            raise HTTPException(status_code=409,detail='Renaming would collide with an existing deck')
+        ensure_parents(db,current_user.id,data.name)
+        for child in subtree:child.name=renames[child.id]
     if data.description is not None:
         deck.description = data.description
     if data.settings is not None:
@@ -205,13 +146,13 @@ def delete_deck(
     if not deck:
         raise HTTPException(status_code=404, detail="Deck not found")
 
-    # Delete related ReviewLog entries first
-    card_ids = [c.id for c in db.query(Card.id).filter(Card.deck_id == deck.id).all()]
-    if card_ids:
-        db.query(ReviewLog).filter(ReviewLog.card_id.in_(card_ids)).delete(synchronize_session=False)
-
-    # Delete the deck (cascades to cards and study progress)
-    db.delete(deck)
+    # ORM cascades also remove ReviewRecord children; a bulk log DELETE would
+    # leave their metadata orphaned. Include the entire named subtree.
+    subtree=[d for d in db.query(Deck).filter_by(user_id=current_user.id)
+             if d.id==deck.id or d.name.startswith(deck.name+'::')]
+    for child in subtree:db.delete(child)
+    from notes import cleanup_empty_notes
+    cleanup_empty_notes(db, current_user.id)
     db.commit()
 
     # After DB delete, scan disk and remove ALL orphaned media files
@@ -235,17 +176,53 @@ def import_cards(
     if not deck:
         raise HTTPException(status_code=404, detail="Deck not found")
 
-    added_count = 0
-    for line in data.text.strip().split("\n"):
-        parts = line.split(data.separator)
-        if len(parts) >= 2:
-            front = parts[0].strip()
-            back = parts[1].strip()
-            if front and back:
-                card = Card(deck_id=deck.id, front=front, back=back)
-                db.add(card)
-                added_count += 1
+    from note_import import import_text
+    try:
+        return import_text(db, deck, data)
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(exc)) from None
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="The collection changed during import; preview and retry") from None
 
-    db.commit()
-    return {"message": f"Successfully imported {added_count} cards."}
+
+@router.get("/{deck_id}/export/text")
+def export_deck_text(
+    deck_id: int,
+    format: Literal['csv', 'txt', 'tsv'] = 'txt',
+    include_guid: bool = True,
+    include_subdecks: bool = True,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    from notes import card_guid
+    from text_transfer import export_text
+    deck = db.query(Deck).filter(Deck.id == deck_id, Deck.user_id == current_user.id).first()
+    if not deck:
+        raise HTTPException(status_code=404, detail="Deck not found")
+    query = db.query(Card).join(Deck).filter(Deck.user_id == current_user.id)
+    if include_subdecks:
+        query = query.filter((Deck.id == deck.id) | Deck.name.startswith(deck.name + '::', autoescape=True))
+    else:
+        query = query.filter(Deck.id == deck.id)
+    cards = query.order_by(Card.id).all()
+    complex_notes = len({c.deck_id for c in cards}) > 1 or any(c.note_link and (len(c.note_link.note.card_links) != 1 or c.note_link.note.note_type.name != 'Basic' or any(not value.strip() for value in json.loads(c.note_link.note.fields_json)) or json.loads(c.note_link.note.tags_json) or json.loads(c.note_link.note.note_type.fields_json) != ['Front', 'Back']) for c in cards)
+    if complex_notes:
+        from note_text_export import export_notes_text
+        try:
+            content = export_notes_text(cards, current_user.id, ',' if format == 'csv' else '\t', include_guid)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from None
+        return Response(content=content, media_type='text/csv' if format == 'csv' else 'text/plain',
+                        headers={'Content-Disposition': f'attachment; filename="deck-{deck_id}.{format}"'})
+    def fields(card):
+        if card.note_link:
+            values=json.loads(card.note_link.note.fields_json)
+            return values[0],values[1],card_guid(card,current_user.id)
+        return card.front,card.back,card_guid(card,current_user.id)
+    content = export_text((fields(c) for c in cards),
+                          separator=',' if format == 'csv' else '\t', include_guid=include_guid)
+    return Response(content=content, media_type='text/csv' if format == 'csv' else 'text/plain',
+                    headers={'Content-Disposition': f'attachment; filename="deck-{deck_id}.{format}"'})
 

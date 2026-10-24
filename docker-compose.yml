@@ -6,6 +6,8 @@ services:
     environment:
       - DATABASE_DIR=/data
       - CORS_ORIGINS=*
+      - APP_ENV=production
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:?JWT_SECRET_KEY must be set in .env or environment}
     volumes:
       - anki-data:/data
       - anki-media:/app/media

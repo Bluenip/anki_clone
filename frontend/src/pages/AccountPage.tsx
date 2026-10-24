@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import client from '../api/client';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../context/useAuth';
 
 const AccountPage = () => {
   const [activeTab, setActiveTab] = useState<'email' | 'password'>('email');
@@ -50,7 +50,7 @@ const AccountPage = () => {
         await client.delete('/api/auth/me');
         logout();
         navigate('/login');
-      } catch (err) {
+      } catch {
         alert('Failed to delete account');
       }
     }

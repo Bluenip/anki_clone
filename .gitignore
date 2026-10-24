@@ -3,6 +3,9 @@ node_modules/
 dist/
 build/
 .env
+.env.*
+!.env.example
+!frontend/.env.development
 
 # Python
 venv/
@@ -17,6 +20,19 @@ env/
 # SQLite
 *.db
 *.sqlite3
+*.sqlite
+*.db-wal
+*.db-shm
+*.sqlite3-wal
+*.sqlite3-shm
+
+# Local collection files and uploaded media
+backend/media/*
+!backend/media/.gitkeep
+backend/data/
+backups/
+*.apkg
+*.colpkg
 
 # IDEs
 .vscode/

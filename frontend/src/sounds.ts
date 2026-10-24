@@ -5,12 +5,19 @@
 
 let audioCtx: AudioContext | null = null;
 
-function getAudioContext(): AudioContext {
+function getAudioContext(): AudioContext | null {
+  if (typeof window === 'undefined') return null;
+  const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+  if (!AudioCtx) return null;
   if (!audioCtx) {
-    audioCtx = new AudioContext();
+    try {
+      audioCtx = new AudioCtx();
+    } catch {
+      return null;
+    }
   }
   // Resume if suspended (browsers require user interaction first)
-  if (audioCtx.state === 'suspended') {
+  if (audioCtx && audioCtx.state === 'suspended') {
     audioCtx.resume();
   }
   return audioCtx;
@@ -23,6 +30,7 @@ function playTone(
   volume: number = 0.15
 ) {
   const ctx = getAudioContext();
+  if (!ctx) return;
   const oscillator = ctx.createOscillator();
   const gainNode = ctx.createGain();
 
@@ -44,6 +52,7 @@ function playTone(
 /** Soft click when flipping card to show answer */
 export function playFlipSound() {
   const ctx = getAudioContext();
+  if (!ctx) return;
   const oscillator = ctx.createOscillator();
   const gainNode = ctx.createGain();
 

@@ -6,11 +6,15 @@ Handles cleanup when cards, decks, or accounts are deleted.
 import os
 import re
 import shutil
+import json
+import html as html_entities
+from urllib.parse import unquote
 from typing import List, Set
 
 
 # Base directory for media files
-MEDIA_BASE = os.path.join(os.path.dirname(__file__), "media")
+MEDIA_BASE = os.getenv("MEDIA_DIR", os.path.join(os.path.dirname(__file__), "media"))
+
 
 
 def extract_media_filenames(html: str) -> List[str]:
@@ -22,8 +26,13 @@ def extract_media_filenames(html: str) -> List[str]:
     """
     filenames = []
     # Match img and audio src attributes pointing to /api/media/
-    matches = re.findall(r'(?:src|href)=["\']\/api\/media\/\d+\/([^"\']+)["\']', html)
-    filenames.extend(matches)
+    matches = re.findall(r'/api/media/\d+/([^"\'<>\s)]+)', html)
+    filenames.extend(unquote(name) for name in matches)
+    filenames.extend(re.findall(r'\[sound:([^\]]+)\]', html))
+    for name in re.findall(r'(?:src|href)\s*=\s*["\']([^"\']+)["\']|url\(\s*["\']?([^"\')]+)', html, re.I):
+        value = html_entities.unescape(next((v for v in name if v), '').strip())
+        if value and not re.match(r'^(?:[a-z][a-z0-9+.-]*:|/|#)', value, re.I):
+            filenames.append(unquote(value))
     return filenames
 
 
@@ -34,7 +43,7 @@ def get_media_dir(user_id: int) -> str:
 
 def get_all_referenced_media(user_id: int, db) -> Set[str]:
     """Get ALL media filenames still referenced by any card of this user."""
-    from models import Card, Deck
+    from models import Card, Deck, Note, NoteType
     
     all_cards = (
         db.query(Card)
@@ -47,6 +56,16 @@ def get_all_referenced_media(user_id: int, db) -> Set[str]:
     for card in all_cards:
         referenced.update(extract_media_filenames(card.front or ""))
         referenced.update(extract_media_filenames(card.back or ""))
+    # Fields not displayed on a particular card and template CSS still own
+    # their media. Rendered projections alone are insufficient for cleanup.
+    for note in db.query(Note).filter_by(user_id=user_id):
+        for value in json.loads(note.fields_json):
+            referenced.update(extract_media_filenames(value))
+    for model in db.query(NoteType).filter_by(user_id=user_id):
+        referenced.update(extract_media_filenames(model.css or ''))
+        for template in json.loads(model.templates_json):
+            referenced.update(extract_media_filenames(template.get('qfmt', '')))
+            referenced.update(extract_media_filenames(template.get('afmt', '')))
     
     return referenced
 
@@ -59,7 +78,9 @@ def cleanup_media_files(user_id: int, filenames: List[str]):
     
     deleted = 0
     for filename in filenames:
-        file_path = os.path.join(media_dir, filename)
+        file_path = os.path.realpath(os.path.join(media_dir, filename))
+        if os.path.dirname(file_path) != os.path.realpath(media_dir):
+            continue
         if os.path.exists(file_path):
             try:
                 os.remove(file_path)

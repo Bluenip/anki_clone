@@ -770,3 +770,45 @@ a:hover { color: #33dfff; }
   height: 100%;
   color: var(--text-muted);
 }
+
+/* P2.1: Reduced motion for accessibility */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* P2.1: Prevent horizontal overflow on mobile */
+.page-container, .study-container, .options-container {
+  max-width: 100vw;
+  overflow-x: hidden;
+}
+
+/* P2.1: Focus visible for keyboard navigation */
+:focus-visible {
+  outline: 2px solid var(--accent-blue, #3b82f6);
+  outline-offset: 2px;
+}
+
+button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible {
+  outline: 2px solid var(--accent-blue, #3b82f6);
+  outline-offset: 2px;
+}
+
+/* Browser controls must not squeeze the results out of view on small screens. */
+.browse-sidebar, .browse-editor { min-width: 0; }
+.browse-table-container { min-height: 160px; overflow: auto; }
+.browse-sidebar .bulk-toolbar > div,
+.browse-sidebar nav[aria-label="Search result pages"] { flex-wrap: wrap; }
+
+@media (max-width: 768px) {
+  .browse-container { height: auto; }
+  .browse-sidebar { flex: none; max-height: none; }
+  .browse-editor { flex: none; overflow: visible; }
+  .browse-editor .editor-content { height: auto; }
+  .browse-table-container { flex: none; height: 320px; max-height: 50vh; min-height: 220px; }
+  .browse-search input { min-width: 0; }
+}

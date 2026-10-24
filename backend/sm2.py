@@ -25,6 +25,24 @@ import re
 @dataclass
 class DeckSchedulingConfig:
     """Deck-level scheduling parameters (mirrors Anki's deck options)."""
+    # Algorithm and study-day settings (future reviews only).
+    fsrs: bool = False
+    fsrs_fuzz: bool = False
+    fsrs_desired_retention: float = 0.9
+    fsrs_parameters: Optional[List[float]] = None
+    timezone: str = "UTC"
+    day_starts_at: int = 0
+    learning_ahead_seconds: int = 0
+    new_cards_ignore_review_limit: bool = False
+    limits_start_from_top: bool = False
+    new_review_order: str = "Mix with reviews"
+    interday_learning_review_order: str = "Mix with reviews"
+    review_sort_order: str = "Due date, then random"
+    new_card_gather_order: str = "Deck"
+    new_card_sort_order: str = "Card type, then order gathered"
+    bury_new_siblings: bool = False
+    bury_review_siblings: bool = False
+    bury_interday_learning_siblings: bool = False
     # Daily limits
     new_cards_per_day: int = 20
     maximum_reviews_per_day: int = 200
@@ -54,6 +72,9 @@ def parse_settings_to_config(settings: dict) -> DeckSchedulingConfig:
     """Convert a JSON settings dict to a DeckSchedulingConfig."""
     config = DeckSchedulingConfig()
     for key, value in settings.items():
+        if key == "fsrs_parameters":
+            config.fsrs_parameters = value
+            continue
         if hasattr(config, key):
             expected_type = type(getattr(config, key))
             try:
@@ -300,6 +321,18 @@ def get_next_intervals(
     return intervals
 
 
+def learning_hard_seconds(steps: List[int], current_step: int) -> int:
+    """Shared preview/apply rule for learning and relearning Hard responses."""
+    if not steps:
+        return 0
+    current_step = min(max(0, current_step), len(steps) - 1)
+    if current_step == 0:
+        if len(steps) > 1:
+            return (steps[0] + steps[1]) // 2
+        return min(int(steps[0] * 1.5), steps[0] + 86400)
+    return steps[current_step]
+
+
 def _get_learning_intervals(intervals: dict, steps: List[int], current_step: int, config: DeckSchedulingConfig):
     """Calculate interval previews for learning cards."""
     # Again → back to step 0
@@ -315,7 +348,8 @@ def _get_learning_intervals(intervals: dict, steps: List[int], current_step: int
     if steps and current_step < len(steps):
         intervals["hard"] = {
             "days": 0,
-            "display": get_interval_display(seconds=steps[current_step]),
+            "display": get_interval_display(seconds=learning_hard_seconds(steps, current_step)),
+            "seconds": learning_hard_seconds(steps, current_step),
         }
     else:
         intervals["hard"] = {"days": 0, "display": "< 1m"}
@@ -359,7 +393,8 @@ def _get_relearning_intervals(
     if steps and current_step < len(steps):
         intervals["hard"] = {
             "days": 0,
-            "display": get_interval_display(seconds=steps[current_step]),
+            "display": get_interval_display(seconds=learning_hard_seconds(steps, current_step)),
+            "seconds": learning_hard_seconds(steps, current_step),
         }
     else:
         intervals["hard"] = {"days": 0, "display": "< 1m"}

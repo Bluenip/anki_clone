@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { getSharedDeck, downloadSharedDeck, rateSharedDeck } from '../api/shared';
-import { useAuth } from '../context/AuthContext';
+import type { SharedDeck } from '../api/shared';
+import { useAuth } from '../context/useAuth';
 
 const SharedDeckDetailPage = () => {
   const { id } = useParams<{ id: string }>();
-  const [deck, setDeck] = useState<any>(null);
+  const [deck, setDeck] = useState<SharedDeck | null>(null);
   const [message, setMessage] = useState('');
   const [userRating, setUserRating] = useState(0);
   const { user } = useAuth();

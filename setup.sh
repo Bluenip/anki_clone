@@ -6,9 +6,10 @@ echo "=== Setting up AnkiClone ==="
 # Backend setup
 echo ">>> Setting up Backend..."
 cd backend
-python3 -m venv venv
+"${PYTHON:-python3.14}" -m venv venv
 source venv/bin/activate
-pip install fastapi uvicorn[standard] sqlalchemy python-jose[cryptography] passlib[bcrypt] python-multipart pydantic bcrypt
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
 echo ">>> Backend ready!"
 
 # Frontend setup
@@ -23,5 +24,5 @@ rm -f src/App.css src/assets/react.svg
 echo ">>> Frontend ready!"
 
 echo "=== Setup complete! ==="
-echo "To start backend:  cd backend && source venv/bin/activate && uvicorn main:app --reload --port 8000"
+echo "To start backend:  cd backend && source venv/bin/activate && python -m uvicorn main:app --reload --port 8000"
 echo "To start frontend: cd frontend && npm run dev"

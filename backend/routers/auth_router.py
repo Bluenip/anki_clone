@@ -56,26 +56,18 @@ def get_me(current_user: User = Depends(get_current_user)):
     return current_user
 
 
-import string
-import random
-
 @router.post("/forgot-password")
 def forgot_password(data: ForgotPasswordRequest, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.email == data.email).first()
-    if not user:
-        # Prevent email enumeration by returning success anyway
-        return {"message": "If that email exists, a password reset link has been sent.", "new_password": None}
-    
-    # Generate a random 8 character password for prototyping
-    chars = string.ascii_letters + string.digits
-    new_pwd = ''.join(random.choice(chars) for _ in range(8))
-    
-    user.password_hash = get_password_hash(new_pwd)
-    db.commit()
-    
+    # SECURITY: Luồng reset mật khẩu qua API bị vô hiệu hóa vì chưa có dịch vụ email.
+    # Khi có email service: gửi link chứa token ngẫu nhiên một lần; không đổi mật khẩu ở đây.
+    # Luồng cũ (đổi ngay & trả mật khẩu mới trong response) đã bị xóa vì rủi ro bảo mật P0.
+    _ = data  # không truy vấn DB để tránh timing attack
+    _ = db
     return {
-        "message": "Password has been reset successfully.",
-        "new_password": new_pwd
+        "message": (
+            "If an account with that email exists, password reset instructions "
+            "would be sent. Please contact support to reset your password."
+        )
     }
 
 
