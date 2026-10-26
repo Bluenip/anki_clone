@@ -210,7 +210,7 @@ def test_property_search_matches_native_and_handles_missing_progress(client,auth
             assert search(client,auth_headers_a,query)=={mapping[cid] for cid in native.find_cards(query)},query
     finally:
         native.close()
-    for query in ['prop:ivl=1.5','prop:ivl>-1','prop:due=0','prop:ivl>999999999999999999999999','prop:ivl=1 OR 1=1']:
+    for query in ['prop:ivl=1.5','prop:ivl>-1','prop:due=not-a-day','prop:ivl>999999999999999999999999','prop:ivl=1 OR 1=1']:
         response=client.get('/api/cards/browse',headers=auth_headers_a,params={'search':query})
         # Last expression treats 1=1 as literal text, never as executable SQL.
         if query.endswith('OR 1=1'):

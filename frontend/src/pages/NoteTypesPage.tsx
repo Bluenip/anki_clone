@@ -4,7 +4,7 @@ import client from '../api/client';
 import CardFace from '../components/CardFace';
 
 type Template = { name: string; qfmt: string; afmt: string };
-type Model = { id?: number; revision?: string; name: string; fields: string[]; templates: Template[]; css: string };
+type Model = { id?: number; revision?: string; name: string; fields: string[]; templates: Template[]; css: string; latex_header?: string; latex_footer?: string };
 const blank = (): Model => ({ name: 'My note type', fields: ['Front', 'Back'], templates: [{ name: 'Card 1', qfmt: '{{Front}}', afmt: '{{FrontSide}}<hr id="answer">{{Back}}' }], css: '.card { font-size: 20px; }' });
 const message = (e: unknown) => {
   const detail = (e as { response?: { data?: { detail?: unknown } } }).response?.data?.detail;
@@ -16,6 +16,8 @@ export default function NoteTypesPage() {
   const [draft, setDraft] = useState<Model>(blank);
   const [samples, setSamples] = useState<Record<string, string>>({ Front: 'Question', Back: 'Answer' });
   const [preview, setPreview] = useState<{ cards: { ordinal: number; front: string; back: string }[]; css: string }>();
+  const [renameFrom, setRenameFrom] = useState('');
+  const [renameTo, setRenameTo] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [status, setStatus] = useState('');
@@ -52,6 +54,22 @@ export default function NoteTypesPage() {
     } catch (e) { if (epoch.current === token) setError(message(e)); }
     finally { pending.current = false; setBusy(false); }
   };
+  const savedDefinition = models.find(m => m.id === draft.id);
+  const dirtyDefinition = Boolean(draft.id && JSON.stringify(draft) !== JSON.stringify(savedDefinition));
+  const renameField = async () => {
+    if (dirtyDefinition) { setError('Save definition changes before renaming a field.'); return; }
+    if (pending.current || !draft.id || !draft.revision) return;
+    pending.current = true; setBusy(true); setError('');
+    const token = epoch.current;
+    try {
+      const { data } = await client.post<Model>(`/api/models/${draft.id}/rename-field`, { old_name: renameFrom, new_name: renameTo, expected_revision: draft.revision });
+      if (token !== epoch.current) return;
+      change(data); setModels(old => old.map(m => m.id === data.id ? data : m));
+      setSamples(old => { const next = { ...old, [renameTo]: old[renameFrom] || '' }; delete next[renameFrom]; return next; });
+      setRenameFrom(''); setRenameTo(''); setStatus('Field renamed. Source values, cards and study history preserved.');
+    } catch (e) { if (token === epoch.current) setError(message(e)); }
+    finally { pending.current = false; setBusy(false); }
+  };
   return <div className="page-container note-types-page" style={{ maxWidth: 1000 }}>
     <h1>Note types &amp; templates</h1><p><Link to="/media">Check media files</Link></p>
     <p>Edit source fields, card templates and shared styling. Saving applies to every note using this type.</p>
@@ -66,7 +84,12 @@ export default function NoteTypesPage() {
       <div className="glass-card" style={{ padding: 20, marginTop: 16 }}>
         <label>Name<input value={draft.name} onChange={e => change({ ...draft, name: e.target.value })} /></label>
         <label>Fields (one name per line)<textarea rows={4} value={draft.fields.join('\n')} onChange={e => change({ ...draft, fields: e.target.value.split('\n') })} /></label>
-        <p>Fields match by name. A field containing data cannot be removed or renamed. Existing template positions identify their cards.</p>
+        <p>Use Rename field to preserve data and update templates. Save other definition changes first. Existing template positions identify their cards.</p>
+        {draft.id && <fieldset disabled={busy || dirtyDefinition}><legend>Rename field in saved definition</legend>
+          <label>Existing field<select value={renameFrom} onChange={e => setRenameFrom(e.target.value)}><option value="">Choose field</option>{models.find(m => m.id === draft.id)?.fields.map(f => <option key={f}>{f}</option>)}</select></label>
+          <label>New field name<input value={renameTo} onChange={e => setRenameTo(e.target.value)} /></label>
+          <button type="button" disabled={!renameFrom || !renameTo.trim()} onClick={() => void renameField()}>Rename field and preserve values</button>
+        </fieldset>}
         {draft.templates.map((t, index) => <section key={index} style={{ marginBlock: 20 }}>
           <h2>Card {index + 1}</h2>
           {(['name', 'qfmt', 'afmt'] as const).map(key => <label key={key}>{key === 'qfmt' ? 'Front template' : key === 'afmt' ? 'Back template' : 'Template name'}
@@ -75,6 +98,11 @@ export default function NoteTypesPage() {
         </section>)}
         <button type="button" onClick={() => change({ ...draft, templates: [...draft.templates, { name: `Card ${draft.templates.length + 1}`, qfmt: '{{' + draft.fields[0] + '}}', afmt: '{{FrontSide}}' }] })}>Add card template</button>
         <label>Shared CSS<textarea rows={7} value={draft.css} onChange={e => change({ ...draft, css: e.target.value })} /></label>
+        <details><summary>LaTeX header and footer</summary>
+          <p>Uses the server’s TeX packages. Generated images are included in media and available offline.</p>
+          <label>LaTeX header<textarea rows={7} value={draft.latex_header ?? ''} placeholder="Server default" onChange={e => change({ ...draft, latex_header: e.target.value })} /></label>
+          <label>LaTeX footer<textarea rows={2} value={draft.latex_footer ?? ''} placeholder="Server default" onChange={e => change({ ...draft, latex_footer: e.target.value })} /></label>
+        </details>
         <h2>Preview fields</h2>
         {draft.fields.map((f, i) => <label key={i}>{f}<textarea rows={2} value={samples[f] || ''} onChange={e => { setSamples({ ...samples, [f]: e.target.value }); setPreview(undefined); }} /></label>)}
         <button type="button" onClick={() => void perform('preview')}>Preview</button>{' '}

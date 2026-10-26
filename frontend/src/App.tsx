@@ -20,6 +20,8 @@ import BrowsePage from './pages/BrowsePage';
 const CustomStudyPage = lazy(() => import('./pages/CustomStudyPage'));
 const MediaPage = lazy(() => import('./pages/MediaPage'));
 const NoteTypesPage = lazy(() => import('./pages/NoteTypesPage'));
+const OfflinePage = lazy(() => import('./pages/OfflinePage'));
+const BackupsPage = lazy(() => import('./pages/BackupsPage'));
 const StatsPage = lazy(() => import('./pages/StatsPage'));
 
 import DeckOptionsPage from './pages/DeckOptionsPage';
@@ -41,6 +43,8 @@ function App() {
               <Route path="/decks/:deckId/cards" element={<ProtectedRoute><CardEditorPage /></ProtectedRoute>} />
               <Route path="/decks/:deckId/options" element={<ProtectedRoute><DeckOptionsPage /></ProtectedRoute>} />
               <Route path="/add" element={<ProtectedRoute><AddPage /></ProtectedRoute>} />
+              <Route path="/offline" element={<ProtectedRoute><OfflinePage /></ProtectedRoute>} />
+              <Route path="/backups" element={<ProtectedRoute><BackupsPage /></ProtectedRoute>} />
               <Route path="/media" element={<ProtectedRoute><MediaPage /></ProtectedRoute>} />
               <Route path="/note-types" element={<ProtectedRoute><NoteTypesPage /></ProtectedRoute>} />
               <Route path="/stats" element={<ProtectedRoute><StatsPage /></ProtectedRoute>} />

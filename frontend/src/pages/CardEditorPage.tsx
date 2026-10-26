@@ -1,3 +1,4 @@
+import ImageOcclusionEditor from '../components/ImageOcclusionEditor';
 import FormattingTools from '../components/FormattingTools';
 import MediaTools from '../components/MediaTools';
 import { useState, useEffect, useCallback, useRef } from 'react';
@@ -288,8 +289,9 @@ const CardEditorPageContent = () => {
             )}
 
             <form onSubmit={handleSaveEdit}>
-              {Object.entries(editFields).map(([fieldName, value]) => {
-                const isOptional = fieldName === 'Extra' || fieldName === 'Add Reverse';
+              {editingNote.kind === 'image_occlusion' && <ImageOcclusionEditor key={editingCard.id} fields={editFields} onChange={setEditFields} disabled={savePending} onBusyChange={active => setMediaBusy(n => Math.max(0, n + (active ? 1 : -1)))} />}
+              {Object.entries(editFields).filter(([f]) => editingNote.kind !== 'image_occlusion' || !['Image', 'Occlusion'].includes(f)).map(([fieldName, value]) => {
+                const isOptional = editingNote.kind === 'image_occlusion' || fieldName === 'Extra' || fieldName === 'Add Reverse';
                 return (
                   <div className="form-group" key={fieldName}>
                     <label htmlFor={`edit-field-${fieldName}`}>

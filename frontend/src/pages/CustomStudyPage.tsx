@@ -1,3 +1,6 @@
+import CustomStudyPresets from '../components/CustomStudyPresets';
+import StudyAutomation from '../components/StudyAutomation';
+import client from '../api/client';
 import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import CardFace, { type CardFaceRef } from '../components/CardFace';
@@ -91,6 +94,7 @@ export const CustomStudyPage = () => {
   const fetchGenRef = useRef<number>(0);
   const fetchSessionsSeqRef = useRef<number>(0);
   const isSubmittingRef = useRef<boolean>(false);
+  const revealedAtRef = useRef<number | null>(null);
   const cardStartTimeRef = useRef<number>(0);
 
   useEffect(() => {
@@ -203,7 +207,7 @@ export const CustomStudyPage = () => {
       );
       setCard(res.data.card);
       setNextAvailableAt(res.data.next_available_at);
-      cardStartTimeRef.current = Date.now();
+      cardStartTimeRef.current = Date.now(); revealedAtRef.current = null;
     } catch (err: unknown) {
       if (!isMountedRef.current || gen !== fetchGenRef.current || activeSessionIdRef.current !== sessionId) {
         return;
@@ -258,6 +262,7 @@ export const CustomStudyPage = () => {
 
   const handleRevealAnswer = useCallback(() => {
     if (!showAnswer && card) {
+      revealedAtRef.current = Date.now();
       setShowAnswer(true);
     }
   }, [showAnswer, card]);
@@ -282,7 +287,7 @@ export const CustomStudyPage = () => {
       setReviewError(null);
       setIs409Conflict(false);
 
-      const duration_ms = Math.min(3600000, Math.max(0, Date.now() - cardStartTimeRef.current));
+      const duration_ms = Math.min((Number(card.settings?.maximum_answer_seconds) || 60) * 1000, Math.max(0, (card.settings?.stop_on_screen_timer_on_answer ? revealedAtRef.current ?? Date.now() : Date.now()) - cardStartTimeRef.current));
 
       try {
         const res = await answerFilteredCard(sid, {
@@ -542,6 +547,7 @@ export const CustomStudyPage = () => {
 
     try {
       const payload = {
+        filters: createForm.filters || [],
         name: createForm.name.trim(),
         search: createForm.search,
         limit: Number(createForm.limit),
@@ -586,6 +592,7 @@ export const CustomStudyPage = () => {
 
   return (
     <div className="page-container custom-study-container" style={{ padding: '2rem 1rem', maxWidth: '900px', margin: '0 auto' }}>
+      {!selectedSession && <CustomStudyPresets onChoose={(name, search, reschedule) => { setCreateForm(old => ({ ...old, name, search, reschedule, filters: [], order: 'due' })); setEditingSession(null); setCreateError(null); setIsCreateModalOpen(true); }} />}
       {/* Top Header */}
       <div
         className="custom-study-header"
@@ -717,7 +724,7 @@ export const CustomStudyPage = () => {
           <button type="button" className="btn btn-ghost" disabled={isPending || loadingCard || actionLoadingId === selectedSession.id} onClick={() => {
             setEditingSession(selectedSession);
             const { name, search, limit, order, reschedule, preview_again_seconds, preview_hard_seconds, preview_good_seconds } = selectedSession;
-            setCreateForm({ name, search, limit, order, reschedule, preview_again_seconds, preview_hard_seconds, preview_good_seconds });
+            setCreateForm({ name, search, limit, order, reschedule, preview_again_seconds, preview_hard_seconds, preview_good_seconds, filters: selectedSession.filters || [] });
             setCreateError(null); setIsCreateModalOpen(true);
           }}>Edit session settings</button>
           {/* 409 Conflict Guidance or Review Error Banner */}
@@ -813,6 +820,14 @@ export const CustomStudyPage = () => {
                   </span>
                 </div>
 
+                <StudyAutomation card={card} face={cardFaceRef} showAnswer={showAnswer} busy={isPending || loadingCard || is409Conflict} onReveal={handleRevealAnswer} onRate={rating => void handleAnswer(rating)} onBury={async () => {
+                  if (!selectedSession || isSubmittingRef.current) return;
+                  const sid = selectedSession.id; const epoch = selectionEpochRef.current;
+                  isSubmittingRef.current = true; setIsPending(true);
+                  try { await client.post(`/api/study/${card.card_id}/action`, { action: 'bury', expected_version: card.version }); if (activeSessionIdRef.current === sid && epoch === selectionEpochRef.current) await fetchNextCard(sid); }
+                  catch (e) { if (activeSessionIdRef.current === sid && epoch === selectionEpochRef.current) setReviewError(errorMessage(e, 'Could not bury card')); }
+                  finally { isSubmittingRef.current = false; if (isMountedRef.current) setIsPending(false); }
+                }} />
                 <CardFace
             key={String(card.card_id) + ":" + String(card.version)}
                   ref={cardFaceRef}
@@ -1117,7 +1132,18 @@ export const CustomStudyPage = () => {
               </div>
 
               <div className="form-group" style={{ marginBottom: '1rem' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
+                <div className="form-group"><label>Study preset<select value="" onChange={e => { if (e.target.value) setCreateForm(old => ({ ...old, search: e.target.value, filters: [], order: 'due' })); }}>
+                <option value="">Choose a preset</option><option value="is:due">Review due cards</option><option value="rated:1:1">Review forgotten cards today</option><option value="is:new">Study new cards</option><option value="added:7">Preview recently added cards</option><option value="is:review -is:due">Review ahead</option><option value="tag:marked">Study marked notes</option>
+              </select></label></div>
+              {(createForm.filters || []).map((filter, index) => <fieldset key={index}><legend>Additional filter {index + 1}</legend>
+                <label>Search<input value={filter.search} onChange={e => setCreateForm(old => ({ ...old, filters: old.filters?.map((f,i) => i === index ? { ...f, search: e.target.value } : f) }))} /></label>
+                <label>Limit<input type="number" min="1" max="1000" value={filter.limit} onChange={e => setCreateForm(old => ({ ...old, filters: old.filters?.map((f,i) => i === index ? { ...f, limit: Number(e.target.value) } : f) }))} /></label>
+                <label>Order<select value={filter.order} onChange={e => setCreateForm(old => ({ ...old, filters: old.filters?.map((f,i) => i === index ? { ...f, order: e.target.value as SessionOrder } : f) }))}>{['oldest','newest','random','due','lapses'].map(order => <option key={order}>{order}</option>)}</select></label>
+                <button type="button" onClick={() => setCreateForm(old => ({ ...old, filters: old.filters?.filter((_,i) => i !== index) }))}>Remove filter</button>
+              </fieldset>)}
+              <button type="button" disabled={(createForm.filters?.length || 0) >= 9} onClick={() => setCreateForm(old => ({ ...old, filters: [...old.filters || [], { search: 'is:new', limit: 100, order: 'oldest' }] }))}>Add another filter</button>
+              <p>Filters run in order without duplicate cards. Combined limit: 1,000 cards.</p>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
                   <label htmlFor="custom-study-search" style={{ fontWeight: 500, margin: 0 }}>
                     Search Query
                   </label>

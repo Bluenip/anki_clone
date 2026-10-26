@@ -87,3 +87,54 @@ To deploy using Docker Compose:
 
 ## 📝 License
 This is an educational prototype and portfolio project.
+
+### Offline study and LaTeX
+
+The production frontend includes a service worker and `/offline`. Serve the app
+and `/api` on the same HTTPS origin (localhost also works). Download a deck while
+connected. Answers persist in IndexedDB; local SM-2/FSRS scheduling supports
+learning repetitions. Server replay is authoritative for collection-wide load
+balancing, daily quotas and sibling changes. Conflicts remain visible until the
+user resolves them; unsynced answers are not silently applied over newer work.
+Downloaded source fields and tags can also be edited on `/offline`. Edits persist
+across reloads. Sync replays reviews first, then merges disjoint field changes;
+changes to the same field require an explicit local/server choice. Note-type
+changes and deleted notes stay as visible conflicts. Edits use durable receipts
+to make retries idempotent. After an applied change, cards must refresh before
+further offline study; a failed refresh keeps that gate in place.
+
+Downloads are paginated (1,000 cards per request, at most 100,000 per selected
+deck tree). The client checks a shared manifest revision before publishing the
+download and verifies media hashes. Browser storage limits still apply.
+
+Reconnect sync runs while the offline page is open. An optional background-sync
+checkbox allows the service worker to replay pending answers/edits using the
+saved login token. This requires the browser Background Sync API, a valid token
+and permission for background work; it does not guarantee execution after the
+browser is force-closed. Unsupported browsers retain manual/reconnect sync.
+Logging out clears background authorization and local account data, and asks
+first if there are unsynced answers or edits. Source-field editing does not
+upload new media while offline.
+
+Full `[latex]...[/latex]` rendering uses `latex`, `dvipng`, `bubblewrap` and
+`prlimit`. These are installed in the backend Docker image. Linux must allow
+unprivileged user namespaces for the isolated compiler; rendering fails closed
+if the sandbox cannot start. Only TeX runtime directories and temporary output
+are mounted, with no network or access to application data. Header/footer can
+be edited under Note types. Install additional trusted TeX packages in the
+server image as needed. Existing native Anki LaTeX images work without a compiler;
+inline math retains the browser fallback when the toolchain is unavailable.
+
+Reference syntax: [Anki TTS](https://docs.ankiweb.net/templates/fields.html),
+[Anki LaTeX](https://docs.ankiweb.net/math.html). Offline FSRS uses
+[ts-fsrs](https://github.com/open-spaced-repetition/ts-fsrs); server replay continues
+to use the pinned Python scheduler.
+
+On Linux x86_64 without system TeX, a portable runtime can be installed for the
+current user with `backend/venv/bin/python backend/setup_latex_runtime.py`.
+It verifies Tectonic 0.17.0 against the official release SHA-256 and primes a
+trusted example with AMS math, TikZ and mhchem. It requires existing `bwrap`,
+`prlimit` and `pdftoppm`. Files stay in `~/.cache/anki-latex` (override with
+`ANKI_TECTONIC_DIR`). Initial setup uses the network; card rendering uses only
+cached packages, in a sandbox with no network. Additional packages must be
+prepared by the server administrator rather than downloaded by untrusted notes.

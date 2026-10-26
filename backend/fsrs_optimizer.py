@@ -27,14 +27,19 @@ def training_items(db, user_id, decks, now):
             histories.pop(log.card_id, None)
             continue
         metadata = json.loads(log.record.payload) if log.record else {}
-        # Unknown/imported manual entries cannot establish complete history.
         kind = metadata.get('kind')
-        if kind not in ('new', 'learning', 'relearning', 'review'):
+        start_new = log.was_new or kind == 'new'
+        if kind == 'imported':
+            raw = metadata.get('anki', {})
+            native_type = raw.get('type')
+            kind = {0: 'learning', 1: 'review', 2: 'relearning'}.get(native_type)
+            start_new = native_type == 0 and raw.get('lastIvl') == 0
+        if kind not in ('new', 'learning', 'relearning', 'review', 'interday'):
             histories.pop(log.card_id, None)
             continue
         cfg = configs[log.card.deck_id]
         day = study_day(utc(log.review_date), cfg).astimezone(ZoneInfo(cfg.timezone)).date()
-        if log.was_new or kind == 'new':
+        if start_new:
             histories[log.card_id] = ([], day)
         if log.card_id not in histories:
             continue

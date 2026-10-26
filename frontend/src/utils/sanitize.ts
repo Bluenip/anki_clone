@@ -38,7 +38,11 @@ const ALLOWED_ATTR = [
 ];
 
 // Configure DOMPurify hooks
-DOMPurify.addHook('uponSanitizeAttribute', (_node, data) => {
+DOMPurify.addHook('uponSanitizeAttribute', (node, data) => {
+  // Locally created media blobs are used by downloaded cards in sandboxed frames.
+  if (data.attrName === 'src' && ['IMG', 'AUDIO', 'VIDEO', 'SOURCE'].includes(node.tagName) && data.attrValue.startsWith('blob:')) {
+    try { if (new URL(data.attrValue).origin === window.location.origin) data.forceKeepAttr = true; } catch { /* Keep the normal sanitizer rules. */ }
+  }
   // Block dangerous URLs in href, src, and action
   if ((data.attrName === 'href' || data.attrName === 'src' || data.attrName === 'action') && data.attrValue) {
     const cleanVal = data.attrValue.replace(/\s+/g, '').toLowerCase();

@@ -5,10 +5,19 @@ from sqlalchemy import and_, or_, func, false
 from models import NoteType, Note, Card
 
 
-def field_lookup(db, uid):
+def field_lookup(db, uid, now=None):
+    from datetime import datetime, timezone
+    now = now or datetime.now(timezone.utc)
     @cache
     def lookup(key, argument):
         from browser_search import matches, in_note
+        from search_advanced import dates, regex_predicate
+        if key in ('added', 'rated'): return dates(db, uid, key, argument, now)
+        if key == '_due_days':
+            from search_advanced import due_days
+            return due_days(db, uid, argument, now)
+        if key == 're': return regex_predicate(db, uid, argument)
+        if argument.startswith('re:'): return regex_predicate(db, uid, argument[3:], key)
         clauses = []
         for model in db.query(NoteType).filter_by(user_id=uid):
             for ordinal, name in enumerate(json.loads(model.fields_json)):

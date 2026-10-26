@@ -13,6 +13,8 @@ export const deleteDeck = (id: number) => client.delete(`/api/decks/${id}`);
 export interface TextImportOptions {
   preview?: boolean;
   duplicate_policy?: 'add' | 'skip' | 'update';
+  match_scope?: 'deck' | 'collection';
+  match_fields?: 'first' | 'all';
   has_header?: boolean;
   allow_html?: boolean;
   front_column?: number;
@@ -31,11 +33,11 @@ export const exportText = (deckId: number, format: 'csv' | 'txt' | 'tsv') =>
   client.get(`/api/decks/${deckId}/export/text`, { params: { format }, responseType: 'blob' });
 
 // Import .apkg file
-export const importApkg = async (file: File, includeScheduling = false, collectionRestore = false) => {
+export const importApkg = async (file: File, includeScheduling = false, collectionRestore = false, mediaConflicts: 'error' | 'rename' = 'error', duplicatePolicy: 'newer' | 'skip' | 'update' | 'add' = 'newer') => {
   const formData = new FormData();
   formData.append('file', file);
   return client.post('/api/apkg/import', formData, {
-    params: { include_scheduling: includeScheduling, collection_restore: collectionRestore },
+    params: { include_scheduling: includeScheduling, collection_restore: collectionRestore, media_conflicts: mediaConflicts, duplicate_policy: duplicatePolicy },
     headers: { 'Content-Type': 'multipart/form-data' }
   });
 };

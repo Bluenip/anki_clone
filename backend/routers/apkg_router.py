@@ -1,3 +1,4 @@
+from typing import Literal
 import logging
 import os
 import sqlite3
@@ -28,6 +29,8 @@ async def import_apkg_file(
     file: UploadFile = File(...),
     include_scheduling: bool = False,
     collection_restore: bool = False,
+    media_conflicts: Literal['error', 'rename'] = 'error',
+    duplicate_policy: Literal['newer', 'skip', 'update', 'add'] = 'newer',
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> dict:
@@ -63,7 +66,7 @@ async def import_apkg_file(
                     )
                 f.write(chunk)
 
-        result = import_apkg(temp_path, user.id, db, include_scheduling=include_scheduling, whole_collection=is_collection)
+        result = import_apkg(temp_path, user.id, db, include_scheduling=include_scheduling, whole_collection=is_collection, media_conflicts=media_conflicts, duplicate_policy=duplicate_policy)
         result['collection_restore'] = is_collection
         return result
     except HTTPException:

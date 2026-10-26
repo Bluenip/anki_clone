@@ -68,6 +68,7 @@ describe('CustomStudyPage and Filtered Session UI', () => {
     const createdSession: filteredApi.Session = {
       id: 10,
       name: 'Pathology Review',
+      filters: [],
       search: 'tag:pathology',
       limit: 150,
       order: 'random',
@@ -125,6 +126,7 @@ describe('CustomStudyPage and Filtered Session UI', () => {
 
     expect(createSpy).toHaveBeenCalledWith({
       name: 'Pathology Review',
+      filters: [],
       search: 'tag:pathology',
       limit: 150,
       order: 'random',

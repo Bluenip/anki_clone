@@ -106,6 +106,16 @@ class DeckSettings(BaseModel):
     model_config = ConfigDict(extra="allow", strict=True)
     fsrs: bool = False
     fsrs_fuzz: bool = False
+    load_balancing: bool = False
+    easy_days: dict[str, int] = Field(default_factory=dict)
+
+    @field_validator("easy_days")
+    @classmethod
+    def validate_easy_days(cls, value):
+        if any(k not in ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun") or not 0 <= v <= 100 for k, v in value.items()):
+            raise ValueError("Easy Days uses Mon through Sun with capacity 0 to 100")
+        return value
+
     fsrs_desired_retention: float = Field(default=0.9, ge=0.7, le=0.99, allow_inf_nan=False)
     fsrs_parameters: Optional[list[float]] = Field(default=None, min_length=21, max_length=21)
     timezone: str = "UTC"
@@ -267,6 +277,8 @@ class ImportRequest(BaseModel):
     has_header: bool = False
     allow_html: bool = True
     duplicate_policy: Literal["add", "skip", "update"] = "add"
+    match_scope: Literal["deck", "collection"] = "deck"
+    match_fields: Literal["first", "all"] = "first"
     preview: bool = False
 
     @field_validator("text")

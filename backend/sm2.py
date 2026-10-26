@@ -28,6 +28,8 @@ class DeckSchedulingConfig:
     # Algorithm and study-day settings (future reviews only).
     fsrs: bool = False
     fsrs_fuzz: bool = False
+    load_balancing: bool = False
+    easy_days: dict = field(default_factory=dict)
     fsrs_desired_retention: float = 0.9
     fsrs_parameters: Optional[List[float]] = None
     timezone: str = "UTC"

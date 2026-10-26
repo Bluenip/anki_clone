@@ -49,7 +49,7 @@ def review(db, card, user_id, data, now=None, *, commit=True, filtered_session_i
             if previous.undone or previous.card_id!=card.id or response['rating']!=data.rating:
                 raise HTTPException(status_code=409, detail='Request ID has already been used for a different or undone operation')
             return response
-    config=config_for(card.deck)
+    config=config_for(card.deck, now)
     state=state_for(db,card)
     before_state=serialize_state(state)
     claim_version(db,state,data.expected_version)
@@ -97,6 +97,8 @@ def review(db, card, user_id, data, now=None, *, commit=True, filtered_session_i
             progress.interval_days = early[data.rating]
             progress.ease_factor = max(1.3, previous_ease + {2:-0.15,3:0,4:0.15}[data.rating])
         if progress.card_state=='review':
+            from load_balancing import choose_interval
+            progress.interval_days = choose_interval(db, card, progress, config, now, progress.interval_days)
             progress.next_review=next_study_day(now,config,progress.interval_days)
     if progress.lapse_count>=config.leech_threshold:
         progress.is_leech=True

@@ -42,12 +42,12 @@ def _count_studied_today(db: Session, deck_id: int, user_id: int):
     
     new_studied = db.query(ReviewLog).join(Card, Card.id == ReviewLog.card_id).filter(
         Card.deck_id == deck_id, ReviewLog.user_id == user_id,
-        ReviewLog.was_new == True, ReviewLog.review_date >= sot
+        ReviewLog.was_new == True, ReviewLog.rating.in_([1,2,3,4]), ReviewLog.review_date >= sot
     ).count()
     
     rev_studied = db.query(ReviewLog).join(Card, Card.id == ReviewLog.card_id).filter(
         Card.deck_id == deck_id, ReviewLog.user_id == user_id,
-        ReviewLog.was_new == False, ReviewLog.review_date >= sot
+        ReviewLog.was_new == False, ReviewLog.rating.in_([1,2,3,4]), ReviewLog.review_date >= sot
     ).count()
     
     return new_studied, rev_studied
@@ -105,6 +105,9 @@ def get_next_study_card(
         progress.repetitions if progress else 0, progress.ease_factor if progress else config.starting_ease,
         progress.interval_days if progress else 0, config=config,
         card_state=progress.card_state if progress else 'new', learning_step=progress.learning_step if progress else 0)
+    if not config.fsrs:
+        from load_balancing import adjust_preview
+        intervals = adjust_preview(db, card, progress, config, now, intervals)
     rendered=bool(card.note_link and card.note_link.note.package_data and json.loads(card.note_link.note.package_data.payload).get('_web_rendered'))
     front,back=media_for_web(card.front,current_user.id),media_for_web(card.back,current_user.id)
     if rendered:

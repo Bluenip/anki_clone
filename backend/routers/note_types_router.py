@@ -8,7 +8,8 @@ from sqlalchemy import update
 from sqlalchemy.orm import Session
 from auth import get_current_user
 from database import get_db
-from models import NoteType, Note, User
+from models import NoteType, Note, User, PackageModel
+from latex_rendering import HEADER, FOOTER, settings as latex_settings
 from note_rendering import render_cards, render_template, css_for_web, TOKEN
 from note_service import update_note
 
@@ -26,6 +27,8 @@ class Definition(BaseModel):
     fields: list[str] = Field(min_length=1, max_length=100)
     templates: list[Template] = Field(min_length=1, max_length=100)
     css: str = Field(default='', max_length=200000)
+    latex_header: str = Field(default=HEADER, max_length=10000)
+    latex_footer: str = Field(default=FOOTER, max_length=10000)
 
     @model_validator(mode='after')
     def validate_definition(self):
@@ -62,12 +65,13 @@ class Preview(Definition):
 
 
 def revision(model):
-    return hashlib.sha256(json.dumps([model.name, model.fields_json, model.templates_json, model.css]).encode()).hexdigest()
+    return hashlib.sha256(json.dumps([model.name, model.fields_json, model.templates_json, model.css, *latex_settings(model)]).encode()).hexdigest()
 
 
 def response(model):
     return dict(id=model.id, name=model.name, fields=json.loads(model.fields_json),
-                templates=json.loads(model.templates_json), css=model.css or '', revision=revision(model))
+                templates=json.loads(model.templates_json), css=model.css or '', revision=revision(model),
+                latex_header=latex_settings(model)[0], latex_footer=latex_settings(model)[1])
 
 
 def owned(db, user, model_id):
@@ -82,6 +86,12 @@ def assign(model, data):
     model.fields_json = json.dumps(data.fields, ensure_ascii=False)
     model.templates_json = json.dumps([t.model_dump() for t in data.templates], ensure_ascii=False)
     model.css = data.css
+    existing = getattr(model, 'package_data', None)
+    raw = json.loads(existing.payload) if existing else {}
+    raw.update(latexPre=data.latex_header, latexPost=data.latex_footer)
+    if existing: existing.payload = json.dumps(raw)
+    elif isinstance(model, NoteType): model.package_data = PackageModel(payload=json.dumps(raw))
+    else: model.package_data = SimpleNamespace(payload=json.dumps(raw))
 
 
 def unique_name(db, user, data, model_id=None):
@@ -159,4 +169,57 @@ def edit(model_id: int, data: EditDefinition, db: Session = Depends(get_db), use
     except Exception:
         db.rollback()
         raise
+    return response(model)
+
+
+class RenameField(BaseModel):
+    expected_revision: str = Field(pattern=r'^[0-9a-f]{64}$')
+    old_name: str = Field(min_length=1, max_length=100)
+    new_name: str = Field(min_length=1, max_length=100)
+
+
+@router.post('/{model_id}/rename-field')
+def rename_field(model_id: int, data: RenameField, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    model = owned(db, user, model_id)
+    try:
+        db.execute(update(NoteType).where(NoteType.id == model.id).values(id=NoteType.id))
+        db.expire_all()
+        if revision(model) != data.expected_revision:
+            raise HTTPException(409, 'Note type changed; reload before renaming')
+        names = json.loads(model.fields_json)
+        if data.old_name not in names or data.new_name in names:
+            raise HTTPException(422, 'Choose an existing field and a new unique name')
+        if not data.new_name.strip() or any(c in data.new_name for c in ':{}') or data.new_name.startswith(('#', '^', '/')):
+            raise HTTPException(422, 'Invalid field name')
+        from image_occlusion import is_occlusion
+        templates = json.loads(model.templates_json)
+        if is_occlusion(templates):
+            raise HTTPException(422, 'Image Occlusion uses fixed field names for portable masks')
+        def replace(match):
+            token = match[1].strip()
+            if token.startswith(('#', '^', '/')):
+                return '{{' + token[0] + data.new_name + '}}' if token[1:] == data.old_name else match[0]
+            prefix, sep, name = token.rpartition(':')
+            if (name if sep else token) == data.old_name:
+                return '{{' + (prefix + ':' if sep else '') + data.new_name + '}}'
+            return match[0]
+        for template in templates:
+            for side in ('qfmt', 'afmt'):
+                template[side] = TOKEN.sub(replace, template[side])
+        names[names.index(data.old_name)] = data.new_name
+        model.fields_json = json.dumps(names, ensure_ascii=False)
+        model.templates_json = json.dumps(templates, ensure_ascii=False)
+        if model.package_data:
+            original = json.loads(model.package_data.payload)
+            for field in original.get('flds', []):
+                if field.get('name') == data.old_name: field['name'] = data.new_name
+            original.pop('req', None)
+            model.package_data.payload = json.dumps(original)
+        for note in db.query(Note).filter_by(note_type_id=model.id, user_id=user.id).all():
+            update_note(db, note, dict(zip(names, json.loads(note.fields_json))), json.loads(note.tags_json))
+        db.commit()
+    except ValueError as exc:
+        db.rollback(); raise HTTPException(422, str(exc)) from None
+    except Exception:
+        db.rollback(); raise
     return response(model)

@@ -42,22 +42,29 @@ def import_text(db, deck, data):
     by_guid = {card_guid(card, deck.user_id): card for card in cards}
     by_front = {}
     for card in cards:
-        if card.deck_id == deck.id:
-            by_front.setdefault(card.front, []).append(card)
+        if data.match_scope == 'collection' or card.deck_id == deck.id:
+            values = [card.front, card.back]
+            if card.note_link:
+                note = card.note_link.note
+                if note.note_type.name != 'Basic' or json.loads(note.note_type.fields_json) != ['Front', 'Back'] or len(note.card_links) != 1:
+                    continue
+                values = json.loads(note.fields_json)
+            by_front.setdefault(tuple(values) if data.match_fields == 'all' else values[0], []).append(card)
     plan, seen, target_ids = [], set(), set()
     counts = {'added': 0, 'updated': 0, 'skipped': 0}
     for row in rows:
-        key = ('guid', row.guid) if row.guid else ('front', row.front)
+        match_key = (row.front, row.back) if data.match_fields == 'all' else row.front
+        key = ('guid', row.guid) if row.guid else ('fields', match_key)
         if key in seen and (row.guid or data.duplicate_policy != 'add'):
             raise ValueError(f'Input contains repeated note identity near line {row.line}; resolve duplicates before importing')
         seen.add(key)
         existing = by_guid.get(row.guid) if row.guid else None
-        if existing and existing.deck_id != deck.id:
+        if existing and data.match_scope == 'deck' and existing.deck_id != deck.id:
             raise ValueError('A GUID already belongs to another deck; this import will not move or overwrite it')
         if existing and data.duplicate_policy == 'add':
             raise ValueError('A GUID already exists; select Skip or Update instead of Add')
         if not row.guid and data.duplicate_policy != 'add':
-            matches = by_front.get(row.front, [])
+            matches = by_front.get(match_key, [])
             if len(matches) > 1:
                 raise ValueError('Multiple notes have the same first field; export with GUIDs to update unambiguously')
             existing = matches[0] if matches else None

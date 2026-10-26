@@ -37,7 +37,7 @@ class NoteUpdate(NoteFields):
 class NoteCreate(NoteFields):
     deck_id: int
     note_type_id: int | None = None
-    kind: Literal['basic', 'reversed', 'optional_reversed', 'cloze', 'typed'] = 'basic'
+    kind: Literal['basic', 'reversed', 'optional_reversed', 'cloze', 'typed', 'image_occlusion'] = 'basic'
 
 
 def owned_note(db, note_id, user_id):
@@ -55,7 +55,7 @@ def get_note_types(db: Session = Depends(get_db), user: User = Depends(get_curre
     from note_service import kind_for
     names = {m.name for m in models}
     return ([{'kind': key, 'name': value['name'], 'fields': value['fields']} for key, value in BUILTINS.items() if value['name'] not in names]
-            + [{'kind': kind_for(m) if kind_for(m) != 'custom' else f'model:{m.id}', 'id': m.id, 'name': m.name, 'fields': json.loads(m.fields_json)} for m in models])
+            + [{'kind': kind_for(m) if kind_for(m) in BUILTINS and m.name == BUILTINS[kind_for(m)]['name'] else f'model:{m.id}', 'editor_kind': kind_for(m), 'id': m.id, 'name': m.name, 'fields': json.loads(m.fields_json)} for m in models])
 
 
 @router.get('/note-types/available')

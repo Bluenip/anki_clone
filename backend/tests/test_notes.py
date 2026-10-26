@@ -61,7 +61,7 @@ def test_optional_reverse_and_cross_user_access(client, auth_headers_a, auth_hea
 
 def test_invalid_cloze_does_not_create_note_or_card(client, auth_headers_a, db_session):
     deck_id = deck(client, auth_headers_a)
-    for text in ['No cloze', '{{c1::nested {{c2::cloze}}}}', '{{c0::bad}}']:
+    for text in ['No cloze', '{{c1::unclosed {{c2::cloze}}', '{{c0::bad}}']:
         response = client.post('/api/notes', headers=auth_headers_a, json={'deck_id':deck_id,'kind':'cloze','fields':{'Text':text,'Extra':''}})
         assert response.status_code == 400, response.text
     assert db_session.query(Card).filter_by(deck_id=deck_id).count() == 0

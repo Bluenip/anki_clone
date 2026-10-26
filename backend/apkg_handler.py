@@ -124,8 +124,13 @@ def import_apkg(
     max_total_media_size: int = MAX_TOTAL_MEDIA_SIZE,
     include_scheduling: bool = False,
     whole_collection: bool = False,
+    media_directory: str | None = None,
+    media_conflicts: str = 'error',
+    duplicate_policy: str = 'newer',
 ) -> dict:
-    media_dir = get_media_dir(user_id)
+    if media_conflicts not in ('error', 'rename') or duplicate_policy not in ('newer', 'skip', 'update', 'add'):
+        raise ValueError('Invalid import conflict policy')
+    media_dir = media_directory or get_media_dir(user_id)
     os.makedirs(media_dir, exist_ok=True)
     real_media_dir = os.path.realpath(media_dir)
     
@@ -215,6 +220,7 @@ def import_apkg(
         from media_utils import get_all_referenced_media
         owned_media = get_all_referenced_media(user_id, db)
         seen_dest_paths = set()
+        media_remaps = {}
         for num_key, filename in media_mapping.items():
             num_key_str = str(num_key).strip()
             # 1. Require strictly numeric archive-member keys (e.g. "0", "1", "2")
@@ -288,14 +294,25 @@ def import_apkg(
 
             # A filename shared by an existing note must never silently change
             # its content when an unrelated package is imported.
-            if os.path.isfile(dst_path) and safe_filename in owned_media:
+            if os.path.isfile(dst_path) and (safe_filename in owned_media or media_conflicts == 'rename'):
                 import filecmp
                 if not filecmp.cmp(real_src, dst_path, shallow=False):
-                    conn.close()
-                    raise ValueError('Media filename conflicts with existing note content; rename the media in the source package before importing')
+                    if media_conflicts == 'error':
+                        conn.close()
+                        raise ValueError('Media filename conflicts with existing note content; choose rename conflicts to preserve both files')
+                    with open(real_src, 'rb') as incoming: digest = hashlib.sha256(incoming.read()).hexdigest()
+                    replacement = 'import-' + digest + ext
+                    destination = os.path.join(real_media_dir, replacement)
+                    if os.path.exists(destination) and (os.path.islink(destination) or not filecmp.cmp(real_src, destination, shallow=False)):
+                        raise ValueError('Renamed media destination is occupied by different content')
+                    media_remaps[filename] = replacement
+                    safe_filename, dst_path = replacement, destination
 
             valid_media_to_copy.append((real_src, dst_path, safe_filename))
 
+        if media_remaps:
+            from media_remap import package
+            col = package(cursor, col, media_remaps)
         decks_json = json.loads(col['decks'])
         models_json = json.loads(col['models'])
         
@@ -315,7 +332,7 @@ def import_apkg(
             from package_notes import import_rows
             if whole_collection and db.query(Deck).filter_by(user_id=user_id).first():
                 raise ValueError('Collection restore requires an empty collection')
-            deck, cards_imported, cards_updated, cards_skipped = import_rows(cursor, col, user_id, db, include_scheduling, whole_collection)
+            deck, cards_imported, cards_updated, cards_skipped = import_rows(cursor, col, user_id, db, include_scheduling, whole_collection, duplicate_policy)
 
             # Now that all DB records are verified and staged, copy validated media
             os.makedirs(real_media_dir, exist_ok=True)

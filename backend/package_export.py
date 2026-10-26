@@ -117,6 +117,11 @@ def export_package(deck_id, user_id, include_scheduling, db):
                 old_fields = {f['name']:f for f in original.get('flds',[])}
                 data['flds'] = [dict(old_fields.get(name,{'sticky':False,'rtl':False,'font':'Arial','size':20,'media':[]}),name=name,ord=i) for i,name in enumerate(names)]
                 data['tmpls'] = [dict(t,ord=i,qfmt=portable(t['qfmt']),afmt=portable(t['afmt'])) for i,t in enumerate(templates)]
+                from image_occlusion import is_occlusion, FIELDS
+                if is_occlusion(templates) and names == FIELDS:
+                    data['originalStockKind'] = 6
+                    for i, field in enumerate(data['flds']):
+                        field.update(tag=i, preventDeletion=i < 4)
                 data.setdefault('req',[[i,'all',[j for j,name in enumerate(names) if '{{'+name+'}}' in t['qfmt'] or '{{#'+name+'}}' in t['qfmt']]] for i,t in enumerate(templates)])
                 data.setdefault('tags',[]);data.setdefault('vers',[]);data.setdefault('did',None)
                 exported_models[str(mid)] = data

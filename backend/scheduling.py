@@ -47,6 +47,12 @@ def fsrs_state(db, card, progress, config, now):
     scheduler = fsrs_scheduler(config)
     reviewed = False
     for log in history:
+        metadata = json.loads(log.record.payload) if log.record else {}
+        raw = metadata.get('anki', {})
+        if metadata.get('kind') == 'reset' or (log.rating == 0 and raw.get('type') == 4 and raw.get('ivl') == 0):
+            state = FSRSCard(card_id=card.id, due=now)
+            reviewed = False
+            continue
         if log.rating in (1,2,3,4):
             state, _ = scheduler.review_card(state, Rating(log.rating), review_datetime=utc(log.review_date))
             reviewed = True
@@ -81,6 +87,8 @@ def fsrs_transition(db, card, progress, rating, config, now, duration_ms=None):
         previous = progress.interval_days if progress and progress.card_state == 'review' and rating > 1 else 0
         interval = fuzzed_interval(delay / 86400, config.maximum_interval, review_seed(card, progress), previous)
     if updated.state == State.Review:
+        from load_balancing import choose_interval
+        interval = choose_interval(db, card, progress, config, now, interval)
         updated.due = next_study_day(now, config, interval)
     elif delay >= 86400:
         updated.due = next_study_day(now, config, max(1,round(delay/86400)))

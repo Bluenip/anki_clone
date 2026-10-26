@@ -1,3 +1,4 @@
+import client from '../api/client';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { listDecks } from '../api/decks';
@@ -61,6 +62,7 @@ const BrowsePage = () => {
   const [saveSuccess, setSaveSuccess] = useState(false);
 
   // Bulk action state
+  const [dueDays, setDueDays] = useState(1);
   const [actionPending, setActionPending] = useState(false);
   const [moveOpen, setMoveOpen] = useState(false);
   const [moveDecks, setMoveDecks] = useState<DeckSummary[]>([]);
@@ -199,6 +201,7 @@ const BrowsePage = () => {
 
     if (targetCards.length === 0 || loading || actionPending || saving) return;
 
+    if (['delete', 'reset', 'reschedule'].includes(action) && !window.confirm(`${action} ${targetCards.length} selected cards? Reset keeps review history. Undo is available until another collection change.`)) return;
     setActionPending(true);
     setErrorMessage('');
     setActionSuccessMessage('');
@@ -211,6 +214,7 @@ const BrowsePage = () => {
     const payload: BulkActionRequest = {
       action,
       ...(action === 'flag' ? { flag } : {}),
+      ...(action === 'reschedule' ? { due_days: dueDays } : {}),
       ...(action === 'move' ? { target_deck_id: Number(targetDeck) } : {}),
       ...((action === 'add_tags' || action === 'remove_tags') ? { tags } : {}),
       cards: targetCards.map((c) => ({
@@ -321,7 +325,7 @@ const BrowsePage = () => {
               Use Next page to view more results. Selections apply only to the current page.
             </p>
             <p style={{ margin: '0 0 4px 0', fontWeight: 600 }}>
-              Supported syntax subset:
+              Supported syntax (also added:7, rated:7:1, re:pattern and Front:re:pattern):
             </p>
             <ul style={{ margin: '0 0 6px 0', paddingLeft: '18px' }}>
               <li>
@@ -494,6 +498,18 @@ const BrowsePage = () => {
           </div>
         </div>
 
+        <div className="bulk-toolbar" style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+          <button type="button" disabled={loading || saving || actionPending || !selectionCount} onClick={() => void handleBulkAction('delete')}>Delete selected</button>
+          <button type="button" disabled={loading || saving || actionPending || !selectionCount} onClick={() => void handleBulkAction('reset')}>Reset selected to new</button>
+          <label>Due in days<input type="number" min="0" max="36500" value={dueDays} onChange={e => setDueDays(Number(e.target.value))} /></label>
+          <button type="button" disabled={loading || saving || actionPending || !selectionCount || !Number.isInteger(dueDays) || dueDays < 0 || dueDays > 36500} onClick={() => void handleBulkAction('reschedule')}>Set due date</button>
+          <button type="button" disabled={loading || saving || actionPending} onClick={async () => {
+            setActionPending(true); setErrorMessage('');
+            try { await client.post('/api/cards/bulk-undo'); await fetchCards(activeQueryRef.current, activeOffsetRef.current); setActionSuccessMessage('Bulk operation undone.'); }
+            catch (e) { setErrorMessage(getErrMsg(e, 'Undo failed')); }
+            finally { setActionPending(false); }
+          }}>Undo bulk operation</button>
+        </div>
         <label className="flag-selector">Flag selected cards <select value="" disabled={selectionCount === 0 || actionPending || loading || saving} onChange={e => { if (e.target.value !== '') void handleBulkAction('flag', undefined, Number(e.target.value)); }}>
           <option value="">Choose flag</option>
           {['Remove flag', 'Red', 'Orange', 'Green', 'Blue', 'Pink', 'Turquoise', 'Purple'].map((name, value) => <option key={value} value={value}>{name}</option>)}

@@ -7,7 +7,7 @@ from note_service import BUILTINS, builtin_model
 from note_rendering import render_cards
 
 
-def import_rows(cursor, collection, user_id, db, include_scheduling=True, whole_collection=False):
+def import_rows(cursor, collection, user_id, db, include_scheduling=True, whole_collection=False, duplicate_policy='newer'):
     from apkg_handler import map_anki_state_to_app, parse_anki_due, convert_ease_factor
     deck_definitions = json.loads(collection['decks'])
     model_definitions = json.loads(collection['models'])
@@ -32,8 +32,9 @@ def import_rows(cursor, collection, user_id, db, include_scheduling=True, whole_
                    'tmpls':definition['templates'], 'type':0, 'css':''}
         if not isinstance(raw, dict):
             raise ValueError('A referenced note type is missing')
-        if mid in active_models and (raw.get('originalStockKind') == 6 or 'image-occlusion' in raw.get('css', '').lower() or any('{{cloze:Occlusion}}' in t.get('qfmt', '') for t in raw.get('tmpls', []))):
-            raise ValueError('Image occlusion note types are not yet supported; import was cancelled without changing the collection')
+        from image_occlusion import is_occlusion
+        if mid in active_models and (raw.get('originalStockKind') == 6 or 'image-occlusion' in raw.get('css', '').lower()) and not is_occlusion(raw.get('tmpls', [])):
+            raise ValueError('Unsupported Image Occlusion template; import was cancelled without changes')
         fields = [f['name'] for f in raw.get('flds', [])]
         templates = raw.get('tmpls', [])
         if not fields or len(fields) > 100 or len(set(fields)) != len(fields) or not templates or len(templates) > 100:
@@ -66,7 +67,11 @@ def import_rows(cursor, collection, user_id, db, include_scheduling=True, whole_
         if len(set(ordinals)) != len(ordinals) or any(ordinal not in rendered for ordinal in ordinals):
             raise ValueError('Package card ordinals do not match supported templates/clozes')
         existing = db.query(Note).filter_by(user_id=user_id, guid=guid).first()
-        if existing and (json.loads(existing.note_type.fields_json) != json.loads(model.fields_json) or
+        if existing and duplicate_policy == 'add':
+            from notes import new_guid
+            raw = dict(raw, guid=new_guid())
+            existing = None
+        if existing and duplicate_policy != 'skip' and (json.loads(existing.note_type.fields_json) != json.loads(model.fields_json) or
                          json.loads(existing.note_type.templates_json) != json.loads(model.templates_json) or existing.note_type.css != model.css):
             raise ValueError('A note GUID exists with a different model; resolve the conflict before importing')
         planned.append((raw, rows, values, tags, rendered, existing))
@@ -131,6 +136,8 @@ def import_rows(cursor, collection, user_id, db, include_scheduling=True, whole_
     added = updated = skipped = 0
     imported_card_ids = {}
     for raw, rows, values, tags, rendered, note in planned:
+        if note is not None and duplicate_policy == 'skip':
+            skipped += len(rows); continue
         source_mod = datetime.fromtimestamp(raw.get('mod', 0), timezone.utc).replace(tzinfo=None)
         if note is None:
             note = Note(user_id=user_id, guid=raw['guid'], note_type=models[str(raw['mid'])][0],
@@ -139,10 +146,10 @@ def import_rows(cursor, collection, user_id, db, include_scheduling=True, whole_
             db.add(note); db.flush()
         else:
             local_mod = note.updated_at.replace(tzinfo=None) if note.updated_at else datetime.min
-            if note.package_data and raw.get('mod', 0) == json.loads(note.package_data.payload).get('mod') and values == json.loads(note.fields_json):
+            if note.package_data and raw.get('mod', 0) == json.loads(note.package_data.payload).get('mod') and values == json.loads(note.fields_json) and tags == json.loads(note.tags_json):
                 skipped += len(rows)
                 continue
-            if source_mod <= local_mod:
+            if duplicate_policy == 'newer' and source_mod <= local_mod:
                 skipped += len(rows)
                 continue
             note.fields_json, note.tags_json, note.updated_at = json.dumps(values, ensure_ascii=False), json.dumps(tags), source_mod

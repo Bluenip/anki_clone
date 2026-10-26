@@ -1,6 +1,7 @@
 import client from './client';
 
 export interface NoteType {
+  editor_kind?: string;
   id?: number;
   kind: string;
   name: string;

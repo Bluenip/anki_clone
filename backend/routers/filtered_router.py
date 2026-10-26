@@ -16,7 +16,15 @@ from scheduling import utc
 router = APIRouter(prefix='/api/filtered', tags=['Custom Study'])
 
 
+class AdditionalFilter(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    search: str = Field(max_length=2048)
+    limit: int = Field(default=100, ge=1, le=1000, strict=True)
+    order: Literal['oldest','newest','random','due','lapses'] = 'oldest'
+
+
 class Build(BaseModel):
+    filters: list[AdditionalFilter] = Field(default_factory=list, max_length=9)
     model_config = ConfigDict(extra='forbid')
     name: str = Field(min_length=1, max_length=255)
     search: str = Field(default='is:due', max_length=2048)
@@ -56,6 +64,7 @@ def claim(db, session, expected):
 
 def response(db, session):
     return {key:getattr(session,key) for key in ('id','name','search','limit','order','reschedule','version','preview_again_seconds','preview_hard_seconds','preview_good_seconds')} | {
+        'filters': json.loads(session.definition.filters_json) if session.definition else [],
         'remaining':db.query(FilteredItem).filter_by(session_id=session.id).count()}
 
 
@@ -79,13 +88,20 @@ def rebuild(db, session, uid, now):
            .outerjoin(SchedulerState,SchedulerState.card_id==Card.id)
            .filter(Deck.user_id==uid,~Card.filtered_item.has(),func.coalesce(StudyProgress.is_suspended,False).is_(False),
                    ~func.coalesce(SchedulerState.buried_until>now,False)))
-    query=query.filter(compile_search(session.search,now,due=due,fields=field_lookup(db,uid)))
-    order={'oldest':Card.id.asc(),'newest':Card.id.desc(),'random':func.random(),
-           'due':StudyProgress.next_review.asc(),'lapses':func.coalesce(StudyProgress.lapse_count,0).desc()}[session.order]
-    cards=query.order_by(order,Card.id).limit(session.limit).all()
-    for position,card in enumerate(cards):
-        state=state_for(db,card);claim_version(db,state,state.version)
-        db.add(FilteredItem(session_id=session.id,card_id=card.id,position=position))
+    definitions = [dict(search=session.search, limit=session.limit, order=session.order)] + (json.loads(session.definition.filters_json) if session.definition else [])
+    if sum(f['limit'] for f in definitions) > 1000:
+        raise ValueError('Combined filter limits must not exceed 1000 cards')
+    selected = []
+    for definition in definitions:
+        filtered = query.filter(compile_search(definition['search'],now,due=due,fields=field_lookup(db,uid,now)))
+        if selected: filtered = filtered.filter(~Card.id.in_(selected))
+        order={'oldest':Card.id.asc(),'newest':Card.id.desc(),'random':func.random(),
+               'due':StudyProgress.next_review.asc(),'lapses':func.coalesce(StudyProgress.lapse_count,0).desc()}[definition['order']]
+        cards=filtered.order_by(order,Card.id).limit(definition['limit']).all()
+        for card in cards:
+            state=state_for(db,card);claim_version(db,state,state.version)
+            db.add(FilteredItem(session_id=session.id,card_id=card.id,position=len(selected)))
+            selected.append(card.id)
     db.flush()
 
 
@@ -98,7 +114,9 @@ def list_sessions(db:Session=Depends(get_db),user:User=Depends(get_current_user)
 def create(data:Build,db:Session=Depends(get_db),user:User=Depends(get_current_user)):
     if not data.name.strip(): raise HTTPException(422,'Name must not be blank')
     try:
-        session=FilteredSession(user_id=user.id,**data.model_dump());db.add(session);db.flush()
+        from models import FilteredDefinition
+        session=FilteredSession(user_id=user.id,**data.model_dump(exclude={'filters'}));db.add(session);db.flush()
+        session.definition = FilteredDefinition(filters_json=json.dumps([f.model_dump() for f in data.filters]))
         rebuild(db,session,user.id,datetime.now(timezone.utc));db.commit()
         return response(db,session)
     except ValueError as exc:
@@ -168,6 +186,9 @@ def card_payload(db,card,uid,now,reschedule):
             for rating,label in [(2,'hard'),(3,'good'),(4,'easy')]:
                 days=early[rating]
                 intervals[label]={'days':days,'seconds':days*86400,'display':get_interval_display(days=days)}
+    if reschedule and not cfg.fsrs:
+        from load_balancing import adjust_preview
+        intervals = adjust_preview(db, card, progress, cfg, now, intervals)
     note=card.note_link.note if card.note_link else None
     rendered=bool(note and note.package_data and json.loads(note.package_data.payload).get('_web_rendered'))
     front,back=media_for_web(card.front,uid),media_for_web(card.back,uid)
@@ -267,8 +288,11 @@ def edit_session(sid: int, data: EditBuild, db: Session = Depends(get_db), user:
         raise HTTPException(422, 'Name must not be blank')
     try:
         claim(db, session, data.expected_version)
-        for key, value in data.model_dump(exclude={'expected_version'}).items():
+        for key, value in data.model_dump(exclude={'expected_version', 'filters'}).items():
             setattr(session, key, value)
+        from models import FilteredDefinition
+        if session.definition is None: session.definition = FilteredDefinition(filters_json='[]')
+        session.definition.filters_json = json.dumps([f.model_dump() for f in data.filters])
         rebuild(db, session, user.id, datetime.now(timezone.utc))
         db.commit()
         return response(db, session)

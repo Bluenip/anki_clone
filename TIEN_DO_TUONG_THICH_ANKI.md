@@ -1,6 +1,8 @@
+> **Cập nhật 26/10/2026:** Các nhóm chức năng trong ảnh đã được mở rộng và kiểm thử tiếp. Báo cáo hiện hành, cách chạy LaTeX và giới hạn thực tế nằm ở [CONG_VIEC_TU_ANH.md](CONG_VIEC_TU_ANH.md). Nội dung dưới đây là mốc nền trước đợt cập nhật này; danh sách cũ ở cuối file không còn mô tả đầy đủ code hiện tại.
+
 # Tiến độ triển khai tương thích Anki
 
-Cập nhật 23/10/2026. Phạm vi đối chiếu định dạng: backend Anki **26.9.3**. Đây là triển khai từng phần của `DE_XUAT_TUONG_THICH_ANKI.md`, chưa phải toàn bộ Anki Desktop.
+Cập nhật 25/10/2026. Phạm vi đối chiếu định dạng: backend Anki **26.9.3**. Đây là triển khai từng phần của `DE_XUAT_TUONG_THICH_ANKI.md`, chưa phải toàn bộ Anki Desktop.
 
 ## Đã có trong code
 
@@ -23,6 +25,14 @@ Cập nhật 23/10/2026. Phạm vi đối chiếu định dạng: backend Anki *
 - Furigana/kana/kanji và hint details hoạt động trong renderer đã sanitize. Công thức `\(…\)`, `\[…\]`, `$$…$$`, `[$]…[/$]`, `[$$]…[/$$]` dùng KaTeX 0.19 + mhchem, tài nguyên đóng gói local, không chạy script của note. Đây là subset TeX, không phải toàn bộ MathJax/LaTeX engine của Anki; custom macros cấu hình và `[latex]` chưa hỗ trợ.
 - Lazy-load các trang lớn; cập nhật dependency trong phạm vi phiên bản tương thích, npm audit không còn cảnh báo ở lần kiểm tra này.
 
+### Image Occlusion — A03 (bổ sung 25/10/2026)
+
+- Add → Type → Image Occlusion: upload PNG/JPEG/GIF/WebP, kéo vẽ hình chữ nhật; chọn vùng, chỉnh vị trí/kích thước theo %, xóa vùng và preview câu hỏi/đáp án. Hai mode Hide all, guess one và Hide one, guess one. Tối đa 100 hình chữ nhật, ordinal c1–c1000; tọa độ chuẩn hóa theo ảnh nên co giãn theo màn hình.
+- Nguồn gồm Occlusion, Image, Header, Back Extra, Comments; ảnh lưu theo cơ chế media portable hiện có, mask dùng cú pháp cloze image-occlusion của Anki. Header/Back Extra hiển thị theo mặt thẻ; Comments chỉ lưu nguồn. Web vẽ lớp che bằng HTML/CSS trong renderer đã sanitize, không chạy JavaScript từ template.
+- Một ordinal sinh một card; giữ nhóm nhiều hình chữ nhật cùng ordinal khi nhập. Edit từ màn Cards giữ ID/GUID/lịch học của các vùng còn lại, gửi revision để chặn bản sửa cũ. Xóa vùng có StudyProgress bị từ chối và rollback toàn note. Vùng mới không tái dùng ordinal vừa xóa trong cùng phiên editor.
+- APKG legacy/modern giữ ảnh/fields/GUID/ordinals và metadata Image Occlusion của Anki. Nhận diện editor theo cấu trúc note khi tên model bị đổi trong quá trình chuyển gói. Template native được lưu để export; web dùng bố cục IO cố định.
+- **Giới hạn:** chỉ hình chữ nhật không xoay; chưa ellipse/polygon/text, nhóm/ungroup qua UI, kéo di chuyển/resize handles, undo thao tác vẽ, paste ảnh. Chỉnh vị trí/kích thước hiện qua ô số. Chỉ nhận template dùng tên field chuẩn tiếng Anh và Image chứa một thẻ img với src; template/shape/property không hỗ trợ bị từ chối trước khi ghi. Chưa cam kết mọi template IO tùy biến hoặc gói từ add-on Image Occlusion Enhanced. Sửa/xóa ảnh gốc không tự điều chỉnh nội dung mà vùng che đang hỏi.
+
 ### CSV/TXT/TSV
 
 - Parser CSV chuẩn: UTF-8/BOM, quoted delimiter, escape, multiline, đổi Front/Back, header tùy chọn, HTML/plain text.
@@ -44,7 +54,7 @@ Cập nhật 23/10/2026. Phạm vi đối chiếu định dạng: backend Anki *
 - COLPKG xuất collection và restore **vào account có collection trống**, cần thao tác restore tường minh; không ghi đè collection có sẵn. Giữ deck rỗng, note type chưa dùng và shared preset/per-deck limits trong fixture đã thử. Native Anki có thể tạo Default/ancestor decks và stock note types.
 - Preset/deck metadata nguồn được giữ; các option đã map được trao đổi với Anki. Không coi package này là backup bit-for-bit của mọi cấu hình/hành vi web.
 - Chặn media cùng tên nhưng khác bytes khi file đang được note/template khác dùng; hiện yêu cầu đổi tên ở package nguồn, chưa tự remap conflict.
-- **Giới hạn:** image occlusion có card, notes không có card trong collection restore, filter đặc biệt chưa hỗ trợ bị từ chối. SVG chưa được nhập. Các preference toàn collection, timezone IANA, today-only overrides, metadata ngoài schema hỗ trợ chưa cam kết round-trip đầy đủ. Export kèm scheduling từ nhiều deck dùng lẫn SM-2/FSRS bị từ chối vì Anki dùng scheduler chung cho collection.
+- **Giới hạn:** Image Occlusion ngoài subset hình chữ nhật nêu trên, notes không có card trong collection restore, filter đặc biệt chưa hỗ trợ bị từ chối. SVG chưa được nhập. Các preference toàn collection, timezone IANA, today-only overrides, metadata ngoài schema hỗ trợ chưa cam kết round-trip đầy đủ. Export kèm scheduling từ nhiều deck dùng lẫn SM-2/FSRS bị từ chối vì Anki dùng scheduler chung cho collection.
 - Giới hạn upload 50 MB, giải nén 150 MB, tối đa 10.000 card nhập/lần; không khẳng định đã kiểm tra collection lớn.
 
 ### Scheduler, queue và review
@@ -115,11 +125,13 @@ Cập nhật 23/10/2026. Phạm vi đối chiếu định dạng: backend Anki *
 
 ## Kiểm chứng
 
-- Backend: **313 test pass**. Frontend: **147 test pass**, build pass, oxlint không cảnh báo ở lần kiểm tra gần nhất.
+- Kiểm tra 25/10/2026 sau A03: Backend **332 test pass**, Frontend **154 test pass**, production build pass, oxlint không cảnh báo. Backend còn 7 cảnh báo deprecation từ các API/dependency sẵn có.
 - Có test dùng backend Anki 26.9.3 thật để mở APKG legacy/modern, đọc fields/GUID/tags/deck/card count và FSRS memory; gói xuất rồi nhập lại vào web không tạo card trùng trong fixtures. Có tests media Unicode/entities/fonts, real duration/suspended due, COLPKG empty decks/unused types/shared presets.
 - Native Anki 26.9.3: đối chiếu biên fuzz, stability/difficulty và learning delays cho card mới và review card mẫu; chưa phủ mọi trạng thái/chuỗi review.
 - Native Anki 26.9.3 xác nhận CSV/TXT hai chiều: Basic/reversed/Cloze, mixed note types, nhiều deck, GUID/tags/source fields. Test rollback lỗi giữa các nhóm, legacy preview không backfill, và export subtree với ký tự SQL wildcard trong tên deck.
 - Firefox kiểm tra text import nâng cao: Cloze mapping, Tab thật, preview không ghi, thay input vô hiệu preview, giữ Extra/tags; mixed preview không tạo deck, liệt kê parent, confirm tạo đúng hierarchy, export cây deck có metadata.
+- Image Occlusion: 19 backend tests mới, gồm hai mode, grouped/sparse ordinals, giữ lịch học/ID, stale revision, rollback khi xóa vùng đã học, thêm/xóa vùng chưa học, input/media không hợp lệ, APKG legacy/modern mở bằng Anki 26.9.3 và nhập lại web. Fixture do Anki tự tạo nhập được; shape không hỗ trợ bị từ chối atomic. 7 frontend tests mới kiểm tra draw/preview/sửa tọa độ/xóa/upload/unmount/source validation.
+- Firefox headless trên DB/media tạm: upload PNG qua UI, kéo chuột thật tạo hai vùng, preview, lưu hai cards, reload/sửa giữ IDs, học với ảnh tải thành công và reveal đúng vùng, viewport mobile 390×844 không tràn ngang ở Add/Edit. Đã sửa lỗi HTML step validation chặn lưu tọa độ lẻ. Screenshot `/home/bluenip/.cache/anki-browser-check/image-occlusion-mobile-firefox.png`; script smoke ở cùng thư mục `check_image_occlusion_bidi.mjs`. Chưa kiểm tra thao tác cảm ứng trên thiết bị thật hoặc GUI Anki Desktop.
 - Firefox **158.0.1 headless** chạy với DB/media tạm riêng: cloze/CSS, script isolation, không có media HTML trùng ngoài iframe, Space trong iframe, rating/sibling bury, Ctrl+Z, FSRS Options, audio preference/R playback, timer, create/bind preset, Today only=0/clear, không lẫn override vào base, auto reveal+Good review.
 - Browser mới: native Anki đối chiếu 17 truy vấn text/deck/tag/note và 8 truy vấn property; kiểm tra isolation, rollback batch, stale edit, chuyển deck giữ note/lịch và đọc qua mốc 1.000 card.
 - Firefox smoke Browser trên 1.003 card tạm: search/phủ định, suspend đúng selection, refresh/clear selection, lỗi cú pháp, chặn stale edit, reload/save, move giữ note/bury, phân trang và cap 500. Screenshot `/home/bluenip/.cache/anki-browser-check/browser-search-firefox.png`.
@@ -148,7 +160,7 @@ Startup `create_all` chỉ tạo bảng bổ sung; không backfill/reschedule ca
 
 ## Các phần chưa hoàn thành
 
-1. Các tùy chọn duplicate/match scope còn lại của text import; mapping đổi tên field/xóa template đang dùng, editor WYSIWYG, diff đáp án từng ký tự, TTS/LaTeX đầy đủ, nested cloze và image occlusion. Editor template/media/typed answer/ruby và subset math đã có như mô tả trên.
+1. Các tùy chọn duplicate/match scope còn lại của text import; mapping đổi tên field/xóa template đang dùng, editor WYSIWYG, diff đáp án từng ký tự, TTS/LaTeX đầy đủ, nested cloze và các phần Image Occlusion nâng cao ngoài subset hình chữ nhật đã nêu. Editor template/media/typed answer/ruby và subset math đã có như mô tả trên.
 2. Phủ fixture APKG/COLPKG thực tế lớn và các phiên bản khác; cấu hình/clock/global preferences đầy đủ, media conflict remapping, backup/restore vào collection có sẵn với preview/backup trước thay thế.
 3. Easy Days/load balancing, mở rộng optimizer cho history nhập và đánh giá chất lượng; mở rộng golden fixtures scheduler/queue. Fuzz FSRS đã có nhưng seed khác native Anki; chưa có fuzz cho nhánh SM-2.
 4. Mở rộng Browser search ngoài subset đã hỗ trợ, batch delete/reset/reschedule, Custom Study presets/hai bộ lọc và xuất định nghĩa phiên, undo thao tác hàng loạt, stats nâng cao và integrity/media UI.

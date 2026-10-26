@@ -1,7 +1,7 @@
 """Small, explicit Anki template subset; source fields are never overwritten.
 
 No scripts are executed. Unsupported filters fail rather than flattening notes.
-Nested clozes are intentionally rejected until their semantics are implemented.
+Nested clozes use a bounded recursive parser.
 """
 from html import escape, unescape
 from html.parser import HTMLParser
@@ -20,6 +20,7 @@ class _Text(HTMLParser):
 def text_only(value):
     parser = _Text()
     parser.feed(value)
+    parser.close()
     return unescape(''.join(parser.parts)).strip()
 
 
@@ -27,31 +28,14 @@ def meaningful(value):
     return bool(text_only(value) or re.search(r'<(?:img|audio|video)\b|\[sound:', value, re.I))
 
 
-CLOZE = re.compile(r'\{\{c([1-9]\d*)::(.*?)\}\}', re.S)
-
-
 def cloze_indexes(value):
-    matches = list(CLOZE.finditer(value))
-    if any('{{' in match[2] for match in matches):
-        raise ValueError('Nested clozes are not supported yet; the note was not changed')
-    if '{{c' in CLOZE.sub('', value):
-        raise ValueError('Malformed or unsupported cloze syntax')
-    indexes = sorted({int(match[1]) - 1 for match in matches})
-    if len(indexes) > 100 or any(index > 999 for index in indexes):
-        raise ValueError('At most 100 cloze cards with indexes c1 through c1000 are supported')
-    return indexes
+    from cloze import parse
+    return parse(value)[1]
 
 
 def render_cloze(value, ordinal, answer):
-    cloze_indexes(value)
-    def replace(match):
-        body, _, hint = match[2].partition('::')
-        if int(match[1]) - 1 != ordinal:
-            return body
-        if answer:
-            return f'<span class="cloze">{body}</span>'
-        return '<span class="cloze">[' + (escape(hint) if hint else '...') + ']</span>'
-    return CLOZE.sub(replace, value)
+    from cloze import render
+    return render(value, ordinal, answer)
 
 
 TOKEN = re.compile(r'\{\{(.*?)\}\}', re.S)
@@ -81,6 +65,9 @@ def render_template(template, fields, ordinal=0, answer=False, front='', context
                 raise ValueError('Unbalanced template conditional')
             _, active = stack.pop()
         elif active:
+            if token == 'tts-voices:':
+                output.append('<div data-tts-voices-list="true"></div>')
+                continue
             if token == 'FrontSide':
                 output.append(front)
                 continue
@@ -97,14 +84,20 @@ def render_template(template, fields, ordinal=0, answer=False, front='', context
                     raise ValueError('Unsupported type answer filter combination')
                 expected = value
                 if 'cloze' in filters:
-                    cloze_indexes(value)
-                    expected = ', '.join(dict.fromkeys(m[2].partition('::')[0] for m in CLOZE.finditer(value) if int(m[1]) - 1 == ordinal))
+                    from cloze import typed
+                    expected = typed(value, ordinal)
                 expected = text_only(expected)
                 output.append('<span data-type-field="' + escape(name, quote=True) + '"' +
                               (' data-type-answer="' + escape(expected, quote=True) + '" data-type-options="' + ','.join(filters) + '"') + '></span>')
                 continue
             for filter_name in reversed(filters):
-                if filter_name == 'cloze':
+                if filter_name.startswith('tts '):
+                    from tts import descriptor
+                    value = descriptor(filter_name, value)
+                elif filter_name == 'cloze-only':
+                    from cloze import typed
+                    value = typed(value, ordinal)
+                elif filter_name == 'cloze':
                     value = render_cloze(value, ordinal, answer)
                 elif filter_name == 'text':
                     value = escape(text_only(value))
@@ -128,7 +121,8 @@ def render_template(template, fields, ordinal=0, answer=False, front='', context
         raise ValueError('Unclosed template conditional')
     if active:
         output.append(template[position:])
-    return ''.join(output)
+    from tts import blocks
+    return blocks(''.join(output))
 
 
 def media_for_web(value, user_id):
@@ -170,6 +164,11 @@ def render_cards(model, field_values, user_id, tags=(), deck_name=''):
     if len(names) != len(field_values) or len(set(names)) != len(names):
         raise ValueError('Note fields do not match the note type')
     fields = dict(zip(names, field_values))
+    from image_occlusion import is_occlusion, render as render_occlusion
+    if is_occlusion(templates):
+        if len(templates) != 1:
+            raise ValueError('Image Occlusion requires one template')
+        return render_occlusion(fields, user_id)
     is_cloze = any('{{cloze:' in t['qfmt'] for t in templates)
     ordinals = sorted({i for name, value in fields.items() for i in cloze_indexes(value)}) if is_cloze else list(range(len(templates)))
     if is_cloze and (not ordinals or len(templates) != 1):
@@ -180,10 +179,11 @@ def render_cards(model, field_values, user_id, tags=(), deck_name=''):
         context = {'Tags': ' '.join(tags), 'Deck': deck_name, 'Subdeck': deck_name.split('::')[-1],
                    'Type': model.name, 'Card': template.get('name', '')}
         front = render_template(template['qfmt'], fields, ordinal=ordinal, context=context)
-        if not meaningful(front) and 'data-type-field=' not in front:
+        if not meaningful(front) and 'data-type-field=' not in front and 'data-tts=' not in front and 'data-tts-voices-list=' not in front:
             continue
         back = render_template(template['afmt'], fields, ordinal=ordinal, answer=True, front=front, context=context)
-        result[ordinal] = (media_for_web(front, user_id), media_for_web(back, user_id))
+        from latex_rendering import render as render_latex
+        result[ordinal] = (media_for_web(render_latex(front, user_id, model), user_id), media_for_web(render_latex(back, user_id, model), user_id))
     if not result:
         raise ValueError('This note would create no cards')
     return result

@@ -168,3 +168,25 @@ def save_limits(deck_id:int,data:LimitsBody,db:Session=Depends(get_db),user:User
         else:deck.options_binding.today_json=json.dumps({'day':day_key(base_settings(deck)),'limits':values})
     db.commit()
     return response(db,deck)
+
+
+class ExtraToday(BaseModel):
+    kind: Literal['new', 'review']
+    count: int = Field(ge=1, le=10000, strict=True)
+
+
+@router.post('/decks/{deck_id}/options/extra-today')
+def extra_today(deck_id: int, data: ExtraToday, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    try:
+        db.execute(update(User).where(User.id == user.id).values(id=User.id)); db.expire_all()
+        deck = owned_deck(db, user.id, deck_id)
+        settings = effective_settings(deck)
+        limits = {key: settings.get(key, default) for key, default in [('new_cards_per_day', 20), ('maximum_reviews_per_day', 200)]}
+        key = 'new_cards_per_day' if data.kind == 'new' else 'maximum_reviews_per_day'
+        limits[key] = min(999999, limits[key] + data.count)
+        if not deck.options_binding: deck.options_binding = DeckOptionsBinding(overrides_json='{}', today_json='{}')
+        deck.options_binding.today_json = json.dumps({'day': day_key(settings), 'limits': limits})
+        db.commit()
+        return response(db, deck)
+    except BaseException:
+        db.rollback(); raise

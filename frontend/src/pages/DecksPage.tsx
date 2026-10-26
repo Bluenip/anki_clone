@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { listDecks, getTodaySummary, createDeck, deleteDeck, updateDeck, importCards, importApkg, exportApkg, exportText, exportCollection, getImportNoteTypes } from '../api/decks';
 import type { Deck as DeckData, TextImportOptions } from '../api/decks';
 import { getNoteTypes } from '../api/notes';
@@ -39,6 +39,8 @@ const DecksPage = () => {
   const [importText, setImportText] = useState('');
   const [importDeckId, setImportDeckId] = useState<number | null>(null);
   const [importSeparator, setImportSeparator] = useState('\t');
+  const [matchScope, setMatchScope] = useState<'deck' | 'collection'>('deck');
+  const [matchFields, setMatchFields] = useState<'first' | 'all'>('first');
   const [duplicatePolicy, setDuplicatePolicy] = useState<'add' | 'skip' | 'update'>('add');
   const [hasHeader, setHasHeader] = useState(false);
   const [allowHtml, setAllowHtml] = useState(true);
@@ -59,7 +61,7 @@ const DecksPage = () => {
     importDeckId,
     importText,
     importSeparator,
-    duplicatePolicy,
+    duplicatePolicy, matchScope, matchFields,
     hasHeader,
     allowHtml,
     useFileDecks,
@@ -83,6 +85,8 @@ const DecksPage = () => {
   const [exporting, setExporting] = useState(false);
   const [exportFormat, setExportFormat] = useState<'apkg' | 'csv' | 'txt' | 'tsv'>('apkg');
 
+  const [mediaConflicts, setMediaConflicts] = useState<'error' | 'rename'>('error');
+  const [packageDuplicates, setPackageDuplicates] = useState<'newer' | 'skip' | 'update' | 'add'>('newer');
   // Import .apkg state
   const [importingApkg, setImportingApkg] = useState(false);
 
@@ -149,7 +153,7 @@ const DecksPage = () => {
     
     const collectionRestore = file.name.toLowerCase().endsWith('.colpkg');
     if (collectionRestore && decks.length > 0) {
-      setOperationError('Collection restore requires an empty collection. Existing decks were not changed.');
+      setOperationError('Use Backups & restore to preview and restore into a collection that already contains cards.');
       e.target.value = '';
       return;
     }
@@ -161,7 +165,7 @@ const DecksPage = () => {
       setImportingApkg(true);
       setOperationError(null);
       try {
-        const res = await importApkg(file, importScheduling, collectionRestore);
+        const res = await importApkg(file, importScheduling, collectionRestore, mediaConflicts, packageDuplicates);
         const data = res.data;
         let message = collectionRestore ? `Restored collection: ${data.cards_imported} cards` : `Imported ${data.cards_imported} cards into deck "${data.deck_name}"`;
         if (data.media_imported > 0) {
@@ -412,6 +416,8 @@ const DecksPage = () => {
         ? {
             preview: !previewIsCurrent,
             duplicate_policy: duplicatePolicy,
+            ...(matchScope !== 'deck' ? { match_scope: matchScope } : {}),
+            ...(matchFields !== 'first' ? { match_fields: matchFields } : {}),
             has_header: hasHeader,
             allow_html: allowHtml,
             ...(useFileDecks ? { use_file_decks: true } : {}),
@@ -432,6 +438,8 @@ const DecksPage = () => {
         : {
             preview: !previewIsCurrent,
             duplicate_policy: duplicatePolicy,
+            ...(matchScope !== 'deck' ? { match_scope: matchScope } : {}),
+            ...(matchFields !== 'first' ? { match_fields: matchFields } : {}),
             has_header: hasHeader,
             allow_html: allowHtml,
             ...(useFileDecks ? { use_file_decks: true } : {}),
@@ -533,6 +541,9 @@ const DecksPage = () => {
         <button className="btn btn-pill" onClick={handleCollectionExport} disabled={exporting || importingApkg}>
           {exporting ? 'Exporting…' : 'Export collection (.colpkg)'}
         </button>
+        <p><Link to="/backups">Backups &amp; restore existing collection</Link></p>
+        <label>Media name collisions<select value={mediaConflicts} disabled={importingApkg} onChange={e => setMediaConflicts(e.target.value as 'error' | 'rename')}><option value="error">Stop and report conflict</option><option value="rename">Keep both files and update incoming references</option></select></label>
+        <label>Existing package notes<select value={packageDuplicates} disabled={importingApkg} onChange={e => setPackageDuplicates(e.target.value as typeof packageDuplicates)}><option value="newer">Update if incoming note is newer</option><option value="skip">Keep existing notes</option><option value="update">Update existing notes</option><option value="add">Import separate copies</option></select></label>
         <label><input type="checkbox" checked={importScheduling} disabled={importingApkg} onChange={e => setImportScheduling(e.target.checked)} /> Import APKG study history</label>
         <input 
           type="file" 
@@ -602,7 +613,9 @@ const DecksPage = () => {
               </div>
               <div className="form-group">
                 <label htmlFor="import-text">Basic notes: Front and Back (quoted multiline fields supported)</label>
-                <textarea 
+                <label>Duplicate search scope<select value={matchScope} disabled={pending} onChange={e => setMatchScope(e.target.value as typeof matchScope)}><option value="deck">Selected deck</option><option value="collection">Entire collection (keep existing decks)</option></select></label>
+                  <label>Duplicate match<select value={matchFields} disabled={pending} onChange={e => setMatchFields(e.target.value as typeof matchFields)}><option value="first">First field</option><option value="all">All fields</option></select></label>
+                  <textarea
                   id="import-text"
                   rows={8} 
                   value={importText} 

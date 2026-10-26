@@ -12,3 +12,6 @@ email-validator==2.3.0
 fsrs==6.3.2
 zstandard==0.25.0
 anki==26.9.3
+
+# Crop raster output from the optional portable TeX runtime.
+Pillow==13.0.0

@@ -23,9 +23,14 @@ def train(deck_id: int, db: Session = Depends(get_db), user: User = Depends(get_
         items, logs = training_items(db, user.id, decks, datetime.now(timezone.utc))
         if len(items) < 400:
             raise HTTPException(422, f'Need 400 interday outcomes with complete learning history; found {len(items)}')
-        params = optimize(items)
-        return {'parameters': params, 'training_samples': len(items), 'history_entries': logs,
-                'scope': 'Selected deck and descendants; complete web histories only',
+        split = max(1, int(len(items) * .8))
+        params = optimize(items[:split])
+        from fsrs_evaluation import evaluate
+        from study_queue import config_for
+        evaluation = evaluate(items[split:], params, config_for(deck).fsrs_parameters)
+        return {'parameters': params, 'training_samples': split, 'total_samples': len(items), 'history_entries': logs,
+                'scope': 'Selected deck and descendants; complete web and imported Anki histories',
+                'evaluation': evaluation, 'training_split': split, 'holdout_samples': len(items) - split,
                 'applied': False}
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from None

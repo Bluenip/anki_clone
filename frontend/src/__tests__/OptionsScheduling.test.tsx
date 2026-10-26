@@ -466,7 +466,7 @@ describe('OptionsScheduling (FSRS & Supported Scheduling Settings)', () => {
   });
 
   describe('Inactive & Unsupported Sections Preserved', () => {
-    it('keeps Easy Days and Custom Scheduling disabled while Display Order is available', async () => {
+    it('enables Easy Days and Display Order while Custom Scheduling remains disabled', async () => {
       vi.spyOn(decksApi, 'getDeck').mockResolvedValue({ data: createMockDeck() } as any);
       renderDeckOptionsPage();
 
@@ -475,9 +475,9 @@ describe('OptionsScheduling (FSRS & Supported Scheduling Settings)', () => {
       });
 
       // Easy Days
-      expect(screen.getByText(/Easy Days review rebalancing is not yet active/i)).toBeDefined();
+      expect(screen.getByText(/Future review dates prefer weekdays/i)).toBeDefined();
       const mondaySlider = screen.getByLabelText('Mon load percentage') as HTMLInputElement;
-      expect(mondaySlider.disabled).toBe(true);
+      expect(mondaySlider.disabled).toBe(false);
 
       // Custom Scheduling
       expect(screen.getByText(/Custom scheduling scripts are not yet active/i)).toBeDefined();
@@ -485,8 +485,7 @@ describe('OptionsScheduling (FSRS & Supported Scheduling Settings)', () => {
       expect(customSchedulingSwitch.hasAttribute('disabled')).toBe(true);
 
       // Inactive badges: exactly 2 remaining (Display Order and Easy Days)
-      const inactiveBadges = screen.getAllByText('Not yet active');
-      expect(inactiveBadges.length).toBe(1);
+      expect(screen.queryAllByText('Not yet active')).toHaveLength(0);
       expect(screen.getByLabelText('New card gather order').closest('fieldset')?.disabled).toBe(false);
 
       // Scope badge remains per-deck

@@ -1,3 +1,5 @@
+> **Cập nhật triển khai 26/10/2026:** Xem [CONG_VIEC_TU_ANH.md](CONG_VIEC_TU_ANH.md) để biết các mục đã triển khai, kiểm thử và giới hạn hiện tại. Tài liệu này giữ vai trò đề xuất/lịch sử thiết kế.
+
 # Đề xuất đưa Anki Clone tới trải nghiệm gần Anki Desktop
 
 Ngày khảo sát: 22/10/2026. Trạng thái: **đề xuất, chưa triển khai**.
@@ -184,7 +186,7 @@ Danh sách là backlog mở rộng theo tác vụ Anki Desktop, không cam kết
 |---|---|---|---|
 | A01 | Note types | Basic, reversed, optional reversed; field tùy ý; thêm/xóa/sắp field; đổi note type với mapping và preview card bị ảnh hưởng | Nền tảng |
 | A02 | Cloze | Nhiều cloze index, hint, một index nhiều chỗ che, edit không tạo card trùng; giữ cú pháp nguồn | Cao |
-| A03 | Image occlusion | Vẽ/sửa/xóa mask, mode hide-one/hide-all theo phạm vi đã chốt, ảnh gốc+mask data, import/export fixture | Sau A01/A02 |
+| A03 | Image occlusion | Vẽ/sửa/xóa mask, mode hide-one/hide-all theo phạm vi đã chốt, ảnh gốc+mask data, import/export fixture. **25/10/2026:** đã triển khai subset hình chữ nhật; xem mục Image Occlusion trong `TIEN_DO_TUONG_THICH_ANKI.md` để biết kiểm chứng và giới hạn. | Sau A01/A02 |
 | A04 | Templates | Front/back/CSS editor, live preview, field replacement, conditional sections, FrontSide, card generation/empty card detection | Cao |
 | A05 | Renderer | Typed answer + so đáp án, hint, filters, ruby/RTL/fonts, MathJax/mhchem; LaTeX legacy cần pipeline riêng, không phải import `.tex` | Theo giai đoạn |
 | A06 | Editor | Rich text + source HTML, paste/drag-drop media, audio recording, sticky fields, chọn type/deck/tags, cảnh báo trùng và field trống | Cao |

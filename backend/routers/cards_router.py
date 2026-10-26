@@ -50,7 +50,7 @@ def browse_cards(
     def due():
         return due_predicate(db, current_user.id, now)
     try:
-        query = query.filter(compile_search(search, now, due=due, fields=field_lookup(db, current_user.id)))
+        query = query.filter(compile_search(search, now, due=due, fields=field_lookup(db, current_user.id, now)))
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from None
 
@@ -86,9 +86,10 @@ class BulkCardTarget(BaseModel):
 
 class BulkCardAction(BaseModel):
     model_config = ConfigDict(extra='forbid')
-    action: Literal['suspend', 'unsuspend', 'bury', 'unbury', 'move', 'add_tags', 'remove_tags', 'flag']
+    action: Literal['suspend', 'unsuspend', 'bury', 'unbury', 'move', 'add_tags', 'remove_tags', 'flag', 'delete', 'reset', 'reschedule']
     cards: List[BulkCardTarget] = Field(min_length=1, max_length=500)
     target_deck_id: int | None = Field(default=None, gt=0, le=9223372036854775807, strict=True)
+    due_days: int | None = Field(default=None, ge=0, le=36500, strict=True)
     flag: int | None = Field(default=None, ge=0, le=7, strict=True)
     tags: List[str] | None = Field(default=None, min_length=1, max_length=100)
 
@@ -112,6 +113,8 @@ def bulk_card_action(data: BulkCardAction, current_user: User = Depends(get_curr
     from review_service import state_for, claim_version
     from scheduling import next_study_day
     from study_queue import config_for
+    if (data.action == 'reschedule') != (data.due_days is not None):
+        raise HTTPException(422, 'due_days is required only for reschedule')
     if (data.action == 'flag') != (data.flag is not None):
         raise HTTPException(422, 'A flag color is required only for flag actions')
     if (data.action in ('add_tags', 'remove_tags')) != (data.tags is not None):
@@ -129,15 +132,50 @@ def bulk_card_action(data: BulkCardAction, current_user: User = Depends(get_curr
         raise HTTPException(status_code=404, detail='One or more cards were not found')
     now = datetime.now(timezone.utc)
     try:
+        from bulk_history import begin, record
+        before = begin(db, current_user.id)
+        cards = db.query(Card).join(Deck).filter(Deck.user_id == current_user.id, Card.id.in_(expected)).order_by(Card.id).all()
+        if len(cards) != len(expected): raise HTTPException(404, 'One or more cards were removed')
         if data.action in ('add_tags', 'remove_tags'):
             from bulk_note_tags import change_tags
             result = change_tags(db, cards, expected, current_user.id, data.action, data.tags)
+            record(db, current_user.id, data.action, before)
             db.commit()
             return result
         for card in cards:
             state = state_for(db, card)
             claim_version(db, state, expected[card.id])
-            if data.action == 'move':
+            if data.action in ('delete', 'reset', 'reschedule'):
+                if card.filtered_item:
+                    raise HTTPException(409, 'Empty the custom study session before changing these cards')
+                if data.action == 'delete':
+                    db.delete(card)
+                    continue
+                progress = db.query(StudyProgress).filter_by(card_id=card.id, user_id=current_user.id).first()
+                if data.action == 'reset':
+                    if progress is not None: db.delete(progress)
+                    state.fsrs_json = None; state.buried_until = None
+                    # A non-answer event preserves statistics but starts a fresh
+                    # memory history, including after a later SM-2/FSRS switch.
+                    from models import ReviewLog, ReviewRecord
+                    import json
+                    event = ReviewLog(user_id=current_user.id, card_id=card.id, rating=0, was_new=False, review_date=now)
+                    event.record = ReviewRecord(payload=json.dumps({'kind': 'reset', 'anki': {'type': 4, 'ivl': 0, 'lastIvl': 0, 'time': 0}}))
+                    db.add(event)
+                else:
+                    if progress is None:
+                        progress = StudyProgress(card_id=card.id, user_id=current_user.id, ease_factor=config_for(card.deck).starting_ease)
+                        db.add(progress)
+                    progress.card_state = 'review'; progress.learning_step = 0
+                    progress.interval_days = max(1, data.due_days)
+                    progress.next_review = next_study_day(now, config_for(card.deck), data.due_days)
+                    state.buried_until = None
+                    if state.fsrs_json:
+                        import json
+                        memory = json.loads(state.fsrs_json)
+                        memory['card']['due'] = progress.next_review.isoformat()
+                        state.fsrs_json = json.dumps(memory)
+            elif data.action == 'move':
                 card.deck_id = data.target_deck_id
             elif data.action == 'flag':
                 from models import PackageCard
@@ -157,6 +195,8 @@ def bulk_card_action(data: BulkCardAction, current_user: User = Depends(get_curr
                                              ease_factor=config_for(card.deck).starting_ease)
                     db.add(progress)
                 progress.is_suspended = data.action == 'suspend'
+        cleanup_empty_notes(db, current_user.id)
+        record(db, current_user.id, data.action, before)
         db.commit()
     except ValueError as exc:
         db.rollback()
@@ -257,3 +297,12 @@ def delete_card(
     # After DB delete, remove any orphaned media files from disk
     cleanup_orphaned_media(current_user.id, db)
 
+
+
+@router.post('/cards/bulk-undo')
+def undo_bulk(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    from bulk_history import undo
+    try:
+        return undo(db, current_user.id)
+    except Exception:
+        db.rollback(); raise

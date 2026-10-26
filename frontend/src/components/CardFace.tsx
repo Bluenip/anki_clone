@@ -1,3 +1,4 @@
+import { answerDiff } from '../utils/answerDiff';
 import { renderMath, mathCss } from '../utils/math';
 import {
   forwardRef,
@@ -76,6 +77,10 @@ const CardFace = forwardRef<CardFaceRef, CardFaceProps>(
       const doc = new DOMParser().parseFromString(sanitizeHtml(html), 'text/html');
       doc.querySelectorAll('[data-type-field]').forEach(n => n.remove());
       doc.querySelectorAll('audio, video').forEach(media => { media.removeAttribute('autoplay'); media.removeAttribute('loop'); });
+      doc.querySelectorAll('[data-tts-voices-list]').forEach(node => {
+        const voices = window.speechSynthesis?.getVoices() || [];
+        node.textContent = voices.length ? voices.map(v => `${v.name} (${v.lang})`).join(' · ') : 'No speech voices loaded. Reload after your device installs a voice.';
+      });
       renderMath(doc.body);
       return doc.body.innerHTML;
     }, [html]);
@@ -139,6 +144,7 @@ const CardFace = forwardRef<CardFaceRef, CardFaceProps>(
 
     const stopAudio = useCallback(() => {
       ++playbackGeneration.current;
+      window.speechSynthesis?.cancel();
       if (playbackTimer.current) clearTimeout(playbackTimer.current);
       playbackTimer.current = null;
       for (const audio of activeAudio.current) {
@@ -177,7 +183,7 @@ const CardFace = forwardRef<CardFaceRef, CardFaceProps>(
         try {
           const doc = iframe.contentDocument || iframe.contentWindow?.document;
           if (!doc) return;
-          const allAudios = Array.from(doc.querySelectorAll('audio'));
+          const allAudios = Array.from(doc.querySelectorAll<HTMLElement>('audio, [data-tts]'));
           let targetAudios = allAudios;
           if (options?.skipFront) {
             const hr = doc.getElementById('answer');
@@ -198,7 +204,7 @@ const CardFace = forwardRef<CardFaceRef, CardFaceProps>(
 
           stopAudio();
           const generation = playbackGeneration.current;
-          activeAudio.current = targetAudios;
+          activeAudio.current = targetAudios.filter((el): el is HTMLAudioElement => el.tagName === 'AUDIO');
           isPlayingRef.current = true;
 
           let idx = 0;
@@ -209,7 +215,23 @@ const CardFace = forwardRef<CardFaceRef, CardFaceProps>(
               onAudioEnded?.();
               return;
             }
-            const audio = targetAudios[idx++];
+            const target = targetAudios[idx++];
+            if (target.hasAttribute('data-tts')) {
+              if (!window.speechSynthesis || typeof SpeechSynthesisUtterance === 'undefined') { playNext(); return; }
+              const utterance = new SpeechSynthesisUtterance(target.dataset.tts || '');
+              utterance.lang = target.dataset.ttsLang || 'en-US';
+              utterance.rate = Math.max(.1, Math.min(10, Number(target.dataset.ttsRate) || 1));
+              const wanted = (target.dataset.ttsVoices || '').split(',');
+              const voices = window.speechSynthesis.getVoices();
+              utterance.voice = voices.find(v => wanted.includes(v.name.replaceAll(' ', '_')) || wanted.includes(v.name)) || voices.find(v => v.lang.toLowerCase() === utterance.lang.toLowerCase()) || null;
+              let done = false;
+              const advanceSpeech = () => { if (done || generation !== playbackGeneration.current) return; done = true; if (playbackTimer.current) clearTimeout(playbackTimer.current); playbackTimer.current = null; playNext(); };
+              utterance.onend = advanceSpeech; utterance.onerror = advanceSpeech;
+              playbackTimer.current = setTimeout(() => { window.speechSynthesis.cancel(); advanceSpeech(); }, Math.max(60000, Math.min(600000, utterance.text.length * 150)));
+              window.speechSynthesis.speak(utterance);
+              return;
+            }
+            const audio = target as HTMLAudioElement;
             audio.currentTime = 0;
             let finished = false;
             const advance = () => {
@@ -323,9 +345,11 @@ const CardFace = forwardRef<CardFaceRef, CardFaceProps>(
             backgroundColor: 'transparent',
           }}
         />
+        {cleanHtml.includes('data-tts=') && <div><button type="button" onClick={() => void playAudio()}>Read aloud</button>{(!window.speechSynthesis || typeof SpeechSynthesisUtterance === 'undefined') && <p role="status">Speech synthesis is unavailable in this browser.</p>}</div>}
         {typedFields.map(field => <div key={field} style={{ marginBlock: 12 }}>
           {!showAnswer ? <label>Type answer ({field})<input autoComplete="off" spellCheck={false} onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) { e.preventDefault(); onRevealAnswer?.(); } }} value={typed[field] || ''} onChange={e => setTyped(old => ({ ...old, [field]: e.target.value }))} /></label>
             : <div role="status"><div>Your answer: {typed[field] || '(empty)'}</div><div>Correct answer: {answers[field] ?? '(not included in back template)'}</div>
+              {answers[field] !== undefined && !matches(field) && <div aria-label="Character comparison" style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{answerDiff(typed[field] || '', answers[field]).map((part, i) => part.kind === 'delete' ? <del key={i} style={{ background: '#7f1d1d', color: '#fff' }}>{part.text}</del> : part.kind === 'insert' ? <ins key={i} style={{ background: '#14532d', color: '#fff' }}>{part.text}</ins> : <span key={i}>{part.text}</span>)}</div>}
               {answers[field] !== undefined && <strong>{matches(field) ? 'Match' : 'Different — compare your answer before rating'}</strong>}
             </div>}
         </div>)}

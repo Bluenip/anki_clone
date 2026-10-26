@@ -133,6 +133,7 @@ def term_predicate(value, now, due=None, fields=None):
         value = select(func.json_extract(PackageCard.payload, '$.flags')).where(PackageCard.card_id == Card.id).scalar_subquery()
         return func.coalesce(value, 0).op('&')(7) == int(argument)
     if key == 'prop':
+        if argument.startswith('due') and fields is not None: return fields('_due_days', argument)
         match = re.fullmatch(r'(ivl|reps|lapses)(<=|>=|!=|=|<|>)([0-9]+)', argument.lower())
         if not match:
             raise ValueError('Supported properties: prop:ivl, prop:reps, prop:lapses with a non-negative integer comparison')

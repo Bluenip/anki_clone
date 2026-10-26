@@ -64,8 +64,9 @@ export interface DeckSettings {
   bury_review_siblings: boolean;
   bury_interday_learning_siblings: boolean;
 
-  // Easy Days (unsupported/inactive)
+  // Easy Days
   easy_days: Record<string, number>;
+  load_balancing?: boolean;
 
   // FSRS (active)
   fsrs: boolean;
@@ -137,6 +138,7 @@ const DEFAULT_SETTINGS: DeckSettings = {
   bury_interday_learning_siblings: false,
 
   // Easy Days
+  load_balancing: false,
   easy_days: { Mon: 100, Tue: 100, Wed: 100, Thu: 100, Fri: 100, Sat: 100, Sun: 100 },
 
   // FSRS
@@ -1477,17 +1479,15 @@ const DeckOptionsPageContent = () => {
             </div>
           </section>
 
-          {/* Easy Days (Inactive / Unsupported) */}
+          {/* Easy Days */}
           <section className="options-card options-panel">
             <div className="options-card-header">
               <div className="options-card-title-group">
                 <h3>Easy Days</h3>
-                <span className="status-pill pill-inactive">Not yet active</span>
-              </div>
+                </div>
             </div>
-            <p className="options-inactive-notice">
-              Easy Days review rebalancing is not yet active on the backend. Settings are retained.
-            </p>
+            <p>Future review dates prefer weekdays with more capacity, within the allowed interval window. Existing due dates and learning steps stay as scheduled.</p>
+            <label><input type="checkbox" checked={settings.load_balancing ?? false} onChange={e => setSettings(old => ({ ...old, load_balancing: e.target.checked }))} />Balance review load across eligible days</label>
             <div className="easy-days-header" aria-hidden="true">
               <span />
               <div className="easy-days-labels">
@@ -1498,20 +1498,18 @@ const DeckOptionsPageContent = () => {
             </div>
             {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day) => (
               <div className="slider-row" key={day}>
-                <label htmlFor={`easy_days_${day}`} className="day-label disabled">
+                <label htmlFor={`easy_days_${day}`} className="day-label">
                   {day}
                 </label>
                 <input
                   id={`easy_days_${day}`}
                   type="range"
-                  className="glass-slider disabled"
+                  className="glass-slider"
                   min="0"
                   max="100"
                   value={settings.easy_days?.[day] ?? 100}
-                  disabled={true}
+                  onChange={e => setSettings(old => ({ ...old, easy_days: { ...old.easy_days, [day]: Number(e.target.value) } }))}
                   aria-label={`${day} load percentage`}
-                  aria-disabled="true"
-                  readOnly
                 />
               </div>
             ))}

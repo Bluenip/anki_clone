@@ -143,7 +143,7 @@ describe('DeckOptionsPage Component', () => {
     expect(screen.queryByText(/used by 1 deck/i)).toBeNull();
   });
 
-  it('displays correct Easy Days Minimum/Reduced/Normal labels and marks unsupported groups as not yet active', async () => {
+  it('displays Easy Days capacity controls and enables scheduling', async () => {
     vi.spyOn(decksApi, 'getDeck').mockResolvedValue({ data: createMockDeck() } as any);
     renderDeckOptionsPage();
 
@@ -157,8 +157,7 @@ describe('DeckOptionsPage Component', () => {
     expect(screen.getByText('Normal')).toBeDefined();
 
     // Inactive groups marked with "Not yet active" pill
-    const inactiveBadges = screen.getAllByText('Not yet active');
-    expect(inactiveBadges.length).toBeGreaterThanOrEqual(1); // Easy Days remains unsupported
+    expect((screen.getByLabelText('Mon load percentage') as HTMLInputElement).disabled).toBe(false);
   });
 
   it('provides accessible semantic switch controls and prevents toggling unsupported switches', async () => {

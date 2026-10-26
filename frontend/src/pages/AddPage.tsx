@@ -1,3 +1,4 @@
+import ImageOcclusionEditor from '../components/ImageOcclusionEditor';
 import FormattingTools from '../components/FormattingTools';
 import MediaTools from '../components/MediaTools';
 import { Link } from 'react-router-dom';
@@ -63,6 +64,7 @@ const AddPage = () => {
   };
 
   const currentType = noteTypes.find(t => t.kind === selectedKind) || noteTypes[0];
+  const isImageOcclusion = selectedKind === 'image_occlusion' || currentType?.editor_kind === 'image_occlusion';
   const currentFields = currentType ? currentType.fields : [];
 
   const handleInsertCloze = () => {
@@ -208,7 +210,7 @@ const AddPage = () => {
               id="note-type-select"
               value={selectedKind}
               onChange={e => setSelectedKind(e.target.value)}
-              disabled={pending || noteTypes.length === 0}
+              disabled={pending || mediaBusy > 0 || noteTypes.length === 0}
             >
               {noteTypes.map(t => <option key={t.kind} value={t.kind}>{t.name}</option>)}
             </select>
@@ -222,8 +224,9 @@ const AddPage = () => {
             <span>Optional fields (Extra, Add Reverse) may be left empty. Press Ctrl+Enter to submit.</span>
           </div>
 
-          {currentFields.map(fieldName => {
-            const isOptional = fieldName === 'Extra' || fieldName === 'Add Reverse';
+          {isImageOcclusion && <ImageOcclusionEditor key={selectedKind} fields={fields} onChange={setFields} disabled={pending} onBusyChange={active => setMediaBusy(n => Math.max(0, n + (active ? 1 : -1)))} />}
+          {currentFields.filter(f => !isImageOcclusion || !['Image', 'Occlusion'].includes(f)).map(fieldName => {
+            const isOptional = isImageOcclusion || fieldName === 'Extra' || fieldName === 'Add Reverse';
             return (
               <div className="form-group" key={fieldName}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.375rem' }}>
@@ -273,7 +276,7 @@ const AddPage = () => {
           <button
             type="submit"
             className="btn btn-primary btn-full"
-            disabled={pending || decks.length === 0 || !selectedDeckId}
+            disabled={pending || mediaBusy > 0 || decks.length === 0 || !selectedDeckId}
           >
             {pending ? 'Adding Note...' : 'Add Note'}
           </button>

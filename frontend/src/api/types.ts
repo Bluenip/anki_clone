@@ -28,7 +28,7 @@ export interface Card {
   ease_factor?: number;
 }
 
-export type BulkActionType = 'suspend' | 'unsuspend' | 'bury' | 'unbury' | 'move' | 'add_tags' | 'remove_tags' | 'flag';
+export type BulkActionType = 'suspend' | 'unsuspend' | 'bury' | 'unbury' | 'move' | 'add_tags' | 'remove_tags' | 'flag' | 'delete' | 'reset' | 'reschedule';
 
 export interface BulkCardItem {
   card_id: number;
@@ -36,6 +36,7 @@ export interface BulkCardItem {
 }
 
 export interface BulkActionRequest {
+  due_days?: number;
   flag?: number;
   action: BulkActionType;
   cards: BulkCardItem[];

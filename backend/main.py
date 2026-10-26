@@ -112,3 +112,9 @@ app.include_router(media_router.router)
 
 from routers import optimizer_router
 app.include_router(optimizer_router.router)
+
+from routers import backups_router
+app.include_router(backups_router.router)
+
+from routers import sync_router
+app.include_router(sync_router.router)

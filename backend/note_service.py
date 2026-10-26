@@ -4,9 +4,11 @@ from sqlalchemy.dialects.sqlite import insert
 from models import Card, Note, NoteCard, NoteType, StudyProgress, PackageNote
 from notes import new_guid
 from note_rendering import render_cards
+import image_occlusion
 
 
 BUILTINS = {
+    'image_occlusion': {'name': 'Image Occlusion', 'fields': image_occlusion.FIELDS, 'templates': image_occlusion.TEMPLATES},
     'typed': {'name': 'Basic (type in the answer)', 'fields': ['Front', 'Back'], 'templates': [
         {'name': 'Card 1', 'qfmt': '{{Front}}<br>{{type:Back}}', 'afmt': '{{FrontSide}}<hr id=answer>{{Back}}'}]},
     'basic': {'name': 'Basic', 'fields': ['Front', 'Back'], 'templates': [
@@ -26,7 +28,7 @@ def builtin_model(db, user_id, kind):
     definition = BUILTINS[kind]
     db.execute(insert(NoteType).values(user_id=user_id, name=definition['name'],
         fields_json=json.dumps(definition['fields']), templates_json=json.dumps(definition['templates']),
-        css='.cloze {color:#77b7ff;font-weight:bold}').on_conflict_do_nothing(index_elements=['user_id', 'name']))
+        css=image_occlusion.CSS if kind == 'image_occlusion' else '.cloze {color:#77b7ff;font-weight:bold}').on_conflict_do_nothing(index_elements=['user_id', 'name']))
     model = db.query(NoteType).filter_by(user_id=user_id, name=definition['name']).one()
     if json.loads(model.fields_json) != definition['fields'] or json.loads(model.templates_json) != definition['templates']:
         raise ValueError('A different note type already uses this built-in name')
@@ -34,8 +36,10 @@ def builtin_model(db, user_id, kind):
 
 
 def kind_for(model):
+    if json.loads(model.fields_json) == image_occlusion.FIELDS and image_occlusion.is_occlusion(json.loads(model.templates_json)):
+        return 'image_occlusion'
     for kind, definition in BUILTINS.items():
-        if model.name == definition['name'] and json.loads(model.fields_json) == definition['fields']:
+        if kind != 'image_occlusion' and model.name == definition['name'] and json.loads(model.fields_json) == definition['fields']:
             return kind
     return 'custom'
 
@@ -46,7 +50,7 @@ def values_for(model, fields):
         raise ValueError('Supply exactly the fields defined by this note type')
     values = [fields[name] for name in names]
     kind = kind_for(model)
-    required = ['Text'] if kind == 'cloze' else ['Front'] if kind in BUILTINS else []
+    required = ['Image', 'Occlusion'] if kind == 'image_occlusion' else ['Text'] if kind == 'cloze' else ['Front'] if kind in BUILTINS else []
     if any(not fields[name].strip() for name in required):
         raise ValueError('Required note fields cannot be empty')
     return values

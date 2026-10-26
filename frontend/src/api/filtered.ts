@@ -3,7 +3,10 @@ import type { StudyCard } from './types';
 
 export type SessionOrder = 'oldest' | 'newest' | 'random' | 'due' | 'lapses';
 
+export type StudyFilter = { search: string; limit: number; order: SessionOrder };
+
 export interface Session {
+  filters?: StudyFilter[];
   id: number;
   name: string;
   search: string;
@@ -18,6 +21,7 @@ export interface Session {
 }
 
 export interface CreateSessionPayload {
+  filters?: StudyFilter[];
   name: string;
   search?: string;
   limit?: number;
@@ -58,6 +62,7 @@ export const getFilteredSessions = () => client.get<Session[]>('/api/filtered');
 
 export const createFilteredSession = (data: CreateSessionPayload) =>
   client.post<Session>('/api/filtered', {
+    ...(data.filters ? { filters: data.filters } : {}),
     name: data.name,
     search: data.search ?? 'is:due',
     limit: data.limit ?? 100,

@@ -92,11 +92,12 @@ def import_notes_text(db, deck, data, *, commit=True):
         by_guid.update({legacy_guid(card, deck.user_id): card for card in legacy_cards})
     by_first = {}
     for note in notes:
-        if note.note_type.name == model.name and any(link.card.deck_id == deck.id for link in note.card_links):
-            by_first.setdefault(json.loads(note.fields_json)[0], []).append(note)
+        if note.note_type.name == model.name and (data.match_scope == 'collection' or any(link.card.deck_id == deck.id for link in note.card_links)):
+            values = json.loads(note.fields_json)
+            by_first.setdefault(tuple(values) if data.match_fields == 'all' else values[0], []).append(note)
     for card in legacy_cards:
-        if card.deck_id == deck.id:
-            by_first.setdefault(card.front, []).append(card)
+        if data.match_scope == 'collection' or card.deck_id == deck.id:
+            by_first.setdefault((card.front, card.back) if data.match_fields == 'all' else card.front, []).append(card)
     plan, seen, targets = [], set(), set()
     counts = dict(added=0, updated=0, skipped=0)
     reader = csv.reader(stream, delimiter=separator, strict=True)
@@ -123,18 +124,19 @@ def import_notes_text(db, deck, data, *, commit=True):
                 raise ValueError('Invalid GUID')
             values = values_for(model, fields)
             render_cards(model, values, deck.user_id, row_tags, deck.name)
-            identity = ('guid', guid) if guid else ('first', values[0])
+            match_key = tuple(values) if data.match_fields == 'all' else values[0]
+            identity = ('guid', guid) if guid else ('fields', match_key)
             if identity in seen and (guid or data.duplicate_policy != 'add'):
                 raise ValueError('Input contains repeated note identity')
             seen.add(identity)
             existing = by_guid.get(guid) if guid else None
             if not guid and data.duplicate_policy != 'add':
-                matches = by_first.get(values[0], [])
+                matches = by_first.get(match_key, [])
                 if len(matches) > 1:
                     raise ValueError('Ambiguous first field; use GUIDs to update')
                 existing = matches[0] if matches else None
             legacy = isinstance(existing, Card)
-            wrong_target = existing and (existing.deck_id != deck.id if legacy else (existing.note_type.name != model.name or any(link.card.deck_id != deck.id for link in existing.card_links)))
+            wrong_target = existing and ((data.match_scope == 'deck' and existing.deck_id != deck.id) if legacy else (existing.note_type.name != model.name or data.match_scope == 'deck' and any(link.card.deck_id != deck.id for link in existing.card_links)))
             if wrong_target:
                 raise ValueError('Existing GUID belongs to another note type or deck')
             if existing and data.duplicate_policy == 'add':

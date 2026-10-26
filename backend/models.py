@@ -20,6 +20,7 @@ class User(Base):
     study_progress = relationship("StudyProgress", back_populates="user", cascade="all, delete-orphan")
     notes = relationship("Note", cascade="all, delete-orphan")
     note_types = relationship("NoteType", cascade="all, delete-orphan")
+    collection_operations = relationship("CollectionOperation", cascade="all, delete-orphan")
     study_operations = relationship("StudyOperation", cascade="all, delete-orphan")
     filtered_sessions = relationship('FilteredSession', cascade='all, delete-orphan')
     option_presets = relationship("OptionPreset", cascade="all, delete-orphan")
@@ -248,6 +249,7 @@ class FilteredSession(Base):
     preview_hard_seconds = Column(Integer, nullable=False, default=600)
     preview_good_seconds = Column(Integer, nullable=False, default=0)
     version = Column(Integer, nullable=False, default=0)
+    definition = relationship('FilteredDefinition', uselist=False, cascade='all, delete-orphan')
     items = relationship('FilteredItem', cascade='all, delete-orphan', back_populates='session')
 
 
@@ -259,3 +261,30 @@ class FilteredItem(Base):
     available_at = Column(DateTime, nullable=True)
     session = relationship('FilteredSession', back_populates='items')
     card = relationship('Card', back_populates='filtered_item')
+
+
+class CollectionOperation(Base):
+    __tablename__ = 'collection_operations'
+    id = Column(String(36), primary_key=True)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False, index=True)
+    action = Column(String(64), nullable=False)
+    before_json = Column(Text, nullable=False)
+    after_hash = Column(String(64), nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    undone = Column(Boolean, nullable=False, default=False)
+
+
+class FilteredDefinition(Base):
+    __tablename__ = 'filtered_definitions'
+    session_id = Column(Integer, ForeignKey('filtered_sessions.id'), primary_key=True)
+    filters_json = Column(Text, nullable=False, default='[]')
+
+
+class OfflineNoteReceipt(Base):
+    __tablename__ = 'offline_note_receipts'
+    __table_args__ = (UniqueConstraint('user_id', 'request_id'),)
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False, index=True)
+    request_id = Column(String(100), nullable=False)
+    payload_hash = Column(String(64), nullable=False)
+    response_json = Column(Text, nullable=False)
