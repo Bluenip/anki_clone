@@ -73,3 +73,20 @@
   .cards-import-modal .cards-import-actions { padding: 12px 16px; }
   .cards-import-actions .btn { min-width: 0; flex: 1; }
 }
+
+/* Use the visible area above the on-screen keyboard, including Safari panning. */
+.decks-page .cards-import-overlay {
+  top: var(--import-viewport-top, 0px);
+  bottom: auto;
+  height: var(--import-viewport-height, 100dvh);
+  padding: max(8px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left));
+  overflow: hidden;
+}
+.decks-page .cards-import-modal { height: 100%; max-height: 900px; min-height: 0; }
+.cards-import-modal > form { flex: 1 1 0; }
+.cards-import-body { flex: 1 1 0; -webkit-overflow-scrolling: touch; scrollbar-color: #43516a #171c2a; }
+.cards-import-body input:not([type="checkbox"]), .cards-import-body select, .cards-import-body textarea { font-size: 16px; }
+@media (max-height: 450px) {
+  .cards-import-modal > h2 { padding: 10px 16px; }
+  .cards-import-modal .cards-import-actions { padding: 8px 16px; }
+}

@@ -30,6 +30,37 @@ async function openImport() {
 describe('Text transfer', () => {
   beforeEach(() => vi.clearAllMocks());
 
+  it('tracks keyboard viewport changes and restores page scrolling when import closes', async () => {
+    const viewport = Object.assign(new EventTarget(), { height: 350, offsetTop: 100 });
+    const oldViewport = Object.getOwnPropertyDescriptor(window, 'visualViewport');
+    Object.defineProperty(window, 'visualViewport', { configurable: true, value: viewport });
+    const remove = vi.spyOn(viewport, 'removeEventListener');
+    const oldOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'auto';
+    const view = mount();
+    try {
+      await openImport();
+      const overlay = screen.getByRole('dialog', { name: 'Import cards' });
+      expect(overlay.style.getPropertyValue('--import-viewport-height')).toBe('350px');
+      expect(document.body.style.overflow).toBe('hidden');
+      viewport.height = 280;
+      viewport.offsetTop = 120;
+      viewport.dispatchEvent(new Event('resize'));
+      viewport.dispatchEvent(new Event('scroll'));
+      expect(overlay.style.getPropertyValue('--import-viewport-height')).toBe('280px');
+      expect(overlay.style.getPropertyValue('--import-viewport-top')).toBe('120px');
+      fireEvent.click(screen.getByRole('button', {name: 'Cancel'}));
+      expect(document.body.style.overflow).toBe('auto');
+      expect(remove).toHaveBeenCalledWith('resize', expect.any(Function));
+      expect(remove).toHaveBeenCalledWith('scroll', expect.any(Function));
+    } finally {
+      view.unmount();
+      document.body.style.overflow = oldOverflow;
+      if (oldViewport) Object.defineProperty(window, 'visualViewport', oldViewport);
+      else Reflect.deleteProperty(window, 'visualViewport');
+    }
+  });
+
   it('keeps package export errors visible when the download API returns a JSON blob', async () => {
     const blob=new Blob(['{}'],{type:'application/json'});
     Object.defineProperty(blob,'text',{value:async()=>JSON.stringify({detail:'Export decks with matching scheduler settings together'})});

@@ -242,6 +242,30 @@ const DecksPage = () => {
     });
   }, []);
 
+  // Mobile keyboards can shrink the visual viewport without changing 100dvh.
+  useEffect(() => {
+    if (!showImportModal) return;
+    const overlay = importModalRef.current?.parentElement;
+    if (!overlay) return;
+    const viewport = window.visualViewport;
+    const resize = () => {
+      overlay.style.setProperty('--import-viewport-height', `${viewport?.height ?? window.innerHeight}px`);
+      overlay.style.setProperty('--import-viewport-top', `${viewport?.offsetTop ?? 0}px`);
+    };
+    resize();
+    viewport?.addEventListener('resize', resize);
+    viewport?.addEventListener('scroll', resize);
+    window.addEventListener('resize', resize);
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      viewport?.removeEventListener('resize', resize);
+      viewport?.removeEventListener('scroll', resize);
+      window.removeEventListener('resize', resize);
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [showImportModal]);
+
   // Trap focus in modals, ignore disabled/hidden controls, handle Escape & restore focus
   useEffect(() => {
     const activeRef = showFileImport
@@ -605,7 +629,7 @@ const DecksPage = () => {
       )}
 
       {showImportModal && (
-        <div className="modal-overlay" onClick={closeImportModal} role="dialog" aria-modal="true" aria-label="Import cards">
+        <div className="modal-overlay cards-import-overlay" onClick={closeImportModal} role="dialog" aria-modal="true" aria-label="Import cards">
           <div className="modal glass-card cards-import-modal" ref={importModalRef} onClick={e => e.stopPropagation()}>
             <h2>Import Cards</h2>
             {importModalError && (
