@@ -99,7 +99,7 @@ export default function NoteTypesPage() {
         <button type="button" onClick={() => change({ ...draft, templates: [...draft.templates, { name: `Card ${draft.templates.length + 1}`, qfmt: '{{' + draft.fields[0] + '}}', afmt: '{{FrontSide}}' }] })}>Add card template</button>
         <label>Shared CSS<textarea rows={7} value={draft.css} onChange={e => change({ ...draft, css: e.target.value })} /></label>
         <details><summary>LaTeX header and footer</summary>
-          <p>Uses the server’s TeX packages. Generated images are included in media and available offline.</p>
+          <p>Uses the server’s TeX packages. Generated images are included when exporting media.</p>
           <label>LaTeX header<textarea rows={7} value={draft.latex_header ?? ''} placeholder="Server default" onChange={e => change({ ...draft, latex_header: e.target.value })} /></label>
           <label>LaTeX footer<textarea rows={2} value={draft.latex_footer ?? ''} placeholder="Server default" onChange={e => change({ ...draft, latex_footer: e.target.value })} /></label>
         </details>

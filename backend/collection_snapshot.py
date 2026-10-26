@@ -53,7 +53,6 @@ def restore(db, uid, saved):
     """Caller holds write lock and verifies current fingerprint before restoring."""
     from fastapi import HTTPException
     current = capture(db, uid)
-    db.execute(delete(m.OfflineNoteReceipt).where(m.OfflineNoteReceipt.user_id == uid))
     versions = {row['card_id']: row['version'] for row in current['scheduler_states']}
     session_versions = {row['id']: row['version'] for row in current['filtered_sessions']}
     # SQLite may reuse deleted integer IDs. Never overwrite another account.
@@ -90,7 +89,6 @@ def restore(db, uid, saved):
 
 def clear(db, uid):
     current = capture(db, uid)
-    db.execute(delete(m.OfflineNoteReceipt).where(m.OfflineNoteReceipt.user_id == uid))
     for model in reversed(TABLES):
         table = model.__table__; pk = list(table.primary_key.columns)[0].name
         keys = [row[pk] for row in current[table.name]]

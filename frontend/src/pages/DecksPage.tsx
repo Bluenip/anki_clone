@@ -1,3 +1,4 @@
+import './DecksPage.css';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { listDecks, getTodaySummary, createDeck, deleteDeck, updateDeck, importCards, importApkg, exportApkg, exportText, exportCollection, getImportNoteTypes } from '../api/decks';
@@ -34,6 +35,8 @@ const DecksPage = () => {
   const [createModalError, setCreateModalError] = useState<string | null>(null);
   const [newDeckName, setNewDeckName] = useState('');
 
+  const [showFileImport, setShowFileImport] = useState(false);
+  const fileImportModalRef = useRef<HTMLDivElement>(null);
   const [showImportModal, setShowImportModal] = useState(false);
   const [importModalError, setImportModalError] = useState<string | null>(null);
   const [importText, setImportText] = useState('');
@@ -99,6 +102,8 @@ const DecksPage = () => {
   const createModalRef = useRef<HTMLDivElement>(null);
   const importModalRef = useRef<HTMLDivElement>(null);
   const exportModalRef = useRef<HTMLDivElement>(null);
+  const closeFileImport = useCallback(() => { setShowFileImport(false); openerRef.current?.focus(); }, []);
+
 
   const openCreateModal = (e?: React.MouseEvent) => {
     openerRef.current = (e?.currentTarget as HTMLElement) || (document.activeElement as HTMLElement);
@@ -150,6 +155,7 @@ const DecksPage = () => {
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    setShowFileImport(false);
     
     const collectionRestore = file.name.toLowerCase().endsWith('.colpkg');
     if (collectionRestore && decks.length > 0) {
@@ -238,7 +244,9 @@ const DecksPage = () => {
 
   // Trap focus in modals, ignore disabled/hidden controls, handle Escape & restore focus
   useEffect(() => {
-    const activeRef = showCreateModal
+    const activeRef = showFileImport
+      ? fileImportModalRef
+      : showCreateModal
       ? createModalRef
       : showImportModal
       ? importModalRef
@@ -256,6 +264,7 @@ const DecksPage = () => {
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
+        if (showFileImport) closeFileImport();
         if (showCreateModal) closeCreateModal();
         if (showImportModal) closeImportModal();
         if (showExportModal) closeExportModal();
@@ -288,7 +297,7 @@ const DecksPage = () => {
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [showCreateModal, showImportModal, showExportModal, getFocusableElements, closeCreateModal, closeImportModal, closeExportModal]);
+  }, [showFileImport, closeFileImport, showCreateModal, showImportModal, showExportModal, getFocusableElements, closeCreateModal, closeImportModal, closeExportModal]);
 
 
   const handleCreateDeck = async (e: React.FormEvent) => {
@@ -459,7 +468,14 @@ const DecksPage = () => {
   if (loading) return <div className="loading-screen"><div className="spinner" /></div>;
 
   return (
-    <div className="page-container" style={{ padding: '2rem 1rem' }}>
+    <div className="page-container decks-page">
+      <header className="decks-heading">
+        <div><p className="decks-eyebrow">YOUR COLLECTION</p><h1>Decks</h1><p>Make a little progress, every day.</p></div>
+        <div className="decks-primary-actions">
+          <button className="btn btn-ghost" onClick={e => { openerRef.current = e.currentTarget; setShowFileImport(true); }} disabled={importingApkg || pending}>{importingApkg ? 'Importing...' : 'Import File'}</button>
+          <button className="btn btn-primary" onClick={openCreateModal} disabled={pending}>Create Deck</button>
+        </div>
+      </header>
       
       {operationError && (
         <div className="alert alert-error" role="alert" style={{ marginBottom: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -490,8 +506,11 @@ const DecksPage = () => {
             <button className="btn btn-primary" onClick={fetchDecks}>Retry</button>
           </div>
         ) : decks.length === 0 ? (
-          <div style={{ padding: '2rem', textAlign: 'center', color: '#888' }}>
-            No decks yet. Click "Create Deck" to get started!
+          <div className="decks-empty">
+            <div className="decks-empty-icon" aria-hidden="true"><svg viewBox="0 0 48 48" fill="none"><rect x="8" y="12" width="29" height="29" rx="5" stroke="currentColor" strokeWidth="2"/><path d="M16 7h21a5 5 0 0 1 5 5v20M17 23h11M17 30h7" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg></div>
+            <h2>Your next learning journey starts here</h2>
+            <p>Create your first deck or import cards you already have.</p>
+            <span>Supports Anki packages, CSV and text files</span>
           </div>
         ) : (
           decks.map(deck => (
@@ -532,28 +551,27 @@ const DecksPage = () => {
         {todaySummary ? `Studied ${todaySummary.reviews} cards in ${todaySummary.seconds} seconds today (${todaySummary.seconds_per_card}s/card)` : 'Study activity unavailable'}
       </div>
 
-      <div style={{ textAlign: 'center', marginTop: '3rem', display: 'flex', gap: '1rem', justifyContent: 'center', flexWrap: 'wrap' }}>
-        <button className="btn btn-pill" onClick={() => window.open('https://ankiweb.net/shared/decks', '_blank')}>Get Shared</button>
-        <button className="btn btn-pill" onClick={openCreateModal} disabled={pending}>Create Deck</button>
-        <button className="btn btn-pill" onClick={() => fileInputRef.current?.click()} disabled={importingApkg || pending}>
-          {importingApkg ? 'Importing...' : 'Import File'}
-        </button>
-        <button className="btn btn-pill" onClick={handleCollectionExport} disabled={exporting || importingApkg}>
-          {exporting ? 'Exporting…' : 'Export collection (.colpkg)'}
-        </button>
-        <p><Link to="/backups">Backups &amp; restore existing collection</Link></p>
-        <label>Media name collisions<select value={mediaConflicts} disabled={importingApkg} onChange={e => setMediaConflicts(e.target.value as 'error' | 'rename')}><option value="error">Stop and report conflict</option><option value="rename">Keep both files and update incoming references</option></select></label>
-        <label>Existing package notes<select value={packageDuplicates} disabled={importingApkg} onChange={e => setPackageDuplicates(e.target.value as typeof packageDuplicates)}><option value="newer">Update if incoming note is newer</option><option value="skip">Keep existing notes</option><option value="update">Update existing notes</option><option value="add">Import separate copies</option></select></label>
-        <label><input type="checkbox" checked={importScheduling} disabled={importingApkg} onChange={e => setImportScheduling(e.target.checked)} /> Import APKG study history</label>
-        <input 
-          type="file" 
-          accept=".txt,.csv,.tsv,.apkg,.colpkg"
-          style={{ display: 'none' }} 
-          ref={fileInputRef} 
-          onChange={handleFileUpload}
-          aria-label="Upload file for import"
-        />
-      </div>
+      <section className="collection-tools" aria-label="Collection tools">
+        <div className="collection-tools-copy"><h2>Collection tools</h2><p>Discover cards, export your collection, or manage backups.</p></div>
+        <div className="collection-tools-actions">
+          <a className="btn btn-ghost" href="https://ankiweb.net/shared/decks" target="_blank" rel="noopener noreferrer">Get Shared <span aria-hidden="true">↗</span></a>
+          <button className="btn btn-ghost" onClick={handleCollectionExport} disabled={exporting || importingApkg}>{exporting ? 'Exporting…' : 'Export collection (.colpkg)'}</button>
+          <Link className="btn btn-ghost" to="/backups">Backups &amp; restore</Link>
+        </div>
+      </section>
+      <input type="file" accept=".txt,.csv,.tsv,.apkg,.colpkg" hidden ref={fileInputRef} onChange={handleFileUpload} aria-label="Upload file for import" />
+      {showFileImport && <div className="modal-overlay" onClick={closeFileImport} role="dialog" aria-modal="true" aria-label="Import file">
+        <div className="modal glass-card file-import-modal" ref={fileImportModalRef} onClick={e => e.stopPropagation()}>
+          <h2>Import your cards</h2>
+          <p className="import-intro">Choose an Anki package, CSV or text file. Package options below apply to .apkg and .colpkg files.</p>
+        <div className="form-group"><label htmlFor="package-media">Media name collisions</label><select id="package-media" value={mediaConflicts} disabled={importingApkg} onChange={e => setMediaConflicts(e.target.value as 'error' | 'rename')}><option value="error">Stop and report conflict</option><option value="rename">Keep both files and update incoming references</option></select></div>
+        <div className="form-group"><label htmlFor="package-duplicates">Existing package notes</label><select id="package-duplicates" value={packageDuplicates} disabled={importingApkg} onChange={e => setPackageDuplicates(e.target.value as typeof packageDuplicates)}><option value="newer">Update if incoming note is newer</option><option value="skip">Keep existing notes</option><option value="update">Update existing notes</option><option value="add">Import separate copies</option></select></div>
+        <label className="package-history"><input type="checkbox" checked={importScheduling} disabled={importingApkg} onChange={e => setImportScheduling(e.target.checked)} /> Import APKG study history</label>
+
+          <p className="import-hint">To replace an existing collection, use <Link to="/backups">Backups &amp; restore</Link>.</p>
+          <div className="modal-actions"><button className="btn btn-ghost" onClick={closeFileImport}>Cancel</button><button className="btn btn-primary" disabled={importingApkg || pending} onClick={() => fileInputRef.current?.click()}>Choose file</button></div>
+        </div>
+      </div>}
 
       {showCreateModal && (
         <div className="modal-overlay" onClick={closeCreateModal} role="dialog" aria-modal="true" aria-label="Create new deck">

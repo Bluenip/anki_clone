@@ -88,33 +88,11 @@ To deploy using Docker Compose:
 ## 📝 License
 This is an educational prototype and portfolio project.
 
-### Offline study and LaTeX
+### Online study and LaTeX
 
-The production frontend includes a service worker and `/offline`. Serve the app
-and `/api` on the same HTTPS origin (localhost also works). Download a deck while
-connected. Answers persist in IndexedDB; local SM-2/FSRS scheduling supports
-learning repetitions. Server replay is authoritative for collection-wide load
-balancing, daily quotas and sibling changes. Conflicts remain visible until the
-user resolves them; unsynced answers are not silently applied over newer work.
-Downloaded source fields and tags can also be edited on `/offline`. Edits persist
-across reloads. Sync replays reviews first, then merges disjoint field changes;
-changes to the same field require an explicit local/server choice. Note-type
-changes and deleted notes stay as visible conflicts. Edits use durable receipts
-to make retries idempotent. After an applied change, cards must refresh before
-further offline study; a failed refresh keeps that gate in place.
-
-Downloads are paginated (1,000 cards per request, at most 100,000 per selected
-deck tree). The client checks a shared manifest revision before publishing the
-download and verifies media hashes. Browser storage limits still apply.
-
-Reconnect sync runs while the offline page is open. An optional background-sync
-checkbox allows the service worker to replay pending answers/edits using the
-saved login token. This requires the browser Background Sync API, a valid token
-and permission for background work; it does not guarantee execution after the
-browser is force-closed. Unsupported browsers retain manual/reconnect sync.
-Logging out clears background authorization and local account data, and asks
-first if there are unsynced answers or edits. Source-field editing does not
-upload new media while offline.
+The site requires a network connection. Local deck downloads, offline editing,
+PWA installation and background synchronization have been removed. Existing
+browsers automatically retire the previous service worker and its local caches.
 
 Full `[latex]...[/latex]` rendering uses `latex`, `dvipng`, `bubblewrap` and
 `prlimit`. These are installed in the backend Docker image. Linux must allow
@@ -126,9 +104,7 @@ server image as needed. Existing native Anki LaTeX images work without a compile
 inline math retains the browser fallback when the toolchain is unavailable.
 
 Reference syntax: [Anki TTS](https://docs.ankiweb.net/templates/fields.html),
-[Anki LaTeX](https://docs.ankiweb.net/math.html). Offline FSRS uses
-[ts-fsrs](https://github.com/open-spaced-repetition/ts-fsrs); server replay continues
-to use the pinned Python scheduler.
+[Anki LaTeX](https://docs.ankiweb.net/math.html). Scheduling uses the pinned Python scheduler on the server.
 
 On Linux x86_64 without system TeX, a portable runtime can be installed for the
 current user with `backend/venv/bin/python backend/setup_latex_runtime.py`.

@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { Link, NavLink, useNavigate } from 'react-router-dom';
-import { localAccount } from '../utils/offline';
 import { useAuth } from '../context/useAuth';
 
 const Navbar = () => {
@@ -8,13 +7,7 @@ const Navbar = () => {
   const navigate = useNavigate();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  const handleLogout = async () => {
-    if (user) {
-      try {
-        const saved = await localAccount(user.id);
-        if ((saved.answers.length || saved.edits?.length) && !window.confirm(`Log out and delete ${saved.answers.length} unsynced answers and ${saved.edits?.length || 0} edits on this device? Cancel to sync first.`)) return;
-      } catch { /* Storage is unavailable; logging out still clears authentication. */ }
-    }
+  const handleLogout = () => {
     logout();
     navigate('/login');
     setMobileMenuOpen(false);
@@ -35,7 +28,6 @@ const Navbar = () => {
               <NavLink to="/add" className={({ isActive }) => isActive ? "menu-item active" : "menu-item"}>Add</NavLink>
               <NavLink to="/browse" className={({ isActive }) => isActive ? "menu-item active" : "menu-item"}>Browse</NavLink>
               <NavLink to="/stats" className={({ isActive }) => isActive ? "menu-item active" : "menu-item"}>Stats</NavLink>
-              <NavLink to="/offline" className="menu-item" onClick={closeMenu}>Offline</NavLink>
               <NavLink to="/custom-study" className={({ isActive }) => isActive ? "menu-item active" : "menu-item"}>Custom Study</NavLink>
             </div>
           )}
@@ -69,7 +61,6 @@ const Navbar = () => {
               <NavLink to="/add" className={({ isActive }) => isActive ? "mobile-nav-item active" : "mobile-nav-item"} onClick={closeMenu}>Add</NavLink>
               <NavLink to="/browse" className={({ isActive }) => isActive ? "mobile-nav-item active" : "mobile-nav-item"} onClick={closeMenu}>Browse</NavLink>
               <NavLink to="/stats" className={({ isActive }) => isActive ? "mobile-nav-item active" : "mobile-nav-item"} onClick={closeMenu}>Stats</NavLink>
-              <NavLink to="/offline" className="menu-item" onClick={closeMenu}>Offline</NavLink>
               <NavLink to="/custom-study" className={({ isActive }) => isActive ? "mobile-nav-item active" : "mobile-nav-item"} onClick={closeMenu}>Custom Study</NavLink>
               <NavLink to="/account" className={({ isActive }) => isActive ? "mobile-nav-item active" : "mobile-nav-item"} onClick={closeMenu}>Account</NavLink>
               <span className="mobile-nav-item" onClick={handleLogout}>Log Out</span>

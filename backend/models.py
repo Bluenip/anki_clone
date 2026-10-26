@@ -278,13 +278,3 @@ class FilteredDefinition(Base):
     __tablename__ = 'filtered_definitions'
     session_id = Column(Integer, ForeignKey('filtered_sessions.id'), primary_key=True)
     filters_json = Column(Text, nullable=False, default='[]')
-
-
-class OfflineNoteReceipt(Base):
-    __tablename__ = 'offline_note_receipts'
-    __table_args__ = (UniqueConstraint('user_id', 'request_id'),)
-    id = Column(Integer, primary_key=True)
-    user_id = Column(Integer, ForeignKey('users.id'), nullable=False, index=True)
-    request_id = Column(String(100), nullable=False)
-    payload_hash = Column(String(64), nullable=False)
-    response_json = Column(Text, nullable=False)

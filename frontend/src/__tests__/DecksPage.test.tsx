@@ -26,7 +26,7 @@ describe('DecksPage state handling and accessibility', () => {
     renderWithRouter(<DecksPage />);
 
     await waitFor(() => {
-      expect(screen.getByText(/No decks yet/i)).toBeDefined();
+      expect(screen.getByText(/Your next learning journey starts here/i)).toBeDefined();
     });
   });
 
@@ -154,7 +154,7 @@ describe('DecksPage state handling and accessibility', () => {
     expect(input.value).toBe('Duplicate Deck');
 
     // Empty list still displays empty state, NOT load error!
-    expect(screen.getByText(/No decks yet/i)).toBeDefined();
+    expect(screen.getByText(/Your next learning journey starts here/i)).toBeDefined();
     expect(screen.queryByText(/Failed to load decks/i)).toBeNull();
 
     // Allows retry with modified name
@@ -276,4 +276,21 @@ describe('DecksPage state handling and accessibility', () => {
     fireEvent.keyDown(document, { key: 'Tab', shiftKey: true });
     expect(document.activeElement).toBe(submitBtn);
   });
+});
+
+
+it('keeps package options in the import dialog and restores focus on Escape', async () => {
+  vi.spyOn(decksApi, 'listDecks').mockResolvedValue({ data: [] } as any);
+  renderWithRouter(<DecksPage />);
+  const opener = await screen.findByRole('button', { name: 'Import File' });
+  expect(screen.queryByLabelText('Media name collisions')).toBeNull();
+  fireEvent.click(opener);
+  expect(screen.getByRole('dialog', { name: 'Import file' })).toBeDefined();
+  expect(screen.getByLabelText('Media name collisions')).toBe(document.activeElement);
+  fireEvent.change(screen.getByLabelText('Existing package notes'), { target: { value: 'skip' } });
+  fireEvent.keyDown(document, { key: 'Escape' });
+  expect(screen.queryByRole('dialog')).toBeNull();
+  expect(document.activeElement).toBe(opener);
+  fireEvent.click(opener);
+  expect((screen.getByLabelText('Existing package notes') as HTMLSelectElement).value).toBe('skip');
 });
