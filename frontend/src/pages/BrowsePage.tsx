@@ -1,3 +1,6 @@
+import { getCardNote, updateNote } from '../api/notes';
+import type { Note } from '../api/notes';
+import './BrowsePage.css';
 import client from '../api/client';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
@@ -5,6 +8,12 @@ import { listDecks } from '../api/decks';
 import type { DeckSummary } from '../api/decks';
 import { browseCards, bulkActionCards, updateCard } from '../api/cards';
 import type { BrowseCard, BulkActionType, BulkActionRequest } from '../api/cards';
+
+const plainPreview = (html: string) => {
+  const text = document.createElement('textarea');
+  text.innerHTML = html.replace(/<(script|style)\b[^>]*>[\s\S]*?<\/\1>/gi, '').replace(/<[^>]*>/g, ' ');
+  return text.value.replace(/\s+/g, ' ').trim();
+};
 
 const MAX_BULK = 500;
 const PAGE_SIZE = 1000;
@@ -56,6 +65,9 @@ const BrowsePage = () => {
   const [actionSuccessMessage, setActionSuccessMessage] = useState('');
 
   // Editor state
+  const [sourceNote, setSourceNote] = useState<Note | null>(null);
+  const [noteFields, setNoteFields] = useState<Record<string, string>>({});
+  const [sourceReady, setSourceReady] = useState(false);
   const [editFront, setEditFront] = useState('');
   const [editBack, setEditBack] = useState('');
   const [saving, setSaving] = useState(false);
@@ -78,12 +90,30 @@ const BrowsePage = () => {
   const activeOffsetRef = useRef(0);
 
   const handleSelectCard = useCallback((card: BrowseCard | null) => {
+    if (card && selectedCardRef.current === card) return;
     selectedCardRef.current = card;
     setSelectedCard(card);
+    setSourceReady(card != null && card.note_id == null);
+    setSourceNote(null);
     setSaveSuccess(false);
     setEditFront(card?.front || '');
     setEditBack(card?.back || '');
   }, []);
+
+  useEffect(() => {
+    let ignore = false;
+    if (!selectedCard) return;
+    if (selectedCard.note_id == null) return;
+    getCardNote(selectedCard.id).then(({ data }) => {
+      if (ignore) return;
+      setSourceNote(data);
+      setNoteFields(data.fields);
+      setSourceReady(true);
+    }).catch(err => {
+      if (!ignore) setErrorMessage(getErrMsg(err, 'Failed to load original note fields'));
+    });
+    return () => { ignore = true; };
+  }, [selectedCard]);
 
   const fetchCards = useCallback(async (query: string = '', offset = 0) => {
     const previousId = selectedCardRef.current?.id;
@@ -243,7 +273,7 @@ const BrowsePage = () => {
   };
 
   const handleSave = async () => {
-    if (!selectedCard || loading || saving || actionPending) return;
+    if (!selectedCard || !sourceReady || loading || saving || actionPending) return;
 
     // Check if card is still in current displayed list
     const currentInList = cards.find((c) => c.id === selectedCard.id);
@@ -257,7 +287,11 @@ const BrowsePage = () => {
     setSaving(true);
     setErrorMessage('');
     try {
-      await updateCard(selectedCard.id, { front: editFront, back: editBack, expected_version: selectedCard.version });
+      if (sourceNote?.id != null) {
+        await updateNote(sourceNote.id, { fields: noteFields, tags: sourceNote.tags, expected_revision: sourceNote.revision });
+      } else {
+        await updateCard(selectedCard.id, { front: editFront, back: editBack, expected_version: selectedCard.version });
+      }
 
       // Reload actual backend versions and note rendering; edits do not invent scheduler versions.
       await fetchCards(activeQueryRef.current, activeOffsetRef.current);
@@ -281,6 +315,8 @@ const BrowsePage = () => {
   };
 
   return (
+    <div className="browser-page">
+      <header className="browser-page-heading"><div><p className="browser-eyebrow">YOUR COLLECTION</p><h1>Browse cards</h1><p>Find, organize and refine your cards.</p></div><Link className="btn btn-secondary" to="/add">Add a card</Link></header>
     <div className="browse-container">
       {/* Left Pane: List and Search */}
       <div className="browse-sidebar glass-card">
@@ -392,7 +428,7 @@ const BrowsePage = () => {
 
         {/* Bulk Action Controls & Selection Stats */}
         <div
-          className="bulk-toolbar"
+          className="bulk-toolbar bulk-selection-toolbar"
           style={{
             display: 'flex',
             flexWrap: 'wrap',
@@ -442,7 +478,7 @@ const BrowsePage = () => {
             </span>
           </div>
 
-          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+          <div className="bulk-organize-actions">
             <button type="button" className="btn btn-secondary" onClick={openMove}
               disabled={selectionCount === 0 || actionPending || loading || saving || moveLoading}>
               {moveLoading ? 'Loading decks...' : 'Change Deck'}
@@ -498,12 +534,12 @@ const BrowsePage = () => {
           </div>
         </div>
 
-        <div className="bulk-toolbar" style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-          <button type="button" disabled={loading || saving || actionPending || !selectionCount} onClick={() => void handleBulkAction('delete')}>Delete selected</button>
-          <button type="button" disabled={loading || saving || actionPending || !selectionCount} onClick={() => void handleBulkAction('reset')}>Reset selected to new</button>
-          <label>Due in days<input type="number" min="0" max="36500" value={dueDays} onChange={e => setDueDays(Number(e.target.value))} /></label>
-          <button type="button" disabled={loading || saving || actionPending || !selectionCount || !Number.isInteger(dueDays) || dueDays < 0 || dueDays > 36500} onClick={() => void handleBulkAction('reschedule')}>Set due date</button>
-          <button type="button" disabled={loading || saving || actionPending} onClick={async () => {
+        <div className="bulk-toolbar bulk-schedule-toolbar" aria-label="Scheduling and deletion">
+          <button type="button" className="btn btn-secondary browse-delete" disabled={loading || saving || actionPending || !selectionCount} onClick={() => void handleBulkAction('delete')}>Delete selected</button>
+          <button type="button" className="btn btn-secondary" disabled={loading || saving || actionPending || !selectionCount} onClick={() => void handleBulkAction('reset')}>Reset selected to new</button>
+          <label className="browse-due-input">Due in days<input type="number" min="0" max="36500" value={dueDays} onChange={e => setDueDays(Number(e.target.value))} /></label>
+          <button type="button" className="btn btn-secondary" disabled={loading || saving || actionPending || !selectionCount || !Number.isInteger(dueDays) || dueDays < 0 || dueDays > 36500} onClick={() => void handleBulkAction('reschedule')}>Set due date</button>
+          <button type="button" className="btn btn-secondary" disabled={loading || saving || actionPending} onClick={async () => {
             setActionPending(true); setErrorMessage('');
             try { await client.post('/api/cards/bulk-undo'); await fetchCards(activeQueryRef.current, activeOffsetRef.current); setActionSuccessMessage('Bulk operation undone.'); }
             catch (e) { setErrorMessage(getErrMsg(e, 'Undo failed')); }
@@ -683,8 +719,8 @@ const BrowsePage = () => {
                           onChange={() => handleToggleCardSelection(card.id)}
                         />
                       </td>
-                      <td>{card.front}</td>
-                      <td>{card.back}</td>
+                      <td title={plainPreview(card.front)}>{plainPreview(card.front)}</td>
+                      <td title={plainPreview(card.back)}>{plainPreview(card.back)}</td>
                       <td>{card.deck_name}</td>
                       <td>
                         {card.card_state === 'new' ? 'New' : card.next_review
@@ -759,6 +795,7 @@ const BrowsePage = () => {
             </div>
 
             <div
+              className="browse-card-metadata"
               style={{
                 marginBottom: '12px',
                 fontSize: '0.85rem',
@@ -774,6 +811,13 @@ const BrowsePage = () => {
 
             </div>
 
+            {!sourceReady ? <p role="status">Loading original note fields…</p> : sourceNote?.id != null ? Object.entries(noteFields).map(([name, value]) => (
+              <div className="form-group" key={name}>
+                <label htmlFor={`note-edit-${name}`}>{name}</label>
+                <textarea id={`note-edit-${name}`} className="editor-textarea" rows={5} value={value}
+                  disabled={saving || actionPending} onChange={e => setNoteFields(prev => ({ ...prev, [name]: e.target.value }))} />
+              </div>
+            )) : <>
             <div className="form-group">
               <label htmlFor="card-edit-front">Front</label>
               <textarea
@@ -796,7 +840,9 @@ const BrowsePage = () => {
                 className="editor-textarea"
               />
             </div>
+            </>}
             <div
+              className="browse-save-actions"
               style={{
                 marginTop: '20px',
                 display: 'flex',
@@ -819,7 +865,7 @@ const BrowsePage = () => {
                 id="save-btn"
                 className="btn btn-primary"
                 onClick={handleSave}
-                disabled={saving || actionPending || loading}
+                disabled={saving || actionPending || loading || !sourceReady}
               >
                 {saving ? 'Saving...' : 'Save Changes'}
               </button>
@@ -832,6 +878,7 @@ const BrowsePage = () => {
           </div>
         )}
       </div>
+    </div>
     </div>
   );
 };

@@ -1,3 +1,4 @@
+import './AddPage.css';
 import ImageOcclusionEditor from '../components/ImageOcclusionEditor';
 import FormattingTools from '../components/FormattingTools';
 import MediaTools from '../components/MediaTools';
@@ -167,8 +168,8 @@ const AddPage = () => {
 
   if (loadError) {
     return (
-      <div className="page-container" style={{ maxWidth: '640px', marginTop: '2rem' }}>
-        <div className="glass-card" style={{ padding: '2rem' }}>
+      <div className="page-container add-note-page">
+        <div className="glass-card add-note-card">
           <div className="alert alert-error" role="alert" style={{ marginBottom: '1rem' }}>
             {loadError}
           </div>
@@ -181,15 +182,16 @@ const AddPage = () => {
   }
 
   return (
-    <div className="page-container" style={{ maxWidth: '640px', marginTop: '2rem' }}>
-      <div className="glass-card" style={{ padding: '2rem' }}>
-        <h2 style={{ marginBottom: '1.5rem', textAlign: 'center' }}>Add Note</h2>
+    <div className="page-container add-note-page">
+      <div className="glass-card add-note-card">
+        <header className="add-note-heading"><div><p className="add-note-eyebrow">BUILD YOUR COLLECTION</p><h1>Add Note</h1><p>Turn what you learn into something you remember.</p></div><Link to="/note-types">Note types &amp; templates ↗</Link></header>
 
         {successMsg && <div className="alert alert-success" role="status" style={{ marginBottom: '1rem' }}>{successMsg}</div>}
         {errorMsg && <div className="alert alert-error" role="alert" style={{ marginBottom: '1rem' }}>{errorMsg}</div>}
 
-        <p><Link to="/note-types">Manage note types &amp; templates</Link></p>
+
       <form onSubmit={handleSubmit} onKeyDown={handleKeyDown}>
+          <div className="add-note-settings">
           <div className="form-group">
             <label htmlFor="deck-select">Deck</label>
             <select
@@ -216,7 +218,8 @@ const AddPage = () => {
             </select>
           </div>
 
-          <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '1.25rem', lineHeight: 1.4 }}>
+          </div>
+          <div className="add-note-help" style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '1.25rem', lineHeight: 1.4 }}>
             <span>HTML and plain text are supported. </span>
             {selectedKind === 'cloze' && (
               <span>Cloze deletions use <code>{'{{c1::answer}}'}</code> syntax. Highlight text and click &quot;Insert Cloze&quot; or press Ctrl+Shift+C. </span>
@@ -225,10 +228,11 @@ const AddPage = () => {
           </div>
 
           {isImageOcclusion && <ImageOcclusionEditor key={selectedKind} fields={fields} onChange={setFields} disabled={pending} onBusyChange={active => setMediaBusy(n => Math.max(0, n + (active ? 1 : -1)))} />}
+          <div className="add-note-fields">
           {currentFields.filter(f => !isImageOcclusion || !['Image', 'Occlusion'].includes(f)).map(fieldName => {
             const isOptional = isImageOcclusion || fieldName === 'Extra' || fieldName === 'Add Reverse';
             return (
-              <div className="form-group" key={fieldName}>
+              <div className="form-group add-note-field" key={fieldName}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.375rem' }}>
                   <label htmlFor={`field-${fieldName}`} style={{ margin: 0 }}>
                     {fieldName} {isOptional && <span style={{ opacity: 0.6 }}>(optional)</span>}
@@ -260,8 +264,9 @@ const AddPage = () => {
               </div>
             );
           })}
+          </div>
 
-          <div className="form-group">
+          <div className="form-group add-note-tags">
             <label htmlFor="note-tags">Tags</label>
             <input
               id="note-tags"
@@ -273,13 +278,13 @@ const AddPage = () => {
             />
           </div>
 
-          <button
+          <div className="add-note-submit"><span>Ready for your next review.</span><button
             type="submit"
             className="btn btn-primary btn-full"
             disabled={pending || mediaBusy > 0 || decks.length === 0 || !selectedDeckId}
           >
             {pending ? 'Adding Note...' : 'Add Note'}
-          </button>
+          </button></div>
           {decks.length === 0 && (
             <p style={{ textAlign: 'center', marginTop: '1rem', color: 'var(--danger)' }}>
               Please create a deck first.

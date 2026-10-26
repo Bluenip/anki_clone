@@ -606,7 +606,7 @@ const DecksPage = () => {
 
       {showImportModal && (
         <div className="modal-overlay" onClick={closeImportModal} role="dialog" aria-modal="true" aria-label="Import cards">
-          <div className="modal glass-card" style={{ maxWidth: '600px' }} ref={importModalRef} onClick={e => e.stopPropagation()}>
+          <div className="modal glass-card cards-import-modal" ref={importModalRef} onClick={e => e.stopPropagation()}>
             <h2>Import Cards</h2>
             {importModalError && (
               <div className="alert alert-error" role="alert" style={{ marginBottom: '1rem' }}>
@@ -614,6 +614,7 @@ const DecksPage = () => {
               </div>
             )}
             <form onSubmit={handleImport}>
+              <div className="cards-import-body">
               <div className="form-group">
                 <label htmlFor="import-deck-select">Target Deck</label>
                 <select 
@@ -667,13 +668,13 @@ const DecksPage = () => {
                 </select>
               </div>
               <div className="form-group">
-                <label><input type="checkbox" checked={hasHeader} disabled={pending} onChange={e => setHasHeader(e.target.checked)} /> First data row is a column header</label>
-                <label><input type="checkbox" checked={allowHtml} disabled={pending} onChange={e => setAllowHtml(e.target.checked)} /> Allow HTML in fields</label>
-                <label><input type="checkbox" checked={useFileDecks} disabled={pending} onChange={e => setUseFileDecks(e.target.checked)} /> Use deck names from file (may create decks)</label>
+                <label className="import-checkbox-label"><input type="checkbox" checked={hasHeader} disabled={pending} onChange={e => setHasHeader(e.target.checked)} /> First data row is a column header</label>
+                <label className="import-checkbox-label"><input type="checkbox" checked={allowHtml} disabled={pending} onChange={e => setAllowHtml(e.target.checked)} /> Allow HTML in fields</label>
+                <label className="import-checkbox-label"><input type="checkbox" checked={useFileDecks} disabled={pending} onChange={e => setUseFileDecks(e.target.checked)} /> Use deck names from file (may create decks)</label>
                 {!advancedMode && (
-                  <label><input type="checkbox" checked={swapColumns} disabled={pending} onChange={e => setSwapColumns(e.target.checked)} /> Swap Front and Back columns</label>
+                  <label className="import-checkbox-label"><input type="checkbox" checked={swapColumns} disabled={pending} onChange={e => setSwapColumns(e.target.checked)} /> Swap Front and Back columns</label>
                 )}
-                <label><input type="checkbox" checked={advancedMode} disabled={pending} onChange={e => { setAdvancedMode(e.target.checked); setImportModalError(null); }} /> Advanced mapping (note kind, columns, tags)</label>
+                <label className="import-checkbox-label"><input type="checkbox" checked={advancedMode} disabled={pending} onChange={e => { setAdvancedMode(e.target.checked); setImportModalError(null); }} /> Advanced mapping (note kind, columns, tags)</label>
               </div>
 
               {advancedMode && (
@@ -763,9 +764,10 @@ const DecksPage = () => {
                 </div>
               )}
 
-              <p>Basic two-field import and advanced built-in note types (Basic, Reversed, Optional Reversed, Cloze) with custom column mapping, tags, and GUIDs are supported. Existing custom note types are available above. Mixed note types are now supported; templates/media/history still require APKG, custom note types must already exist. Extra unmapped fields are rejected to prevent data loss. Anki file directives override separator/HTML settings.</p>
+              <details className="import-format-help"><summary>Supported formats and mapping details</summary><p>Basic two-field import and advanced built-in note types (Basic, Reversed, Optional Reversed, Cloze) with custom column mapping, tags, and GUIDs are supported. Existing custom note types are available above. Mixed note types are now supported; templates/media/history still require APKG, custom note types must already exist. Extra unmapped fields are rejected to prevent data loss. Anki file directives override separator/HTML settings.</p></details>
               {previewIsCurrent && <p role="status">{importPreview?.message} No changes made yet. Confirm to apply.</p>}
-              <div className="modal-actions">
+              </div>
+              <div className="modal-actions cards-import-actions">
                 <button type="button" className="btn btn-ghost" onClick={closeImportModal} disabled={pending}>Cancel</button>
                 <button type="submit" className="btn btn-primary" disabled={pending || !importText.trim()}>{pending ? 'Processing...' : previewIsCurrent ? 'Confirm Import' : 'Preview Import'}</button>
               </div>

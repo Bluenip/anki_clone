@@ -41,3 +41,35 @@
 }
 /* Opaque surfaces keep dialog text legible when backdrop blur is unavailable. */
 .decks-page .modal { background: #171c2a; border: 1px solid #ffffff1c; }
+
+/* Keep long dialogs inside the visible viewport, including landscape phones. */
+.decks-page .modal { max-height: calc(100dvh - 32px); overflow-y: auto; overscroll-behavior: contain; }
+.decks-page .cards-import-modal {
+  max-width: 640px; display: flex; flex-direction: column;
+  overflow: hidden; padding: 0;
+}
+.cards-import-modal > h2 { flex-shrink: 0; margin: 0; padding: 22px 24px; border-bottom: 1px solid #ffffff12; }
+.cards-import-modal > .alert { margin: 12px 24px; flex-shrink: 0; }
+.cards-import-modal > form { display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+.cards-import-body { min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 24px; scrollbar-gutter: stable; }
+.cards-import-body .form-group label { margin-bottom: 10px; }
+.cards-import-body select { color-scheme: dark; }
+.cards-import-body .import-checkbox-label { display: flex; align-items: flex-start; gap: 10px; line-height: 1.5; padding: 5px 0; cursor: pointer; }
+.cards-import-body .import-checkbox-label input[type="checkbox"] {
+  flex: 0 0 16px; width: 16px; height: 16px; margin: 2px 0 0;
+  padding: 0; accent-color: #22d3ee; cursor: pointer;
+}
+.cards-import-modal .cards-import-actions {
+  flex-shrink: 0; margin: 0; padding: 16px 24px;
+  border-top: 1px solid #ffffff16; background: #171c2a;
+}
+.import-format-help { color: #a3abc1; font-size: 13px; line-height: 1.6; margin-bottom: 12px; }
+.import-format-help summary { cursor: pointer; padding: 8px 0; }
+.import-format-help p { padding: 8px 0; }
+@media (max-width: 600px) {
+  .decks-page .modal { max-height: calc(100dvh - 16px); }
+  .cards-import-modal > h2 { padding: 16px; }
+  .cards-import-body { padding: 16px; }
+  .cards-import-modal .cards-import-actions { padding: 12px 16px; }
+  .cards-import-actions .btn { min-width: 0; flex: 1; }
+}

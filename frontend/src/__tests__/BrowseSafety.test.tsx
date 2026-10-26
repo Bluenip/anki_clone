@@ -7,7 +7,7 @@ import * as decksApi from '../api/decks';
 vi.mock('../api/decks');
 vi.mock('../api/cards');
 const card: api.BrowseCard = { id: 1, deck_id: 1, front: 'question', back: 'answer', deck_name: 'Deck',
-  created_at: '', updated_at: '', version: 3, is_suspended: false, is_buried: false, card_state: 'new', note_id: 1 };
+  created_at: '', updated_at: '', version: 3, is_suspended: false, is_buried: false, card_state: 'new', note_id: null };
 const open = () => render(<MemoryRouter><BrowsePage /></MemoryRouter>);
 beforeEach(() => { vi.resetAllMocks(); });
 

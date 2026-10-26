@@ -5,6 +5,7 @@ import BrowsePage from '../pages/BrowsePage';
 import * as cardsApi from '../api/cards';
 
 vi.mock('../api/cards');
+vi.mock('../api/notes', () => ({ getCardNote: vi.fn().mockResolvedValue({data: {id: 10, fields: {Front: 'Question', Back: 'Answer'}, tags: []}}), updateNote: vi.fn() }));
 
 const mockCards: cardsApi.BrowseCard[] = [
   {
