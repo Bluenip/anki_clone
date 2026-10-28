@@ -1,6 +1,7 @@
 import PackageImportPanel from '../components/PackageImportPanel';
 import './DecksPage.css';
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { visibleDeckRows } from '../utils/deckTree';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { listDecks, getTodaySummary, createDeck, deleteDeck, updateDeck, importCards, startPackageImport, discardPackageUpload, listPendingPackageImports, exportApkg, exportText, exportCollection, getImportNoteTypes } from '../api/decks';
 import type { Deck as DeckData, TextImportOptions } from '../api/decks';
@@ -25,6 +26,17 @@ async function exportFailure(error: unknown, fallback: string): Promise<string> 
 
 const DecksPage = () => {
   const [decks, setDecks] = useState<DeckData[]>([]);
+  const [collapsedDecks, setCollapsedDecks] = useState<Set<string>>(new Set());
+  const deckRows = useMemo(() => visibleDeckRows(decks, collapsedDecks), [decks, collapsedDecks]);
+  const toggleDeck = (name: string) => {
+    setActiveDropdown(null);
+    setCollapsedDecks(previous => {
+      const next = new Set(previous);
+      if (next.has(name)) next.delete(name);
+      else next.add(name);
+      return next;
+    });
+  };
   const [todaySummary, setTodaySummary] = useState<{ reviews: number; seconds: number; seconds_per_card: number } | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -582,16 +594,26 @@ const DecksPage = () => {
             <span>Supports Anki packages, CSV and text files</span>
           </div>
         ) : (
-          decks.map(deck => (
-            <div key={deck.id} className="deck-row" style={{ position: 'relative', zIndex: activeDropdown === deck.id ? 20 : 1 }}>
-              <div className="col-name" onClick={() => navigate(`/decks/${deck.id}`)}>
-                {deck.name}
+          deckRows.map(({ name, label, depth, deck, children }) => (
+            <div key={name} className="deck-row" style={{ position: 'relative', zIndex: deck && activeDropdown === deck.id ? 20 : 1 }}>
+              <div className="col-name deck-tree-name" style={{ paddingInlineStart: `${depth * 24}px` }}>
+                {children.size > 0 ? (
+                  <button type="button" className="deck-tree-toggle"
+                    aria-label={`${collapsedDecks.has(name) ? 'Expand' : 'Collapse'} ${name}`}
+                    aria-expanded={!collapsedDecks.has(name)} onClick={() => toggleDeck(name)}>
+                    <span aria-hidden="true">{collapsedDecks.has(name) ? '+' : '−'}</span>
+                  </button>
+                ) : <span className="deck-tree-spacer" aria-hidden="true" />}
+                {deck ? <Link className="deck-tree-label" to={`/decks/${deck.id}`} title={name}>{label}</Link>
+                  : <button type="button" className="deck-tree-label deck-tree-group" title={name}
+                      aria-label={`Toggle group ${name}`} onClick={() => toggleDeck(name)}>{label}</button>}
               </div>
-              <div className="col-stat stat-new">{deck.new_cards || 0}</div>
-              <div className="col-stat stat-learn">{deck.learn_cards || 0}</div>
-              <div className="col-stat stat-due">{deck.due_cards || 0}</div>
-              
+              <div className="col-stat stat-new">{deck ? deck.new_cards || 0 : '—'}</div>
+              <div className="col-stat stat-learn">{deck ? deck.learn_cards || 0 : '—'}</div>
+              <div className="col-stat stat-due">{deck ? deck.due_cards || 0 : '—'}</div>
+
               <div className="col-actions">
+                {deck && <>
                 <button 
                   className="gear-btn" 
                   onClick={(e) => { e.stopPropagation(); setActiveDropdown(activeDropdown === deck.id ? null : deck.id); }}
@@ -610,6 +632,7 @@ const DecksPage = () => {
                     <button className="gear-dropdown-item" role="menuitem" disabled={pending} style={{ color: '#ef4444' }} onClick={() => { setActiveDropdown(null); handleDelete(deck.id); }}>Delete</button>
                   </div>
                 )}
+                </>}
               </div>
             </div>
           ))

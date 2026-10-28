@@ -313,3 +313,45 @@ it('recovers a server-side preview in a fresh browser tab and places confirmatio
   view.unmount();
   sessionStorage.clear();
 });
+
+it('groups missing parents, sorts units and preserves nested collapse state', async () => {
+  vi.spyOn(decksApi, 'listDecks').mockResolvedValue({ data: [
+    { id: 30, name: 'Book::Unit 10', new_cards: 20 },
+    { id: 6, name: 'Book::Unit 02::Vocabulary', new_cards: 20 },
+    { id: 1, name: 'Book::Unit 01', new_cards: 18 },
+  ] } as any);
+  const view = renderWithRouter(<DecksPage />);
+  const collapse = await screen.findByRole('button', { name: 'Collapse Book' });
+  expect(collapse.getAttribute('aria-expanded')).toBe('true');
+  expect([...view.container.querySelectorAll('.deck-tree-label')].map(el => el.textContent))
+    .toEqual(['Book', 'Unit 01', 'Unit 02', 'Vocabulary', 'Unit 10']);
+  expect(screen.getByRole('link', { name: 'Unit 01' }).getAttribute('href')).toBe('/decks/1');
+  expect(screen.queryByLabelText('Options for deck Book')).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: 'Collapse Book::Unit 02' }));
+  expect(screen.queryByText('Vocabulary')).toBeNull();
+  fireEvent.click(collapse);
+  expect(screen.queryByText('Unit 01')).toBeNull();
+  expect(screen.getByRole('button', { name: 'Expand Book' }).getAttribute('aria-expanded')).toBe('false');
+  fireEvent.click(screen.getByRole('button', { name: 'Expand Book' }));
+  expect(screen.getByText('Unit 01')).toBeDefined();
+  expect(screen.queryByText('Vocabulary')).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: 'Expand Book::Unit 02' }));
+  expect(screen.getByRole('link', { name: 'Vocabulary' }).getAttribute('href')).toBe('/decks/6');
+});
+
+it('keeps real parent links, server counts and options when children are collapsed', async () => {
+  vi.spyOn(decksApi, 'listDecks').mockResolvedValue({ data: [
+    { id: 2, name: 'Parent::Child', new_cards: 20 },
+    { id: 1, name: 'Parent', new_cards: 10, learn_cards: 2, due_cards: 3 },
+    { id: 3, name: 'Parenting', new_cards: 5 },
+  ] } as any);
+  renderWithRouter(<DecksPage />);
+  const collapse = await screen.findByRole('button', { name: 'Collapse Parent' });
+  expect(screen.getByRole('link', { name: 'Parent' }).getAttribute('href')).toBe('/decks/1');
+  expect(screen.getByText('10')).toBeDefined();
+  fireEvent.click(collapse);
+  expect(screen.queryByRole('link', { name: 'Child' })).toBeNull();
+  expect(screen.getByRole('link', { name: 'Parenting' })).toBeDefined();
+  fireEvent.click(screen.getByLabelText('Options for deck Parent'));
+  expect(screen.getByRole('menuitem', { name: 'Options' })).toBeDefined();
+});
