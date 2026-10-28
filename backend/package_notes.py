@@ -21,6 +21,11 @@ def import_rows(cursor, collection, user_id, db, include_scheduling=True, whole_
     if len(source_notes) > MAX_NOTES:
         raise ValueError('Note count exceeds maximum limit')
     used_decks = {str(row['did']) for row in source_cards}
+    card_decks = set(used_decks)
+    # Parent decks often have no cards, but carry their own options/limits.
+    names = {deck_definitions[did]['name'] for did in used_decks if did in deck_definitions}
+    used_decks.update(did for did, definition in deck_definitions.items()
+                      if any(name.startswith(definition.get('name', '') + '::') for name in names))
     used_models = {str(source_notes[row['nid']]['mid']) for row in source_cards if row['nid'] in source_notes}
     active_models = set(used_models)
     if whole_collection:
@@ -85,7 +90,7 @@ def import_rows(cursor, collection, user_id, db, include_scheduling=True, whole_
         planned.append((raw, rows, values, tags, existing))
     deck_map = {}
     preset_map = {}
-    for did in used_decks:
+    for did in sorted(used_decks, key=lambda did: (deck_definitions.get(did, {}).get('name', '').count('::'), did)):
         definition = deck_definitions.get(did)
         if not definition or not definition.get('name'):
             raise ValueError('A referenced deck is missing')
@@ -125,6 +130,8 @@ def import_rows(cursor, collection, user_id, db, include_scheduling=True, whole_
                 deck.options_binding=DeckOptionsBinding(preset=preset_map[conf_id],overrides_json=json.dumps(overrides),today_json='{}')
             db.add(deck); db.flush()
         deck_map[did] = deck
+    from deck_hierarchy import repair_missing_parents
+    repair_missing_parents(db, user_id)
     # Assign source models by structural identity, without overwriting local types.
     for mid, (model, raw) in list(models.items()):
         existing = db.query(NoteType).filter_by(user_id=user_id, name=model.name).first()
@@ -239,7 +246,7 @@ def import_rows(cursor, collection, user_id, db, include_scheduling=True, whole_
             progress=db.query(StudyProgress).filter_by(card_id=card_id,user_id=user_id).first()
             if progress and progress.last_reviewed is None:progress.last_reviewed=date
         db.flush()
-    selected = next(iter(deck_map.values()), None)
+    selected = next((deck_map[did] for did in sorted(card_decks) if did in deck_map), next(iter(deck_map.values()), None))
     if selected is None:
         raise ValueError('Package contains no supported cards')
     return selected, added, updated, skipped

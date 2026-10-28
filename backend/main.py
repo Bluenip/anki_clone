@@ -8,6 +8,13 @@ from routers import auth_router, decks_router, cards_router, study_router, share
 # Create all tables
 Base.metadata.create_all(bind=engine)
 
+# Older imports stored child names without their empty parent deck records.
+from database import SessionLocal
+from deck_hierarchy import repair_missing_parents
+with SessionLocal() as hierarchy_db:
+    repair_missing_parents(hierarchy_db)
+    hierarchy_db.commit()
+
 app = FastAPI(
     title="AnkiClone API",
     description="Spaced Repetition Flashcard Platform API",
