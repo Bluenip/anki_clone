@@ -45,13 +45,13 @@ const AccountPage = () => {
   };
 
   const handleRemoveAccount = async () => {
-    if (window.confirm("Are you sure you want to completely remove your account? This action cannot be undone.")) {
+    if (window.confirm("Delete your account and all its decks, cards, study history, images, audio, backups and import uploads? This action cannot be undone.")) {
       try {
         await client.delete('/api/auth/me');
         logout();
         navigate('/login');
-      } catch {
-        alert('Failed to delete account');
+      } catch (err: any) {
+        setError(err.response?.data?.detail || 'Failed to delete account. Please retry.');
       }
     }
   };

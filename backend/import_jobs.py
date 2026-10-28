@@ -156,19 +156,23 @@ def submit(package_path, user_id, options):
 
 
 def start(path, data, gate, preview):
-    lock = (path / '.lock').open('a+')
-    fcntl.flock(lock, fcntl.LOCK_EX)
-    if not preview:
-        latest = json.loads((path / 'status.json').read_text())
-        if latest['status'] != 'awaiting_confirmation':
-            lock.close()
-            raise HTTPException(409, 'This import is no longer awaiting confirmation')
-    data.update(status='queued', completed=0, total=0, detail=None)
-    write_status(path, data)
+    from account_lifecycle import acquire_account_lock
+    account = acquire_account_lock(data['user_id'])
+    lock = None
     try:
-        EXECUTOR.submit(run, path, dict(data), gate, lock, preview)
+        lock = (path / '.lock').open('a+')
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        if not preview:
+            latest = json.loads((path / 'status.json').read_text())
+            if latest['status'] != 'awaiting_confirmation':
+                raise HTTPException(409, 'This import is no longer awaiting confirmation')
+        data.update(status='queued', completed=0, total=0, detail=None)
+        write_status(path, data)
+        EXECUTOR.submit(run, path, dict(data), gate, lock, preview, account)
     except Exception:
-        lock.close()
+        if lock is not None:
+            lock.close()
+        account.close()
         gate.close()
         raise
 
@@ -205,7 +209,7 @@ def cancel(job_id, user_id):
     return data
 
 
-def run(path, data, gate, lock, preview):
+def run(path, data, gate, lock, preview, account):
     from apkg_handler import import_apkg
     last_write = 0
     def progress(stage, completed=0, total=0):
@@ -235,6 +239,7 @@ def run(path, data, gate, lock, preview):
         finally:
             lock.close()
             gate.close()
+            account.close()
 
 
 def pending(user_id):

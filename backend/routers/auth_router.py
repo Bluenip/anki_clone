@@ -19,7 +19,9 @@ def register(data: UserRegister, db: Session = Depends(get_db)):
             detail="Email already registered",
         )
 
+    from account_lifecycle import allocate_user_id
     user = User(
+        id=allocate_user_id(db),
         email=data.email,
         username=data.username,
         password_hash=get_password_hash(data.password),
@@ -110,10 +112,16 @@ def delete_account(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    from media_utils import cleanup_user_media
-    # Delete all media files for this user
-    cleanup_user_media(current_user.id)
-    
-    db.delete(current_user)
-    db.commit()
+    from account_lifecycle import purge_account_files
+    try:
+        user_id = current_user.id
+        db.delete(current_user)
+        # Surface database errors before removing files. Do not report success
+        # when filesystem cleanup failed; keep the account available for retry.
+        db.flush()
+        purge_account_files(user_id)
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
     return {"detail": "Account deleted successfully"}
