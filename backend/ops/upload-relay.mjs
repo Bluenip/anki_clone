@@ -46,9 +46,9 @@ export default {
     if (!methods.includes(request.method)) return reply('Method not allowed', 405);
     const authorization = request.headers.get('Authorization');
     if (!authorization?.startsWith('Bearer ')) return reply('Authentication required', 401);
-    // A chunk is at most 1 MiB; the backend enforces the exact budget while reading.
+    // A chunk is at most 8 MiB; the backend enforces the exact budget while reading.
     const length = request.headers.get('Content-Length');
-    if (length && Number(length) > 1024 ** 2) return reply('Request too large', 413);
+    if (length && Number(length) > 8 * 1024 ** 2) return reply('Request too large', 413);
     const upstream = new URL(env.ORIGIN_URL);
     upstream.pathname = url.pathname;
     upstream.search = url.search;

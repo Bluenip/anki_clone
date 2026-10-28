@@ -162,7 +162,7 @@ It covers preview, import, duplicate handling, every media file's bytes, origina
 fields/GUIDs and counts against upstream Anki, plus the background HTTP workflow.
 
 
-Package uploads now use authenticated adaptive chunks (initially 256 KiB, at most 1 MiB) before creating the preview
+Package uploads now use authenticated adaptive chunks (initially 256 KiB, at most 8 MiB) before creating the preview
 job. Each request stays small enough for Cloudflare/proxy limits and has a
 timeout. Temporary network/proxy failures retry from the last acknowledged
 offset. Slow transfers automatically reduce chunk size; interrupted uploads can

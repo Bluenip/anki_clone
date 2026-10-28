@@ -67,6 +67,20 @@ def test_resume_truncates_unacknowledged_bytes(client,auth_headers_a,jobs):
     assert package.read_bytes()==b'12345'
 
 
+def test_fast_upload_can_acknowledge_a_chunk_larger_than_one_mib(client, auth_headers_a, jobs):
+    payload = b'package bytes' * (2 * 1024**2 // 13)
+    assert len(payload) > 1024**2
+    state = create(client, auth_headers_a, len(payload))
+    path = f'/api/apkg/uploads/{state["id"]}'
+    response = client.put(path, headers=auth_headers_a, content=payload)
+    # Offset is required even for the first (large) request.
+    assert response.status_code == 422
+    response = client.put(path + '?offset=0', headers=auth_headers_a, content=payload)
+    assert response.status_code == 200, response.text
+    assert response.json()['received'] == len(payload)
+    assert (import_uploads.root() / state['id'] / 'package.apkg').read_bytes() == payload
+
+
 def test_chunk_write_failure_rolls_back(client,auth_headers_a,jobs,monkeypatch):
     state=create(client,auth_headers_a,20)
     path=f'/api/apkg/uploads/{state["id"]}'

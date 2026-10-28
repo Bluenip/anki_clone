@@ -86,7 +86,7 @@ export async function startPackageImport(file: File, includeScheduling: boolean,
       try { sessionStorage.setItem(storageKey(), JSON.stringify({ id, fingerprint })); } catch { /* Upload still works without storage. */ }
     }
     let offset = state.received;
-    const maxChunk = Math.min(state.chunk_bytes, 1024 ** 2);
+    const maxChunk = Math.min(state.chunk_bytes, 8 * 1024 ** 2);
     if (!Number.isInteger(maxChunk) || maxChunk <= 0 || !Number.isInteger(offset) || offset < 0 || offset > file.size) throw new Error('Invalid upload state. Select the file again.');
     const minChunk = Math.min(32 * 1024, maxChunk);
     let chunkBytes = Math.min(maxChunk, state.recommended_chunk_bytes || 256 * 1024);

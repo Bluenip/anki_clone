@@ -12,7 +12,7 @@ from fastapi import HTTPException
 import import_jobs
 from import_config import MAX_UPLOAD_BYTES, check_space
 
-CHUNK_BYTES = 1024**2
+CHUNK_BYTES = 8 * 1024**2
 RECOMMENDED_CHUNK_BYTES = 256 * 1024
 
 

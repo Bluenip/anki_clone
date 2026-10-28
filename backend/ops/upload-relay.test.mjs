@@ -61,3 +61,14 @@ test('returns backend ownership errors with CORS and does not follow redirects',
   assert.equal(response.status, 502);
   assert.equal(response.headers.get('Location'), null);
 });
+
+test('accepts a large bounded chunk and rejects oversized requests before forwarding', async () => {
+  let forwarded = 0;
+  globalThis.fetch = async () => { forwarded++; return Response.json({ received: 2 * 1024 ** 2 }); };
+  const input = length => request(`/api/apkg/uploads/${id}?offset=0`, {
+    method: 'PUT', headers: { Authorization: 'Bearer test-token', 'Content-Length': String(length) },
+  });
+  assert.equal((await relay.fetch(input(2 * 1024 ** 2), env)).status, 200);
+  assert.equal((await relay.fetch(input(8 * 1024 ** 2 + 1), env)).status, 413);
+  assert.equal(forwarded, 1);
+});

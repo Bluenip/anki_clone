@@ -57,6 +57,21 @@ it('reduces the next chunk after a slow successful request', async () => {
   expect(calls.every(call => call[2]?.timeout === 120000)).toBe(true);
 });
 
+it('grows beyond 1 MiB on fast connections while respecting the 8 MiB request budget', async () => {
+  const uploadFile = new File([new Uint8Array(32 * 1024 ** 2)], 'fast.apkg');
+  vi.mocked(client.post).mockResolvedValueOnce({ data: { id: 'upload', received: 0, chunk_bytes: 8 * 1024 ** 2 } });
+  vi.mocked(client.post).mockResolvedValueOnce({ data: { id: 'job' } });
+  vi.mocked(client.put).mockImplementation(async (_url, body, config) => ({
+    data: { received: ((config?.params as { offset: number } | undefined)?.offset || 0) + (body as Blob).size },
+  }));
+  await startPackageImport(uploadFile, false, false, 'error', 'newer', vi.fn());
+  const sizes = vi.mocked(client.put).mock.calls.map(call => (call[1] as Blob).size);
+  expect(sizes[0]).toBe(256 * 1024);
+  expect(Math.max(...sizes)).toBe(8 * 1024 ** 2);
+  expect(sizes.reduce((sum, size) => sum + size, 0)).toBe(uploadFile.size);
+  expect(sizes.length).toBeLessThan(16);
+});
+
 it('shrinks a timed-out request before retrying the same offset', async () => {
   const uploadFile = new File([new Uint8Array(256 * 1024)], 'retry.apkg');
   vi.mocked(client.post).mockResolvedValueOnce({ data: { id: 'upload', received: 0, chunk_bytes: 1024 ** 2 } });
