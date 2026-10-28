@@ -194,3 +194,14 @@ def test_upload_low_disk_space_reports_reason_without_temp_file(client, auth_hea
     assert response.status_code == 400
     assert 'Insufficient disk space' in response.json()['detail']
     assert not list(import_jobs.ROOT.iterdir())
+
+
+def test_pending_jobs_recover_preview_without_browser_state(client, auth_headers_a, auth_headers_b, jobs):
+    job_id = upload(client, auth_headers_a)
+    wait_job(client, job_id, auth_headers_a, {'awaiting_confirmation'})
+    own = client.get('/api/apkg/jobs', headers=auth_headers_a)
+    assert own.status_code == 200
+    assert [job['id'] for job in own.json()] == [job_id]
+    assert client.get('/api/apkg/jobs', headers=auth_headers_b).json() == []
+    client.post(f'/api/apkg/jobs/{job_id}/cancel', headers=auth_headers_a)
+    assert client.get('/api/apkg/jobs', headers=auth_headers_a).json() == []

@@ -56,6 +56,11 @@ async def create_job(file: UploadFile = File(...), include_scheduling: bool = Fa
             os.unlink(path)
 
 
+@router.get('/jobs')
+def pending_jobs(user: User = Depends(get_current_user)):
+    return import_jobs.pending(user.id)
+
+
 @router.get('/jobs/{job_id}')
 def get_job(job_id: str, user: User = Depends(get_current_user)):
     return import_jobs.read_status(job_id, user.id)

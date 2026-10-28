@@ -294,3 +294,22 @@ it('keeps package options in the import dialog and restores focus on Escape', as
   fireEvent.click(opener);
   expect((screen.getByLabelText('Existing package notes') as HTMLSelectElement).value).toBe('skip');
 });
+
+it('recovers a server-side preview in a fresh browser tab and places confirmation above the deck list', async () => {
+  sessionStorage.clear();
+  vi.spyOn(decksApi, 'listDecks').mockResolvedValue({ data: [] } as any);
+  vi.spyOn(decksApi, 'listPendingPackageImports').mockResolvedValue({ data: [{ id: 'recovered', status: 'awaiting_confirmation' }] } as any);
+  vi.spyOn(decksApi, 'getPackageImport').mockResolvedValue({ data: {
+    id: 'recovered', status: 'awaiting_confirmation', completed: 1, total: 1,
+    result: { cards_imported: 432, cards_updated: 0, cards_skipped: 0, notes_in_package: 214,
+      cards_in_package: 432, media_imported: 921, media_bytes: 20000000, deck_name: 'Hanzi', warnings: [] },
+  } } as any);
+  const view = renderWithRouter(<DecksPage />);
+  await screen.findByRole('button', { name: 'Import package' });
+  expect(sessionStorage.getItem('anki-package-import')).toBe('recovered');
+  const panel = screen.getByRole('region', { name: 'Package import' });
+  const table = view.container.querySelector('.desktop-deck-table');
+  expect(panel.compareDocumentPosition(table! ) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  view.unmount();
+  sessionStorage.clear();
+});

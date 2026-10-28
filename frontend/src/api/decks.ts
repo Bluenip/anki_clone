@@ -68,3 +68,5 @@ export { startPackageImport, discardPackageUpload } from './packageUpload';
 export const getPackageImport = (id: string) => client.get<PackageImportJob>(`/api/apkg/jobs/${id}`);
 export const confirmPackageImport = (id: string) => client.post<PackageImportJob>(`/api/apkg/jobs/${id}/confirm`);
 export const cancelPackageImport = (id: string) => client.post<PackageImportJob>(`/api/apkg/jobs/${id}/cancel`);
+
+export const listPendingPackageImports = () => client.get<PackageImportJob[]>('/api/apkg/jobs');

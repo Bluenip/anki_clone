@@ -235,3 +235,23 @@ def run(path, data, gate, lock, preview):
         finally:
             lock.close()
             gate.close()
+
+
+def pending(user_id):
+    """Recover an account's active jobs even after a lost browser response/tab."""
+    if not ROOT.exists():
+        return []
+    found = []
+    for path in ROOT.glob('*/status.json'):
+        if not re.fullmatch(r'[0-9a-f]{32}', path.parent.name):
+            continue
+        try:
+            data = json.loads(path.read_text())
+            if data.get('user_id') != user_id or data.get('status') not in ACTIVE | {'awaiting_confirmation'}:
+                continue
+            data = read_status(path.parent.name, user_id)
+            if data['status'] in ACTIVE | {'awaiting_confirmation'}:
+                found.append(data)
+        except (OSError, ValueError):
+            logger.warning('Could not inspect import job %s', path.parent.name)
+    return sorted(found, key=lambda data: data['updated_at'], reverse=True)[:20]

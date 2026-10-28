@@ -2,7 +2,7 @@ import PackageImportPanel from '../components/PackageImportPanel';
 import './DecksPage.css';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { listDecks, getTodaySummary, createDeck, deleteDeck, updateDeck, importCards, startPackageImport, discardPackageUpload, exportApkg, exportText, exportCollection, getImportNoteTypes } from '../api/decks';
+import { listDecks, getTodaySummary, createDeck, deleteDeck, updateDeck, importCards, startPackageImport, discardPackageUpload, listPendingPackageImports, exportApkg, exportText, exportCollection, getImportNoteTypes } from '../api/decks';
 import type { Deck as DeckData, TextImportOptions } from '../api/decks';
 import { getNoteTypes } from '../api/notes';
 import type { NoteType } from '../api/notes';
@@ -102,6 +102,20 @@ const DecksPage = () => {
     setPackageJobId(null); setImportingApkg(false);
     sessionStorage.removeItem('anki-package-import');
   };
+
+  useEffect(() => {
+    let disposed = false;
+    // Recover accepted previews after a lost response, reload, or a new tab.
+    Promise.resolve(listPendingPackageImports()).then(response => {
+      if (disposed || !response?.data?.length) return;
+      const saved = sessionStorage.getItem('anki-package-import');
+      const active = response.data.find(job => job.id === saved) || response.data[0];
+      setPackageJobId(active.id);
+      sessionStorage.setItem('anki-package-import', active.id);
+      setImportingApkg(true);
+    }).catch(() => { /* Normal page actions remain available if discovery fails. */ });
+    return () => { disposed = true; };
+  }, []);
 
   // Dropdown state
   const [activeDropdown, setActiveDropdown] = useState<number | null>(null);
