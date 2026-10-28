@@ -163,4 +163,4 @@ ANKI_TEST_MUSIC_APKG=/path/to/Classical_Music_Themes_-_Part_I.apkg \
 
 It covers preview, import, duplicate handling, every media file's bytes, original
 fields/GUIDs and counts against upstream Anki, plus the background HTTP workflow.
-See [the implementation plan and verification results](IMPORT_COMPATIBILITY_PLAN.md).
+See [the implementation plan and verification results](backend/docs/IMPORT_COMPATIBILITY_PLAN.md).
