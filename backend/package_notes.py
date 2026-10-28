@@ -7,14 +7,18 @@ from note_service import BUILTINS, builtin_model
 from note_rendering import render_cards
 
 
-def import_rows(cursor, collection, user_id, db, include_scheduling=True, whole_collection=False, duplicate_policy='newer'):
+def import_rows(cursor, collection, user_id, db, include_scheduling=True, whole_collection=False, duplicate_policy='newer', progress=None):
     from apkg_handler import map_anki_state_to_app, parse_anki_due, convert_ease_factor
     deck_definitions = json.loads(collection['decks'])
     model_definitions = json.loads(collection['models'])
     source_configs = json.loads(collection['dconf']) if 'dconf' in collection.keys() else {}
+    from import_config import MAX_NOTES
+    def checkpoint(stage, index, total):
+        if progress and index % 100 == 0:
+            progress(stage, index, total)
     source_cards = [dict(row) for row in cursor.execute('SELECT * FROM cards')]
     source_notes = {row['id']: dict(row) for row in cursor.execute('SELECT * FROM notes')}
-    if len(source_notes) > 10000:
+    if len(source_notes) > MAX_NOTES:
         raise ValueError('Note count exceeds maximum limit')
     used_decks = {str(row['did']) for row in source_cards}
     used_models = {str(source_notes[row['nid']]['mid']) for row in source_cards if row['nid'] in source_notes}
@@ -51,7 +55,8 @@ def import_rows(cursor, collection, user_id, db, include_scheduling=True, whole_
     if whole_collection and len(groups)!=len(source_notes):
         raise ValueError('Collection contains notes without cards; this restore cannot preserve them yet')
     seen_guids = set()
-    for nid, rows in groups.items():
+    for index, (nid, rows) in enumerate(groups.items()):
+        checkpoint('checking_templates', index, len(groups))
         raw = source_notes[nid]
         guid = raw['guid']
         if not isinstance(guid, str) or not 1 <= len(guid) <= 100 or guid in seen_guids:
@@ -62,7 +67,10 @@ def import_rows(cursor, collection, user_id, db, include_scheduling=True, whole_
         if any(len(v) > 50000 for v in values) or sum(len(v) for v in values) > 500000:
             raise ValueError('Note fields exceed supported limits')
         tags = raw.get('tags', '').split()
-        rendered = render_cards(model, values, user_id, tags)
+        try:
+            rendered = render_cards(model, values, user_id, tags)
+        except ValueError as exc:
+            raise ValueError(f'Note type {model.name!r}, source note {nid}: {exc}') from None
         ordinals = [row['ord'] for row in rows]
         if len(set(ordinals)) != len(ordinals) or any(ordinal not in rendered for ordinal in ordinals):
             raise ValueError('Package card ordinals do not match supported templates/clozes')
@@ -74,7 +82,7 @@ def import_rows(cursor, collection, user_id, db, include_scheduling=True, whole_
         if existing and duplicate_policy != 'skip' and (json.loads(existing.note_type.fields_json) != json.loads(model.fields_json) or
                          json.loads(existing.note_type.templates_json) != json.loads(model.templates_json) or existing.note_type.css != model.css):
             raise ValueError('A note GUID exists with a different model; resolve the conflict before importing')
-        planned.append((raw, rows, values, tags, rendered, existing))
+        planned.append((raw, rows, values, tags, existing))
     deck_map = {}
     preset_map = {}
     for did in used_decks:
@@ -135,9 +143,11 @@ def import_rows(cursor, collection, user_id, db, include_scheduling=True, whole_
         models[mid] = (model, raw)
     added = updated = skipped = 0
     imported_card_ids = {}
-    for raw, rows, values, tags, rendered, note in planned:
+    for index, (raw, rows, values, tags, note) in enumerate(planned):
+        checkpoint('importing_notes', index, len(planned))
         if note is not None and duplicate_policy == 'skip':
             skipped += len(rows); continue
+        rendered = render_cards(models[str(raw['mid'])][0], values, user_id, tags)
         source_mod = datetime.fromtimestamp(raw.get('mod', 0), timezone.utc).replace(tzinfo=None)
         if note is None:
             note = Note(user_id=user_id, guid=raw['guid'], note_type=models[str(raw['mid'])][0],

@@ -90,3 +90,7 @@
   .cards-import-modal > h2 { padding: 10px 16px; }
   .cards-import-modal .cards-import-actions { padding: 8px 16px; }
 }
+
+.package-import-progress { padding: 1.25rem; margin: 1rem 0; overflow-wrap: anywhere; }
+.package-import-progress progress { width: 100%; margin-bottom: 1rem; }
+.package-import-progress ul { max-height: 15rem; overflow-y: auto; }

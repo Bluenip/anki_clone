@@ -9,6 +9,7 @@ import time
 import random
 import string
 import shutil
+from contextlib import ExitStack
 from datetime import datetime, timedelta, timezone
 from sqlalchemy.orm import Session
 from models import Deck, Card, StudyProgress, ReviewLog
@@ -97,15 +98,14 @@ def convert_ease_factor(factor_permille: int) -> float:
     """2500 -> 2.50"""
     return factor_permille / 1000.0
 
-MAX_UNCOMPRESSED_SIZE = 150 * 1024 * 1024  # 150 MB
-MAX_ZIP_ENTRIES = 5000
-MAX_CARDS_IMPORT = 10000
-MAX_MEDIA_FILES = 1000
-MAX_SINGLE_MEDIA_SIZE = 10 * 1024 * 1024  # 10 MB
-MAX_TOTAL_MEDIA_SIZE = 100 * 1024 * 1024  # 100 MB
+from import_config import (
+    MAX_UNCOMPRESSED_BYTES as MAX_UNCOMPRESSED_SIZE, MAX_ZIP_ENTRIES,
+    MAX_CARDS as MAX_CARDS_IMPORT, MAX_MEDIA_FILES,
+    MAX_SINGLE_MEDIA_BYTES as MAX_SINGLE_MEDIA_SIZE, MAX_MEDIA_BYTES as MAX_TOTAL_MEDIA_SIZE,
+    MAX_NOTES, check_space,
+)
 
-# SVG is explicitly excluded from allowed media formats to eliminate
-# active content injection risks (embedded scripts, event handlers, XXE, foreignObject).
+# SVG requires explicit static sanitization; never accept raw active SVG.
 ALLOWED_MEDIA_EXTENSIONS = {
     '.png', '.jpg', '.jpeg', '.gif', '.webp',
     '.mp3', '.ogg', '.wav', '.m4a', '.aac', '.flac', '.mp4', '.webm', '.woff', '.woff2', '.ttf', '.otf'
@@ -127,14 +127,22 @@ def import_apkg(
     media_directory: str | None = None,
     media_conflicts: str = 'error',
     duplicate_policy: str = 'newer',
+    preview: bool = False,
+    progress=None,
+    sanitize_svg: bool = False,
 ) -> dict:
     if media_conflicts not in ('error', 'rename') or duplicate_policy not in ('newer', 'skip', 'update', 'add'):
         raise ValueError('Invalid import conflict policy')
+    def report(stage, completed=0, total=0):
+        if progress:
+            progress(stage, completed, total)
+    warnings = []
+    report('validating')
     media_dir = media_directory or get_media_dir(user_id)
     os.makedirs(media_dir, exist_ok=True)
     real_media_dir = os.path.realpath(media_dir)
     
-    with tempfile.TemporaryDirectory() as temp_dir:
+    with tempfile.TemporaryDirectory() as temp_dir, ExitStack() as resources:
         real_temp_dir = os.path.realpath(temp_dir)
         archive_members = set()
 
@@ -143,8 +151,15 @@ def import_apkg(
             if len(entries) > max_zip_entries:
                 raise ValueError(f"Too many files in archive (max {max_zip_entries})")
 
+            total_uncompressed = sum(entry.file_size for entry in entries)
+            if total_uncompressed > max_uncompressed_size:
+                raise ValueError(f'Uncompressed archive size exceeds limit of {max_uncompressed_size} bytes')
+            check_space(temp_dir, total_uncompressed)
             total_uncompressed = 0
-            for entry in entries:
+            for entry_index, entry in enumerate(entries):
+                report('extracting', entry_index, len(entries))
+                if entry.filename in archive_members:
+                    raise ValueError('Duplicate archive member')
                 total_uncompressed += entry.file_size
                 if total_uncompressed > max_uncompressed_size:
                     raise ValueError(f"Uncompressed archive size exceeds limit of {max_uncompressed_size} bytes")
@@ -173,9 +188,10 @@ def import_apkg(
                     raise ValueError(f"Symlink detected in extracted archive: {name}")
 
         from package_codec import prepare_collection
-        col_file, normalized_metadata = prepare_collection(temp_dir, max_uncompressed_size, max_media_files)
+        col_file, normalized_metadata = prepare_collection(temp_dir, max_uncompressed_size, max_media_files, progress=report)
         try:
             conn = sqlite3.connect(col_file)
+            resources.callback(conn.close)
             conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
             cursor.execute("SELECT * FROM col LIMIT 1")
@@ -187,6 +203,10 @@ def import_apkg(
             conn.close()
             raise ValueError("Corrupted APKG database: col record missing")
         col_crt = col['crt']
+        note_count = cursor.execute('SELECT COUNT(*) FROM notes').fetchone()[0]
+        if note_count > MAX_NOTES:
+            conn.close()
+            raise ValueError(f'Note count exceeds maximum limit ({note_count} > {MAX_NOTES})')
 
 
         # Prevalidate card count before any DB or media writes
@@ -221,7 +241,8 @@ def import_apkg(
         owned_media = get_all_referenced_media(user_id, db)
         seen_dest_paths = set()
         media_remaps = {}
-        for num_key, filename in media_mapping.items():
+        for media_index, (num_key, filename) in enumerate(media_mapping.items()):
+            report('checking_media', media_index, len(media_mapping))
             num_key_str = str(num_key).strip()
             # 1. Require strictly numeric archive-member keys (e.g. "0", "1", "2")
             if not num_key_str.isdigit() or "/" in num_key_str or "\\" in num_key_str or ".." in num_key_str:
@@ -258,17 +279,27 @@ def import_apkg(
                 raise ValueError(f"Invalid or hidden media filename: '{filename}'")
 
             ext = os.path.splitext(safe_filename)[1].lower()
-            if ext == ".svg":
+            if ext == ".svg" and not sanitize_svg:
                 conn.close()
                 raise ValueError("SVG media imports are rejected due to active content / script injection risks")
-            if ext not in ALLOWED_MEDIA_EXTENSIONS:
+            if ext not in ALLOWED_MEDIA_EXTENSIONS and not (ext == ".svg" and sanitize_svg):
                 conn.close()
                 raise ValueError(f"Unsupported media format '{ext}' for '{safe_filename}'")
+
+            if ext == '.svg':
+                from static_svg import sanitize_svg as clean_svg
+                if os.path.getsize(real_src) > min(max_single_media_size, 10 * 1024**2):
+                    raise ValueError('SVG exceeds 10 MiB processing limit')
+                with open(real_src, 'rb') as svg_file:
+                    cleaned = clean_svg(svg_file.read())
+                with open(real_src, 'wb') as svg_file:
+                    svg_file.write(cleaned)
+                warnings.append(f'SVG sanitized to static graphics: {safe_filename}')
 
             # Content verification: detect smuggled SVG active content
             with open(real_src, "rb") as mf:
                 content_prefix = mf.read(1024)
-                if b"<svg" in content_prefix.lower() or (b"<?xml" in content_prefix.lower() and b"<svg" in (content_prefix + mf.read(2048)).lower()):
+                if ext != ".svg" and (b"<svg" in content_prefix.lower() or (b"<?xml" in content_prefix.lower() and b"<svg" in (content_prefix + mf.read(2048)).lower())):
                     conn.close()
                     raise ValueError("SVG content detected and rejected due to active content / script injection risks")
 
@@ -300,7 +331,7 @@ def import_apkg(
                     if media_conflicts == 'error':
                         conn.close()
                         raise ValueError('Media filename conflicts with existing note content; choose rename conflicts to preserve both files')
-                    with open(real_src, 'rb') as incoming: digest = hashlib.sha256(incoming.read()).hexdigest()
+                    with open(real_src, 'rb') as incoming: digest = hashlib.file_digest(incoming, 'sha256').hexdigest()
                     replacement = 'import-' + digest + ext
                     destination = os.path.join(real_media_dir, replacement)
                     if os.path.exists(destination) and (os.path.islink(destination) or not filecmp.cmp(real_src, destination, shallow=False)):
@@ -310,6 +341,7 @@ def import_apkg(
 
             valid_media_to_copy.append((real_src, dst_path, safe_filename))
 
+        check_space(real_media_dir, total_media_bytes * 2)
         if media_remaps:
             from media_remap import package
             col = package(cursor, col, media_remaps)
@@ -322,8 +354,25 @@ def import_apkg(
                 deck_name = d["name"]
                 break
 
+        if any('<script' in json.dumps(m).lower() for m in models_json.values()):
+            warnings.append('Template scripts are preserved for export but disabled in web rendering')
+        from media_utils import extract_media_filenames
+        referenced = set()
+        for row in cursor.execute('SELECT flds FROM notes'):
+            referenced.update(extract_media_filenames(row[0]))
+        for model in models_json.values():
+            referenced.update(extract_media_filenames(model.get('css', '')))
+            for template in model.get('tmpls', []):
+                referenced.update(extract_media_filenames(template.get('qfmt', '') + template.get('afmt', '')))
+        available = set(media_mapping.values()) | set(media_remaps.values())
+        missing = sorted(name for name in referenced if name not in available and not os.path.isfile(os.path.join(real_media_dir, os.path.basename(name))))
+        if missing:
+            warnings.append(f'{len(missing)} referenced media files missing; first 20: ' + ', '.join(missing[:20]))
+
         # Transactional DB records & atomic media staging with rollback
         backup_dir = tempfile.mkdtemp(prefix="anki_media_backup_")
+        resources.callback(shutil.rmtree, backup_dir, ignore_errors=True)
+        check_space(backup_dir, total_media_bytes)
         backed_up_files = {}         # dst_p -> backup_p
         newly_created_files = set()  # dst_p
         in_flight_temp_files = set()  # temp_dst paths
@@ -332,20 +381,34 @@ def import_apkg(
             from package_notes import import_rows
             if whole_collection and db.query(Deck).filter_by(user_id=user_id).first():
                 raise ValueError('Collection restore requires an empty collection')
-            deck, cards_imported, cards_updated, cards_skipped = import_rows(cursor, col, user_id, db, include_scheduling, whole_collection, duplicate_policy)
+            deck, cards_imported, cards_updated, cards_skipped = import_rows(cursor, col, user_id, db, include_scheduling, whole_collection, duplicate_policy, progress=report)
 
+            result = {
+                'deck_id': None if preview else deck.id, 'deck_name': deck.name,
+                'cards_imported': cards_imported, 'cards_updated': cards_updated,
+                'cards_skipped': cards_skipped, 'notes_in_package': note_count,
+                'cards_in_package': total_card_count, 'media_imported': len(valid_media_to_copy),
+                'media_bytes': total_media_bytes, 'warnings': warnings, 'preview': preview,
+            }
+            if preview:
+                db.rollback()
+                conn.close()
+                return result
+            report('copying_media', 0, len(valid_media_to_copy))
             # Now that all DB records are verified and staged, copy validated media
             os.makedirs(real_media_dir, exist_ok=True)
 
             # Step 1: Backup any pre-existing destination media files before modifying them
-            for _, dst_p, _ in valid_media_to_copy:
+            for media_index, (_, dst_p, _) in enumerate(valid_media_to_copy):
+                report('backing_up_media', media_index, len(valid_media_to_copy))
                 if os.path.exists(dst_p) and dst_p not in backed_up_files:
                     backup_p = os.path.join(backup_dir, f"backup_{len(backed_up_files)}")
                     shutil.copy2(dst_p, backup_p)
                     backed_up_files[dst_p] = backup_p
 
             # Step 2: Copy media files safely with temporary file staging
-            for src_p, dst_p, _ in valid_media_to_copy:
+            for media_index, (src_p, dst_p, _) in enumerate(valid_media_to_copy):
+                report('copying_media', media_index, len(valid_media_to_copy))
                 if dst_p not in backed_up_files:
                     newly_created_files.add(dst_p)
                 temp_dst = dst_p + f".tmp_import_{os.getpid()}_{random.randint(100000, 999999)}"
@@ -361,6 +424,7 @@ def import_apkg(
                         except OSError:
                             pass
 
+            report("committing", 0, 1)
             db.commit()
             conn.close()
         except Exception:
@@ -399,15 +463,7 @@ def import_apkg(
             if os.path.exists(backup_dir):
                 shutil.rmtree(backup_dir, ignore_errors=True)
 
-    return {
-        "deck_id": deck.id,
-        "deck_name": deck.name,
-        "cards_imported": cards_imported,
-        "cards_updated": cards_updated,
-        "cards_skipped": cards_skipped,
-        "media_imported": len(valid_media_to_copy),
-        "warnings": ["Template scripts are preserved for export but disabled in web rendering"] if any('<script' in json.dumps(m).lower() for m in models_json.values()) else []
-    }
+    return result
 
 
 def export_apkg(deck_id: int, user_id: int, include_scheduling: bool, db: Session) -> str:

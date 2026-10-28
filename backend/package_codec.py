@@ -9,9 +9,15 @@ import os
 from pathlib import Path
 import sqlite3
 import zstandard
+from import_config import MAX_MEDIA_FILES
 
 
-def prepare_collection(directory, max_bytes, max_media=1000):
+def _sha1(path):
+    with path.open('rb') as stream:
+        return hashlib.file_digest(stream, 'sha1').digest()
+
+
+def prepare_collection(directory, max_bytes, max_media=MAX_MEDIA_FILES, progress=None):
     root=Path(directory)
     modern=root/'collection.anki21b'
     if not modern.exists():
@@ -32,6 +38,9 @@ def prepare_collection(directory, max_bytes, max_media=1000):
         try:
             with source.open('rb') as compressed, zstandard.ZstdDecompressor().stream_reader(compressed) as reader, destination.open('wb') as output:
                 while chunk:=reader.read(min(65536,remaining+1)):
+                    if progress: progress('decompressing', max_bytes - remaining, max_bytes)
+                    from import_config import check_space
+                    check_space(root, len(chunk))
                     remaining-=len(chunk);size+=len(chunk)
                     if remaining<0:raise ValueError('Nested compressed package exceeds decompressed size limit')
                     output.write(chunk)
@@ -58,7 +67,7 @@ def prepare_collection(directory, max_bytes, max_media=1000):
         decoded=root/(key+'.decoded')
         size=decode(source,decoded)
         if size!=entry.size:raise ValueError('Modern package media size does not match manifest')
-        if entry.sha1 and hashlib.sha1(decoded.read_bytes()).digest()!=entry.sha1:
+        if entry.sha1 and _sha1(decoded)!=entry.sha1:
             raise ValueError('Modern package media hash does not match manifest')
         os.replace(decoded,source)
         mapping[key]=filename

@@ -115,3 +115,6 @@ app.include_router(optimizer_router.router)
 
 from routers import backups_router
 app.include_router(backups_router.router)
+
+from routers import import_jobs_router
+app.include_router(import_jobs_router.router)

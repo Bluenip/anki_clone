@@ -1,7 +1,8 @@
+import PackageImportPanel from '../components/PackageImportPanel';
 import './DecksPage.css';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { listDecks, getTodaySummary, createDeck, deleteDeck, updateDeck, importCards, importApkg, exportApkg, exportText, exportCollection, getImportNoteTypes } from '../api/decks';
+import { listDecks, getTodaySummary, createDeck, deleteDeck, updateDeck, importCards, startPackageImport, exportApkg, exportText, exportCollection, getImportNoteTypes } from '../api/decks';
 import type { Deck as DeckData, TextImportOptions } from '../api/decks';
 import { getNoteTypes } from '../api/notes';
 import type { NoteType } from '../api/notes';
@@ -91,7 +92,14 @@ const DecksPage = () => {
   const [mediaConflicts, setMediaConflicts] = useState<'error' | 'rename'>('error');
   const [packageDuplicates, setPackageDuplicates] = useState<'newer' | 'skip' | 'update' | 'add'>('newer');
   // Import .apkg state
-  const [importingApkg, setImportingApkg] = useState(false);
+  const [importingApkg, setImportingApkg] = useState(() => !!sessionStorage.getItem('anki-package-import'));
+  const [packageJobId, setPackageJobId] = useState<string | null>(() => sessionStorage.getItem('anki-package-import'));
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
+  const uploadController = useRef<AbortController | null>(null);
+  const closePackageJob = () => {
+    setPackageJobId(null); setImportingApkg(false);
+    sessionStorage.removeItem('anki-package-import');
+  };
 
   // Dropdown state
   const [activeDropdown, setActiveDropdown] = useState<number | null>(null);
@@ -170,19 +178,21 @@ const DecksPage = () => {
     if (file.name.toLowerCase().endsWith('.apkg') || collectionRestore) {
       setImportingApkg(true);
       setOperationError(null);
+      let submitted = false;
       try {
-        const res = await importApkg(file, importScheduling, collectionRestore, mediaConflicts, packageDuplicates);
-        const data = res.data;
-        let message = collectionRestore ? `Restored collection: ${data.cards_imported} cards` : `Imported ${data.cards_imported} cards into deck "${data.deck_name}"`;
-        if (data.media_imported > 0) {
-          message += ` + ${data.media_imported} media files`;
-        }
-        alert(message);
-        fetchDecks();
+        setUploadProgress(0);
+        uploadController.current = new AbortController();
+        const res = await startPackageImport(file, importScheduling, collectionRestore, mediaConflicts,
+          packageDuplicates, setUploadProgress, uploadController.current.signal);
+        submitted = true;
+        setPackageJobId(res.data.id);
+        sessionStorage.setItem('anki-package-import', res.data.id);
       } catch (err: any) {
-        setOperationError(err?.response?.data?.detail || 'Failed to import .apkg file.');
+        if (err?.code !== 'ERR_CANCELED') setOperationError(err?.response?.data?.detail || 'Failed to upload package.');
       } finally {
-        setImportingApkg(false);
+        setUploadProgress(null);
+        uploadController.current = null;
+        if (!submitted) setImportingApkg(false);
       }
     } else {
       const reader = new FileReader();
@@ -583,6 +593,12 @@ const DecksPage = () => {
           <Link className="btn btn-ghost" to="/backups">Backups &amp; restore</Link>
         </div>
       </section>
+      {uploadProgress !== null && <section className="glass-card package-import-progress" aria-label="Package upload">
+        <p role="status">Uploading package: {uploadProgress}%</p>
+        <progress max={100} value={uploadProgress} aria-label="Upload progress" />
+        <button className="btn btn-ghost" onClick={() => uploadController.current?.abort()}>Cancel upload</button>
+      </section>}
+      {packageJobId && <PackageImportPanel key={packageJobId} id={packageJobId} onBusy={setImportingApkg} onComplete={fetchDecks} onClose={closePackageJob} />}
       <input type="file" accept=".txt,.csv,.tsv,.apkg,.colpkg" hidden ref={fileInputRef} onChange={handleFileUpload} aria-label="Upload file for import" />
       {showFileImport && <div className="modal-overlay" onClick={closeFileImport} role="dialog" aria-modal="true" aria-label="Import file">
         <div className="modal glass-card file-import-modal" ref={fileImportModalRef} onClick={e => e.stopPropagation()}>

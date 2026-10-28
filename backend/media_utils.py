@@ -49,7 +49,7 @@ def get_all_referenced_media(user_id: int, db) -> Set[str]:
         db.query(Card)
         .join(Deck, Deck.id == Card.deck_id)
         .filter(Deck.user_id == user_id)
-        .all()
+        .yield_per(500)
     )
     
     referenced = set()

@@ -38,3 +38,6 @@ backups/
 .vscode/
 .idea/
 .DS_Store
+
+# Temporary package jobs and durable status records
+backend/import-jobs/

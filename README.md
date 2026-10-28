@@ -114,3 +114,53 @@ trusted example with AMS math, TikZ and mhchem. It requires existing `bwrap`,
 `ANKI_TECTONIC_DIR`). Initial setup uses the network; card rendering uses only
 cached packages, in a sandbox with no network. Additional packages must be
 prepared by the server administrator rather than downloaded by untrusted notes.
+
+### Importing Anki packages
+
+Use **Import File**, select `.apkg`, review the preview and warnings, then choose
+**Import package**. Upload and processing progress are shown separately. You can
+cancel before the final commit; failures/cancellation roll back collection and
+media changes. The existing synchronous `/api/apkg/import` API remains available.
+
+Package jobs run in a background thread with an independent database session.
+Their status is stored under `DATABASE_DIR/import-jobs`, and file locks serialize
+package jobs across API workers on the same Linux host/filesystem. This is not a
+distributed queue. If a worker stops, its job is marked interrupted on the next
+status request: check the collection before retrying, as a stop during final
+commit may have succeeded. Reloading the deck page in the same browser tab
+reconnects to the last job. Keep the API running until imports finish.
+
+Defaults: 1 GiB upload, 3 GiB decompressed data, 2 GiB media, 256 MiB per media
+file, 100,000 notes/cards/media. `ANKI_IMPORT_*` settings in `.env.example` control
+these budgets; export them before launching a local backend (the app does not
+auto-load `.env`), or use Docker Compose, which forwards them. Nginx allows
+1100 MiB including multipart overhead; raise its limit too if increasing uploads
+beyond 1 GiB. Large decks still need sufficient RAM and temporary disk space;
+100,000 is a validation ceiling, not a performance guarantee.
+
+Completed/failed/cancelled jobs delete their uploaded package. Unconfirmed
+previews expire after 24 hours; expiry and seven-day status cleanup run on status
+reads/new submissions. Cleanup is lazy, so on an idle server those files remain
+until the next request. A browser disconnect during upload can leave the job
+running if the upload was already accepted. Avoid restarting the API mid-import.
+
+The importer supports the existing old/new package adapters, font media and a
+conservative static SVG mode (enabled by the new UI). SVG scripts, CSS,
+foreign objects, animation and external links are removed, so complex SVGs may
+look different; the preview warns when SVGs are sanitized. The synchronous API
+keeps raw SVG rejected unless `sanitize_svg=true` is selected. Disguised SVGs
+remain rejected. Missing media and disabled template scripts generate warnings;
+unsupported template filters/note types stop the import with an identified note
+type/source note. JavaScript/add-ons are not executed. There is no claim of full
+AnkiWeb compatibility or a measured coverage percentage.
+
+The optional real-world music regression runs entirely against temporary data:
+
+```bash
+ANKI_TEST_MUSIC_APKG=/path/to/Classical_Music_Themes_-_Part_I.apkg \
+  backend/venv/bin/python -m pytest backend/tests/test_music_package.py -q
+```
+
+It covers preview, import, duplicate handling, every media file's bytes, original
+fields/GUIDs and counts against upstream Anki, plus the background HTTP workflow.
+See [the implementation plan and verification results](IMPORT_COMPATIBILITY_PLAN.md).

@@ -54,3 +54,27 @@ export const exportApkg = async (deckId: number, includeScheduling = false, mode
 export const exportCollection = () => client.get('/api/apkg/export-collection', { responseType: 'blob' });
 
 export const getImportNoteTypes = () => client.get<{ id: number; name: string; fields: string[] }[]>('/api/note-types/available');
+
+export interface PackageImportResult {
+  cards_imported: number; cards_updated: number; cards_skipped: number;
+  notes_in_package: number; cards_in_package: number;
+  media_imported: number; media_bytes: number; deck_name: string; warnings: string[];
+}
+export interface PackageImportJob {
+  id: string; status: string; completed: number; total: number;
+  result: PackageImportResult | null; detail?: string; cancel_requested?: boolean;
+}
+export const startPackageImport = (file: File, includeScheduling: boolean, collectionRestore: boolean,
+  mediaConflicts: 'error' | 'rename', duplicatePolicy: 'newer' | 'skip' | 'update' | 'add',
+  onProgress: (percent: number) => void, signal?: AbortSignal) => {
+  const body = new FormData(); body.append('file', file);
+  return client.post<PackageImportJob>('/api/apkg/jobs', body, {
+    params: { include_scheduling: includeScheduling, collection_restore: collectionRestore,
+      media_conflicts: mediaConflicts, duplicate_policy: duplicatePolicy, sanitize_svg: true },
+    headers: { 'Content-Type': 'multipart/form-data' }, signal,
+    onUploadProgress: e => onProgress(e.total ? Math.round(e.loaded * 100 / e.total) : 0),
+  });
+};
+export const getPackageImport = (id: string) => client.get<PackageImportJob>(`/api/apkg/jobs/${id}`);
+export const confirmPackageImport = (id: string) => client.post<PackageImportJob>(`/api/apkg/jobs/${id}/confirm`);
+export const cancelPackageImport = (id: string) => client.post<PackageImportJob>(`/api/apkg/jobs/${id}/cancel`);

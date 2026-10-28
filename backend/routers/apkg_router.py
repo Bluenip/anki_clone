@@ -19,8 +19,9 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/apkg", tags=["APKG Import/Export"])
 
-# 50 MB max upload limit
-MAX_APKG_UPLOAD_SIZE = 50 * 1024 * 1024
+# Configurable shared package upload limit
+from import_config import MAX_UPLOAD_BYTES, check_space
+MAX_APKG_UPLOAD_SIZE = MAX_UPLOAD_BYTES
 CHUNK_SIZE = 64 * 1024  # 64 KB
 
 
@@ -30,6 +31,7 @@ async def import_apkg_file(
     include_scheduling: bool = False,
     collection_restore: bool = False,
     media_conflicts: Literal['error', 'rename'] = 'error',
+    sanitize_svg: bool = False,
     duplicate_policy: Literal['newer', 'skip', 'update', 'add'] = 'newer',
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
@@ -54,6 +56,7 @@ async def import_apkg_file(
 
     try:
         with os.fdopen(fd, "wb") as f:
+            check_space(tempfile.gettempdir(), file.size or 0)
             while True:
                 chunk = await file.read(CHUNK_SIZE)
                 if not chunk:
@@ -62,28 +65,28 @@ async def import_apkg_file(
                 if total_bytes > MAX_APKG_UPLOAD_SIZE:
                     raise HTTPException(
                         status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-                        detail="File too large. Maximum allowed size is 50MB.",
+                        detail=f"File too large. Maximum allowed size is {MAX_APKG_UPLOAD_SIZE // 1024**2} MiB.",
                     )
                 f.write(chunk)
 
-        result = import_apkg(temp_path, user.id, db, include_scheduling=include_scheduling, whole_collection=is_collection, media_conflicts=media_conflicts, duplicate_policy=duplicate_policy)
+        from starlette.concurrency import run_in_threadpool
+        from import_jobs import import_gate
+        def process():
+            with import_gate():
+                return import_apkg(temp_path, user.id, db, include_scheduling=include_scheduling,
+                                   whole_collection=is_collection, media_conflicts=media_conflicts,
+                                   duplicate_policy=duplicate_policy, sanitize_svg=sanitize_svg)
+        result = await run_in_threadpool(process)
         result['collection_restore'] = is_collection
         return result
     except HTTPException:
         raise
     except (ValueError, zipfile.BadZipFile, sqlite3.DatabaseError, KeyError) as e:
         logger.warning("Failed to import APKG for user %s: %s", user.id, str(e))
-        err_str = str(e)
-        if any(indicator in err_str for indicator in ("/home", "/tmp", "/var", "/etc", "/usr", "\\", "..")):
-            detail_msg = "Invalid or corrupted APKG file"
-        elif err_str:
-            detail_msg = f"Invalid or corrupted APKG file: {err_str}"
-        else:
-            detail_msg = "Invalid or corrupted APKG file"
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=detail_msg,
-        )
+        from import_jobs import error_info
+        code, detail = error_info(e)
+        raise HTTPException(status_code=400, detail=detail, headers={'X-Import-Error': code})
+
 
 
 
