@@ -176,3 +176,11 @@ select the same file again in that tab. Resume state is scoped to the signed-in
 account and verifies file metadata plus samples from both ends. Unconfirmed
 uploads expire after 24 hours. Only explicit cancellation or a permanent file
 error discards received bytes.
+
+If upload is fast directly to the origin but slow through Cloudflare Tunnel,
+compare the connector transport instead of increasing application timeouts.
+`backend/ops/cloudflared-http2.sh --dry-run` shows an optional systemd override
+for a QUIC-to-HTTP/2 comparison. A server administrator can run it with `sudo`;
+it briefly reconnects the shared tunnel. Token files and ingress routes are
+preserved. The script rolls back its new override if the tunnel fails readiness;
+use `--restore` to undo a successful test if performance does not improve.

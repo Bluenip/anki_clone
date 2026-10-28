@@ -534,6 +534,18 @@ const DecksPage = () => {
         </div>
       )}
 
+      {uploadProgress !== null && <section className="glass-card package-import-progress" aria-label="Package upload">
+        <p role="status">{uploadStatus} {uploadProgress}%</p>
+        <progress max={100} value={uploadProgress} aria-label="Upload progress" />
+        <button className="btn btn-ghost" onClick={() => uploadController.current?.abort()}>Cancel upload</button>
+      </section>}
+      {uploadFile && uploadProgress === null && !importingApkg && <section className="glass-card package-import-progress" aria-label="Paused upload">
+        <p>{uploadFile.name} — received parts are saved. You can continue without starting over.</p>
+        <button className="btn btn-primary" onClick={() => void uploadPackage(uploadFile, uploadFile.name.toLowerCase().endsWith('.colpkg'))}>Resume upload</button>
+        <button className="btn btn-ghost" onClick={() => { setUploadFile(null); setOperationError(null); void discardPackageUpload(); }}>Cancel upload</button>
+      </section>}
+      {packageJobId && <PackageImportPanel key={packageJobId} id={packageJobId} onBusy={setImportingApkg} onComplete={fetchDecks} onClose={closePackageJob} />}
+
       <div className="desktop-deck-table">
         <div className="deck-list-header">
           <div className="col-name">Deck</div>
@@ -602,17 +614,6 @@ const DecksPage = () => {
           <Link className="btn btn-ghost" to="/backups">Backups &amp; restore</Link>
         </div>
       </section>
-      {uploadProgress !== null && <section className="glass-card package-import-progress" aria-label="Package upload">
-        <p role="status">{uploadStatus} {uploadProgress}%</p>
-        <progress max={100} value={uploadProgress} aria-label="Upload progress" />
-        <button className="btn btn-ghost" onClick={() => uploadController.current?.abort()}>Cancel upload</button>
-      </section>}
-      {uploadFile && uploadProgress === null && !importingApkg && <section className="glass-card package-import-progress" aria-label="Paused upload">
-        <p>{uploadFile.name} — received parts are saved. You can continue without starting over.</p>
-        <button className="btn btn-primary" onClick={() => void uploadPackage(uploadFile, uploadFile.name.toLowerCase().endsWith('.colpkg'))}>Resume upload</button>
-        <button className="btn btn-ghost" onClick={() => { setUploadFile(null); setOperationError(null); void discardPackageUpload(); }}>Cancel upload</button>
-      </section>}
-      {packageJobId && <PackageImportPanel key={packageJobId} id={packageJobId} onBusy={setImportingApkg} onComplete={fetchDecks} onClose={closePackageJob} />}
       <input type="file" accept=".txt,.csv,.tsv,.apkg,.colpkg" hidden ref={fileInputRef} onChange={handleFileUpload} aria-label="Upload file for import" />
       {showFileImport && <div className="modal-overlay" onClick={closeFileImport} role="dialog" aria-modal="true" aria-label="Import file">
         <div className="modal glass-card file-import-modal" ref={fileImportModalRef} onClick={e => e.stopPropagation()}>
