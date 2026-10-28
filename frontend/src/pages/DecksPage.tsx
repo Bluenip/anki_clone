@@ -2,7 +2,7 @@ import PackageImportPanel from '../components/PackageImportPanel';
 import './DecksPage.css';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { listDecks, getTodaySummary, createDeck, deleteDeck, updateDeck, importCards, startPackageImport, exportApkg, exportText, exportCollection, getImportNoteTypes } from '../api/decks';
+import { listDecks, getTodaySummary, createDeck, deleteDeck, updateDeck, importCards, startPackageImport, discardPackageUpload, exportApkg, exportText, exportCollection, getImportNoteTypes } from '../api/decks';
 import type { Deck as DeckData, TextImportOptions } from '../api/decks';
 import { getNoteTypes } from '../api/notes';
 import type { NoteType } from '../api/notes';
@@ -95,6 +95,8 @@ const DecksPage = () => {
   const [importingApkg, setImportingApkg] = useState(() => !!sessionStorage.getItem('anki-package-import'));
   const [packageJobId, setPackageJobId] = useState<string | null>(() => sessionStorage.getItem('anki-package-import'));
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
+  const [uploadStatus, setUploadStatus] = useState('Uploading…');
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
   const uploadController = useRef<AbortController | null>(null);
   const closePackageJob = () => {
     setPackageJobId(null); setImportingApkg(false);
@@ -160,6 +162,30 @@ const DecksPage = () => {
     openerRef.current?.focus();
   }, []);
 
+  const uploadPackage = async (file: File, collectionRestore: boolean) => {
+    setImportingApkg(true);
+    setOperationError(null);
+    setUploadFile(file);
+    let submitted = false;
+    try {
+      setUploadProgress(0);
+      uploadController.current = new AbortController();
+      const res = await startPackageImport(file, importScheduling, collectionRestore, mediaConflicts,
+        packageDuplicates, setUploadProgress, uploadController.current.signal, setUploadStatus);
+      submitted = true;
+      setUploadFile(null);
+      setPackageJobId(res.data.id);
+      sessionStorage.setItem('anki-package-import', res.data.id);
+    } catch (err: any) {
+      if (err?.name !== 'PackageUploadPaused') setUploadFile(null);
+      if (err?.code !== 'ERR_CANCELED' && err?.name !== 'AbortError') setOperationError(err?.response?.data?.detail || err?.message || 'Failed to upload package.');
+    } finally {
+      setUploadProgress(null);
+      uploadController.current = null;
+      if (!submitted) setImportingApkg(false);
+    }
+  };
+
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -176,24 +202,7 @@ const DecksPage = () => {
       return;
     }
     if (file.name.toLowerCase().endsWith('.apkg') || collectionRestore) {
-      setImportingApkg(true);
-      setOperationError(null);
-      let submitted = false;
-      try {
-        setUploadProgress(0);
-        uploadController.current = new AbortController();
-        const res = await startPackageImport(file, importScheduling, collectionRestore, mediaConflicts,
-          packageDuplicates, setUploadProgress, uploadController.current.signal);
-        submitted = true;
-        setPackageJobId(res.data.id);
-        sessionStorage.setItem('anki-package-import', res.data.id);
-      } catch (err: any) {
-        if (err?.code !== 'ERR_CANCELED' && err?.name !== 'AbortError') setOperationError(err?.response?.data?.detail || err?.message || 'Failed to upload package.');
-      } finally {
-        setUploadProgress(null);
-        uploadController.current = null;
-        if (!submitted) setImportingApkg(false);
-      }
+      await uploadPackage(file, collectionRestore);
     } else {
       const reader = new FileReader();
       reader.onload = (ev) => {
@@ -594,9 +603,14 @@ const DecksPage = () => {
         </div>
       </section>
       {uploadProgress !== null && <section className="glass-card package-import-progress" aria-label="Package upload">
-        <p role="status">Uploading package: {uploadProgress}%</p>
+        <p role="status">{uploadStatus} {uploadProgress}%</p>
         <progress max={100} value={uploadProgress} aria-label="Upload progress" />
         <button className="btn btn-ghost" onClick={() => uploadController.current?.abort()}>Cancel upload</button>
+      </section>}
+      {uploadFile && uploadProgress === null && !importingApkg && <section className="glass-card package-import-progress" aria-label="Paused upload">
+        <p>{uploadFile.name} — received parts are saved. You can continue without starting over.</p>
+        <button className="btn btn-primary" onClick={() => void uploadPackage(uploadFile, uploadFile.name.toLowerCase().endsWith('.colpkg'))}>Resume upload</button>
+        <button className="btn btn-ghost" onClick={() => { setUploadFile(null); setOperationError(null); void discardPackageUpload(); }}>Cancel upload</button>
       </section>}
       {packageJobId && <PackageImportPanel key={packageJobId} id={packageJobId} onBusy={setImportingApkg} onComplete={fetchDecks} onClose={closePackageJob} />}
       <input type="file" accept=".txt,.csv,.tsv,.apkg,.colpkg" hidden ref={fileInputRef} onChange={handleFileUpload} aria-label="Upload file for import" />

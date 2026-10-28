@@ -162,9 +162,17 @@ It covers preview, import, duplicate handling, every media file's bytes, origina
 fields/GUIDs and counts against upstream Anki, plus the background HTTP workflow.
 
 
-Package uploads now use authenticated 8 MiB chunks before creating the preview
+Package uploads now use authenticated adaptive chunks (initially 256 KiB, at most 1 MiB) before creating the preview
 job. Each request stays small enough for Cloudflare/proxy limits and has a
 timeout. Temporary network/proxy failures retry from the last acknowledged
-offset, and failed/cancelled uploads are cleaned up. Old multipart endpoints
+offset. Slow transfers automatically reduce chunk size; interrupted uploads can
+be resumed with the same file, while cancelled uploads are removed. Old multipart endpoints
 remain available for API clients. Deploy backend and frontend from the same
 commit; the UI reports when the backend does not support chunked upload yet.
+
+If a connection remains unavailable after retries, use **Resume upload**. The
+last acknowledged bytes remain saved, including across a page reload when you
+select the same file again in that tab. Resume state is scoped to the signed-in
+account and verifies file metadata plus samples from both ends. Unconfirmed
+uploads expire after 24 hours. Only explicit cancellation or a permanent file
+error discards received bytes.

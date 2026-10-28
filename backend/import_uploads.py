@@ -5,12 +5,15 @@ import json
 from pathlib import Path
 import time
 import uuid
+import re
+from starlette.requests import ClientDisconnect
 
 from fastapi import HTTPException
 import import_jobs
 from import_config import MAX_UPLOAD_BYTES, check_space
 
-CHUNK_BYTES = 8 * 1024**2
+CHUNK_BYTES = 1024**2
+RECOMMENDED_CHUNK_BYTES = 256 * 1024
 
 
 def root():
@@ -19,7 +22,7 @@ def root():
 
 @contextmanager
 def locked(upload_id, user_id):
-    if not __import__('re').fullmatch(r'[0-9a-f]{32}', upload_id):
+    if not re.fullmatch(r'[0-9a-f]{32}', upload_id):
         raise HTTPException(404, 'Upload not found')
     path = root() / upload_id
     if not (path / 'status.json').is_file():
@@ -44,6 +47,8 @@ def locked(upload_id, user_id):
                 data['status'] = 'expired'
                 package.unlink(missing_ok=True)
                 import_jobs.write_status(path, data)
+        data['chunk_bytes'] = CHUNK_BYTES
+        data['recommended_chunk_bytes'] = min(RECOMMENDED_CHUNK_BYTES, CHUNK_BYTES)
         yield path, data
 
 
@@ -81,7 +86,8 @@ def create(user_id, filename, size, options):
     path.mkdir(mode=0o700)
     (path / 'package.apkg').touch(mode=0o600)
     data = dict(id=path.name, user_id=user_id, filename=Path(filename).name, size=size,
-                received=0, status='uploading', chunk_bytes=CHUNK_BYTES, options=options)
+                received=0, status='uploading', chunk_bytes=CHUNK_BYTES,
+                recommended_chunk_bytes=min(RECOMMENDED_CHUNK_BYTES, CHUNK_BYTES), options=options)
     import_jobs.write_status(path, data)
     return data
 
@@ -117,6 +123,9 @@ async def append(upload_id, user_id, offset, request):
                 os.fsync(stream.fileno())
                 data['received'] = offset + count
                 import_jobs.write_status(path, data)
+            except ClientDisconnect:
+                stream.truncate(offset)
+                raise HTTPException(408, 'Upload connection interrupted. Resume from the last saved part.') from None
             except BaseException:
                 stream.truncate(offset)
                 raise

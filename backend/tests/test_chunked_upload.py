@@ -89,3 +89,19 @@ def test_expiry_and_upload_limits(client,auth_headers_a,jobs,monkeypatch):
     assert client.post('/api/apkg/uploads',headers=auth_headers_a,json={'filename':'big.apkg','size':11}).status_code==413
     assert client.post('/api/apkg/uploads',headers=auth_headers_a,json={'filename':'bad.exe','size':5}).status_code==400
     assert client.post('/api/apkg/uploads',headers=auth_headers_a,json={'filename':'all.colpkg','size':5}).status_code==400
+
+
+def test_disconnected_request_rolls_back_without_internal_server_error(client,auth_headers_a,jobs,user_a):
+    import asyncio
+    from fastapi import HTTPException
+    from starlette.requests import Request
+    state=create(client,auth_headers_a,20)
+    events=iter([{'type':'http.request','body':b'partial','more_body':True}, {'type':'http.disconnect'}])
+    async def receive():return next(events)
+    request=Request({'type':'http','method':'PUT','path':'/','headers':[]},receive)
+    with pytest.raises(HTTPException) as error:
+        asyncio.run(import_uploads.append(state['id'],user_a.id,0,request))
+    assert error.value.status_code==408
+    path=import_uploads.root()/state['id']/'package.apkg'
+    assert path.stat().st_size==0
+    assert client.get(f'/api/apkg/uploads/{state["id"]}',headers=auth_headers_a).json()['received']==0
