@@ -1,0 +1,14 @@
+{
+  "name": "anki-upload-relay",
+  "production_branch": "main",
+  "deployment_configs": {
+    "production": {
+      "compatibility_date": "2026-10-28",
+      "services": { "UPLOAD_RELAY": { "service": "anki-upload-relay" } }
+    },
+    "preview": {
+      "compatibility_date": "2026-10-28",
+      "services": { "UPLOAD_RELAY": { "service": "anki-upload-relay" } }
+    }
+  }
+}

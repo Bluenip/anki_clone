@@ -24,7 +24,10 @@ services:
       - anki-network
 
   frontend:
-    build: ./frontend
+    build:
+      context: ./frontend
+      args:
+        VITE_PACKAGE_API_URL: ${VITE_PACKAGE_API_URL:-}
     container_name: anki-frontend
     restart: unless-stopped
     ports:

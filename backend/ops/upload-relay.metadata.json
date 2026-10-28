@@ -1,0 +1,13 @@
+{
+  "main_module": "upload-relay.mjs",
+  "compatibility_date": "2026-10-28",
+  "bindings": [
+    { "type": "plain_text", "name": "ORIGIN_URL", "text": "https://thaituan.site" },
+    { "type": "plain_text", "name": "ALLOWED_ORIGIN", "text": "https://thaituan.site" }
+  ],
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 0.1,
+    "traces": { "enabled": true, "head_sampling_rate": 0.1 }
+  }
+}

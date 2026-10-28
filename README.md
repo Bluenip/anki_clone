@@ -184,3 +184,38 @@ for a QUIC-to-HTTP/2 comparison. A server administrator can run it with `sudo`;
 it briefly reconnects the shared tunnel. Token files and ingress routes are
 preserved. The script rolls back its new override if the tunnel fails readiness;
 use `--restore` to undo a successful test if performance does not improve.
+
+For slow client-to-site anycast routes, package requests can use a separate HTTPS
+ingress while reaching the same backend, database, and user-owned upload IDs.
+Set `VITE_PACKAGE_API_URL=https://anki-upload-relay.pages.dev` in the deployment's
+environment and rebuild the frontend. Leave it unset to use the normal API.
+Only resumable uploads, import jobs, and package limits use this ingress. A relay
+network/5xx failure makes subsequent requests use the original API for 60 seconds;
+the uploader reconciles the saved offset before retrying and never replays a
+mutation in the transport interceptor.
+
+The relay source and API deployment metadata live in `backend/ops/`:
+
+- Upload `upload-relay.mjs` with `upload-relay.metadata.json` to the Worker
+  `anki-upload-relay` using the Workers multipart script API. Its bindings fix the
+  upstream and allowed browser origin to `https://thaituan.site`; JWT validation
+  and upload/job ownership checks remain on the backend. Enable logs/traces as
+  specified in the metadata; do not log authorization headers or request bodies.
+- `upload-relay-pages.json` configures the Pages project with a service binding to
+  that Worker. Direct-upload `upload-relay-pages.mjs` as `_worker.js`, with an
+  empty asset `manifest` (`{}`), to its `main` branch. The stable entry point is
+  `https://anki-upload-relay.pages.dev`. The Pages entry point is intentional:
+  its anycast address pool performed much better than the site's and
+  `workers.dev`'s routes on the affected connection. No client IP pinning is used.
+- Keep the Worker's public `workers.dev`/preview endpoints disabled. The Pages
+  ingress calls it via the service binding. Requests and responses stream without
+  storing package contents at the relay. Only the listed package endpoints are
+  accepted, browser CORS is restricted, redirects are rejected, and every API
+  response is private/no-store.
+
+Check the relay with `node --test backend/ops/upload-relay.test.mjs` and run the
+frontend package transport/upload/panel tests. Validate deployments with full real
+APKG uploads through the browser, preview and confirmation in a disposable
+account, followed by account/media/job cleanup. A successful health/probe request
+alone does not establish upload or import performance. To roll back, unset
+`VITE_PACKAGE_API_URL` and rebuild; the original site/tunnel needs no changes.
