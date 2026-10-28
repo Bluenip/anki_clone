@@ -66,10 +66,7 @@ npm run dev
 
 To deploy using Docker Compose:
 
-1. Copy `.env.example` to `.env`:
-   ```bash
-   cp .env.example .env
-   ```
+1. Create a local `.env` file for Docker Compose with your `JWT_SECRET_KEY`. Keep it on the server; do not commit credentials.
 2. Generate a secure secret and set it in `.env`:
    ```bash
    # Generate secret:
@@ -131,7 +128,7 @@ commit may have succeeded. Reloading the deck page in the same browser tab
 reconnects to the last job. Keep the API running until imports finish.
 
 Defaults: 1 GiB upload, 3 GiB decompressed data, 2 GiB media, 256 MiB per media
-file, 100,000 notes/cards/media. `ANKI_IMPORT_*` settings in `.env.example` control
+file, 100,000 notes/cards/media. `ANKI_IMPORT_*` settings documented in `backend/import_config.py` control
 these budgets; export them before launching a local backend (the app does not
 auto-load `.env`), or use Docker Compose, which forwards them. Nginx allows
 1100 MiB including multipart overhead; raise its limit too if increasing uploads
@@ -163,3 +160,11 @@ ANKI_TEST_MUSIC_APKG=/path/to/Classical_Music_Themes_-_Part_I.apkg \
 
 It covers preview, import, duplicate handling, every media file's bytes, original
 fields/GUIDs and counts against upstream Anki, plus the background HTTP workflow.
+
+
+Package uploads now use authenticated 8 MiB chunks before creating the preview
+job. Each request stays small enough for Cloudflare/proxy limits and has a
+timeout. Temporary network/proxy failures retry from the last acknowledged
+offset, and failed/cancelled uploads are cleaned up. Old multipart endpoints
+remain available for API clients. Deploy backend and frontend from the same
+commit; the UI reports when the backend does not support chunked upload yet.

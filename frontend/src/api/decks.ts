@@ -64,16 +64,67 @@ export interface PackageImportJob {
   id: string; status: string; completed: number; total: number;
   result: PackageImportResult | null; detail?: string; cancel_requested?: boolean;
 }
-export const startPackageImport = (file: File, includeScheduling: boolean, collectionRestore: boolean,
+interface PackageUpload { id: string; received: number; size: number; chunk_bytes: number }
+const pause = (ms: number, signal?: AbortSignal) => new Promise<void>((resolve, reject) => {
+  if (signal?.aborted) { reject(new DOMException('Upload cancelled', 'AbortError')); return; }
+  const aborted = () => { clearTimeout(timer); reject(new DOMException('Upload cancelled', 'AbortError')); };
+  const timer = setTimeout(() => { signal?.removeEventListener('abort', aborted); resolve(); }, ms);
+  signal?.addEventListener('abort', aborted, { once: true });
+});
+export const startPackageImport = async (file: File, includeScheduling: boolean, collectionRestore: boolean,
   mediaConflicts: 'error' | 'rename', duplicatePolicy: 'newer' | 'skip' | 'update' | 'add',
   onProgress: (percent: number) => void, signal?: AbortSignal) => {
-  const body = new FormData(); body.append('file', file);
-  return client.post<PackageImportJob>('/api/apkg/jobs', body, {
-    params: { include_scheduling: includeScheduling, collection_restore: collectionRestore,
-      media_conflicts: mediaConflicts, duplicate_policy: duplicatePolicy, sanitize_svg: true },
-    headers: { 'Content-Type': 'multipart/form-data' }, signal,
-    onUploadProgress: e => onProgress(e.total ? Math.round(e.loaded * 100 / e.total) : 0),
-  });
+  let id: string | undefined;
+  let submitted = false;
+  try {
+    const created = await client.post<PackageUpload>('/api/apkg/uploads', {
+      filename: file.name, size: file.size, include_scheduling: includeScheduling,
+      collection_restore: collectionRestore, media_conflicts: mediaConflicts,
+      duplicate_policy: duplicatePolicy, sanitize_svg: true,
+    }, { signal, timeout: 30000 });
+    id = created.data.id;
+    let offset = created.data.received;
+    const chunkBytes = Math.min(created.data.chunk_bytes, 8 * 1024 ** 2);
+    if (!Number.isInteger(chunkBytes) || chunkBytes <= 0) throw new Error('Server returned an invalid upload chunk size.');
+    let failures = 0;
+    while (offset < file.size) {
+      const end = Math.min(offset + chunkBytes, file.size);
+      try {
+        const response = await client.put<PackageUpload>(`/api/apkg/uploads/${id}`, file.slice(offset, end), {
+          params: { offset }, signal, timeout: 60000,
+          headers: { 'Content-Type': 'application/octet-stream' },
+          onUploadProgress: e => onProgress(Math.min(100, Math.round((offset + e.loaded) * 100 / file.size))),
+        });
+        if (response.data.received !== end) throw new Error('Server returned an unexpected upload offset.');
+        offset = response.data.received;
+        failures = 0;
+      } catch (error: unknown) {
+        const status = (error as { response?: { status?: number } }).response?.status;
+        const retryable = !status || [408, 409, 429, 500, 502, 503, 504, 520, 522, 524].includes(status);
+        if (signal?.aborted || !retryable || ++failures > 3) throw error;
+        await pause(500 * failures, signal);
+        const state = await client.get<PackageUpload>(`/api/apkg/uploads/${id}`, { signal, timeout: 30000 });
+        offset = state.data.received;
+        onProgress(Math.round(offset * 100 / file.size));
+      }
+    }
+    const result = await client.post<PackageImportJob>(`/api/apkg/uploads/${id}/finish`, {}, { signal, timeout: 30000 });
+    submitted = true;
+    return result;
+  } catch (error: unknown) {
+    const data = error as { response?: { status?: number; data?: { detail?: string } }; message?: string };
+    if (data.response?.status === 404 || data.response?.status === 405) {
+      throw new Error('This server needs the updated backend for chunked uploads. Redeploy the backend and reload this page.');
+    }
+    if ([502, 503, 504, 520, 522, 524].includes(data.response?.status || 0)) {
+      throw new Error(`The upload proxy returned HTTP ${data.response?.status}. Please retry after checking the server connection.`);
+    }
+    throw error;
+  } finally {
+    if (id && !submitted) {
+      await client.delete(`/api/apkg/uploads/${id}`, { timeout: 10000 }).catch(() => {});
+    }
+  }
 };
 export const getPackageImport = (id: string) => client.get<PackageImportJob>(`/api/apkg/jobs/${id}`);
 export const confirmPackageImport = (id: string) => client.post<PackageImportJob>(`/api/apkg/jobs/${id}/confirm`);

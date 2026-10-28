@@ -46,9 +46,20 @@ from test_import_jobs import jobs, wait_job
 @pytest.mark.skipif(not os.getenv('ANKI_TEST_MUSIC_APKG'), reason='Set ANKI_TEST_MUSIC_APKG to run the real music fixture')
 def test_real_music_package_through_background_http(client, auth_headers_a, jobs):
     import import_jobs
-    with open(os.environ['ANKI_TEST_MUSIC_APKG'], 'rb') as package:
-        response = client.post('/api/apkg/jobs', headers=auth_headers_a,
-                               files={'file': ('music.apkg', package, 'application/octet-stream')})
+    package_path = os.environ['ANKI_TEST_MUSIC_APKG']
+    created = client.post('/api/apkg/uploads', headers=auth_headers_a,
+                          json={'filename': 'music.apkg', 'size': os.path.getsize(package_path)})
+    assert created.status_code == 201, created.text
+    state = created.json()
+    upload_id = state['id']
+    offset = 0
+    with open(package_path, 'rb') as package:
+        while chunk := package.read(state['chunk_bytes']):
+            response = client.put(f'/api/apkg/uploads/{upload_id}', params={'offset': offset},
+                                  headers={**auth_headers_a, 'Content-Type': 'application/octet-stream'}, content=chunk)
+            assert response.status_code == 200, response.text
+            offset = response.json()['received']
+    response = client.post(f'/api/apkg/uploads/{upload_id}/finish', headers=auth_headers_a)
     assert response.status_code == 202, response.text
     job_id = response.json()['id']
     preview = wait_job(client, job_id, auth_headers_a, {'awaiting_confirmation'})

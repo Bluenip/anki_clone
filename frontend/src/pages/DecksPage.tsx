@@ -188,7 +188,7 @@ const DecksPage = () => {
         setPackageJobId(res.data.id);
         sessionStorage.setItem('anki-package-import', res.data.id);
       } catch (err: any) {
-        if (err?.code !== 'ERR_CANCELED') setOperationError(err?.response?.data?.detail || 'Failed to upload package.');
+        if (err?.code !== 'ERR_CANCELED' && err?.name !== 'AbortError') setOperationError(err?.response?.data?.detail || err?.message || 'Failed to upload package.');
       } finally {
         setUploadProgress(null);
         uploadController.current = null;

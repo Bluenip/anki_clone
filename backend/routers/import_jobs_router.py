@@ -69,3 +69,51 @@ def confirm_job(job_id: str, user: User = Depends(get_current_user)):
 @router.post('/jobs/{job_id}/cancel')
 def cancel_job(job_id: str, user: User = Depends(get_current_user)):
     return import_jobs.cancel(job_id, user.id)
+
+
+from fastapi import Request, Query
+from pydantic import BaseModel, Field
+import import_uploads
+
+
+class UploadRequest(BaseModel):
+    filename: str = Field(min_length=1, max_length=255)
+    size: int = Field(gt=0)
+    include_scheduling: bool = False
+    collection_restore: bool = False
+    media_conflicts: Literal['error', 'rename'] = 'error'
+    duplicate_policy: Literal['newer', 'skip', 'update', 'add'] = 'newer'
+    sanitize_svg: bool = True
+
+
+@router.post('/uploads', status_code=201)
+def create_upload(body: UploadRequest, user: User = Depends(get_current_user)):
+    try:
+        return import_uploads.create(user.id, body.filename, body.size,
+                                     body.model_dump(exclude={'filename', 'size'}))
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from None
+
+
+@router.get('/uploads/{upload_id}')
+def get_upload(upload_id: str, user: User = Depends(get_current_user)):
+    return import_uploads.get(upload_id, user.id)
+
+
+@router.put('/uploads/{upload_id}')
+async def append_upload(upload_id: str, request: Request, offset: int = Query(ge=0),
+                        user: User = Depends(get_current_user)):
+    try:
+        return await import_uploads.append(upload_id, user.id, offset, request)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from None
+
+
+@router.post('/uploads/{upload_id}/finish', status_code=202)
+def finish_upload(upload_id: str, user: User = Depends(get_current_user)):
+    return import_uploads.finish(upload_id, user.id)
+
+
+@router.delete('/uploads/{upload_id}')
+def delete_upload(upload_id: str, user: User = Depends(get_current_user)):
+    return import_uploads.cancel(upload_id, user.id)
