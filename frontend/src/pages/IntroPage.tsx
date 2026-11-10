@@ -51,9 +51,9 @@ const IntroPage = () => {
 
       <div className="intro-layout">
         <div className="intro-video glass-card">
-          <video ref={video} controls preload="metadata" playsInline poster="/intro/poster.jpg">
-            <source src="/intro/huong-dan.mp4" type="video/mp4" />
-            Trình duyệt của bạn không phát được video. <a href="/intro/huong-dan.mp4">Tải video về</a>.
+          <video ref={video} controls preload="metadata" playsInline poster="/guide-media/poster.jpg">
+            <source src="/guide-media/huong-dan.mp4" type="video/mp4" />
+            Trình duyệt của bạn không phát được video. <a href="/guide-media/huong-dan.mp4">Tải video về</a>.
           </video>
         </div>
 
