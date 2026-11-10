@@ -17,6 +17,7 @@ const AddPage = lazy(() => import('./pages/AddPage'));
 import AccountPage from './pages/AccountPage';
 import ForgotPasswordPage from './pages/ForgotPasswordPage';
 import ResetPasswordPage from './pages/ResetPasswordPage';
+import IntroPage from './pages/IntroPage';
 import BrowsePage from './pages/BrowsePage';
 const CustomStudyPage = lazy(() => import('./pages/CustomStudyPage'));
 const MediaPage = lazy(() => import('./pages/MediaPage'));
@@ -39,6 +40,7 @@ function App() {
               <Route path="/register" element={<RegisterPage />} />
               <Route path="/forgot-password" element={<ForgotPasswordPage />} />
               <Route path="/reset-password" element={<ResetPasswordPage />} />
+              <Route path="/intro" element={<IntroPage />} />
               <Route path="/decks" element={<ProtectedRoute><DecksPage /></ProtectedRoute>} />
               <Route path="/decks/:id" element={<ProtectedRoute><DeckDetailPage /></ProtectedRoute>} />
               <Route path="/decks/:deckId/cards" element={<ProtectedRoute><CardEditorPage /></ProtectedRoute>} />

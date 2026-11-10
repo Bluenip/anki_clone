@@ -22,15 +22,18 @@ const Navbar = () => {
           <Link to="/" className="navbar-brand" onClick={closeMenu}>
             AnkiWeb <span className="brand-icon">🌟</span>
           </Link>
+          <div className="nav-links">
+            <NavLink to="/intro" className={({ isActive }) => isActive ? "menu-item active" : "menu-item"}>Hướng dẫn</NavLink>
           {user && (
-            <div className="nav-links">
+            <>
               <NavLink to="/decks" className={({ isActive }) => isActive ? "menu-item active" : "menu-item"}>Decks</NavLink>
               <NavLink to="/add" className={({ isActive }) => isActive ? "menu-item active" : "menu-item"}>Add</NavLink>
               <NavLink to="/browse" className={({ isActive }) => isActive ? "menu-item active" : "menu-item"}>Browse</NavLink>
               <NavLink to="/stats" className={({ isActive }) => isActive ? "menu-item active" : "menu-item"}>Stats</NavLink>
               <NavLink to="/custom-study" className={({ isActive }) => isActive ? "menu-item active" : "menu-item"}>Custom Study</NavLink>
-            </div>
+            </>
           )}
+          </div>
         </div>
         <div className="top-menu-right">
           {user ? (
@@ -55,6 +58,7 @@ const Navbar = () => {
       </div>
       {mobileMenuOpen && (
         <div className="mobile-nav-menu">
+          <NavLink to="/intro" className={({ isActive }) => isActive ? "mobile-nav-item active" : "mobile-nav-item"} onClick={closeMenu}>Hướng dẫn</NavLink>
           {user ? (
             <>
               <NavLink to="/decks" className={({ isActive }) => isActive ? "mobile-nav-item active" : "mobile-nav-item"} onClick={closeMenu}>Decks</NavLink>

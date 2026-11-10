@@ -56,6 +56,9 @@ const LoginPage = () => {
         <p className="auth-footer">
           Don't have an account? <Link to="/register">Sign Up</Link>
         </p>
+        <p className="auth-footer">
+          Lần đầu dùng? <Link to="/intro">Xem video hướng dẫn</Link>
+        </p>
       </div>
     </div>
   );

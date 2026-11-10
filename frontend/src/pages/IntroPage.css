@@ -1,0 +1,31 @@
+.intro-page { max-width: 1200px; margin: 0 auto; }
+.intro-hero { text-align: center; max-width: 720px; margin: 1rem auto 2rem; }
+.intro-kicker { color: var(--accent-cyan); font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; font-size: 0.8rem; margin: 0 0 0.5rem; }
+.intro-hero h1 { font-size: clamp(1.6rem, 4vw, 2.4rem); line-height: 1.2; margin: 0 0 0.75rem; background: var(--accent-gradient-h); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.intro-lead { color: var(--text-secondary); font-size: 1.05rem; line-height: 1.6; margin: 0 0 1.5rem; }
+.intro-actions { display: flex; gap: 0.75rem; justify-content: center; flex-wrap: wrap; }
+
+.intro-layout { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 1.5rem; align-items: start; }
+.intro-video { padding: 0.5rem; overflow: hidden; position: sticky; top: 1rem; }
+.intro-video video { display: block; width: 100%; aspect-ratio: 16 / 9; border-radius: var(--radius-md); background: #000; }
+
+.intro-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.5rem; }
+.intro-steps button {
+  display: flex; gap: 0.75rem; width: 100%; text-align: left; padding: 0.75rem;
+  background: var(--surface); border: 1px solid var(--glass-border); border-radius: var(--radius-md);
+  color: inherit; font: inherit; cursor: pointer; transition: var(--transition);
+}
+.intro-steps button:hover, .intro-steps button:focus-visible { background: var(--surface-hover); border-color: var(--accent-cyan); outline: none; }
+.intro-step-num {
+  flex: none; width: 1.75rem; height: 1.75rem; border-radius: 50%; display: grid; place-items: center;
+  background: var(--accent-gradient); color: #fff; font-weight: 700; font-size: 0.85rem;
+}
+.intro-step-body { display: flex; flex-direction: column; gap: 0.2rem; min-width: 0; }
+.intro-step-title { display: flex; justify-content: space-between; gap: 0.5rem; font-weight: 600; color: var(--text-primary); }
+.intro-step-title time { color: var(--accent-cyan); font-weight: 500; font-size: 0.8rem; font-variant-numeric: tabular-nums; }
+.intro-step-text { color: var(--text-secondary); font-size: 0.85rem; line-height: 1.45; }
+
+@media (max-width: 900px) {
+  .intro-layout { grid-template-columns: 1fr; }
+  .intro-video { position: static; }
+}
