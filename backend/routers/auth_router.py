@@ -1,10 +1,13 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+import os
+
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from database import get_db
 from models import User
-from schemas import UserRegister, UserLogin, UserResponse, TokenResponse, EmailUpdate, PasswordUpdate, ForgotPasswordRequest
-from auth import verify_password, get_password_hash, create_access_token, get_current_user
+from schemas import UserRegister, UserLogin, UserResponse, TokenResponse, EmailUpdate, PasswordUpdate, ForgotPasswordRequest, ResetPasswordRequest
+from auth import verify_password, get_password_hash, create_access_token, get_current_user, create_reset_token, verify_reset_token
+from mailer import send_reset_email
 
 router = APIRouter(prefix="/api/auth", tags=["Authentication"])
 
@@ -59,18 +62,29 @@ def get_me(current_user: User = Depends(get_current_user)):
 
 
 @router.post("/forgot-password")
-def forgot_password(data: ForgotPasswordRequest, db: Session = Depends(get_db)):
-    # SECURITY: Luồng reset mật khẩu qua API bị vô hiệu hóa vì chưa có dịch vụ email.
-    # Khi có email service: gửi link chứa token ngẫu nhiên một lần; không đổi mật khẩu ở đây.
-    # Luồng cũ (đổi ngay & trả mật khẩu mới trong response) đã bị xóa vì rủi ro bảo mật P0.
-    _ = data  # không truy vấn DB để tránh timing attack
-    _ = db
+def forgot_password(data: ForgotPasswordRequest, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.email == data.email).first()
+    if user:
+        base_url = os.environ.get("APP_BASE_URL", "http://localhost:3456").rstrip("/")
+        link = f"{base_url}/reset-password?token={create_reset_token(user)}"
+        # Sent after the response so timing does not reveal whether the account exists.
+        background_tasks.add_task(send_reset_email, user.email, link)
     return {
         "message": (
-            "If an account with that email exists, password reset instructions "
-            "would be sent. Please contact support to reset your password."
+            "If an account with that email exists, a password reset link has been sent. "
+            "Check your inbox (and spam folder)."
         )
     }
+
+
+@router.post("/reset-password")
+def reset_password(data: ResetPasswordRequest, db: Session = Depends(get_db)):
+    user = verify_reset_token(data.token, db)
+    if user is None:
+        raise HTTPException(status_code=400, detail="Reset link is invalid or has expired")
+    user.password_hash = get_password_hash(data.new_password)
+    db.commit()
+    return {"detail": "Password has been reset"}
 
 
 @router.put("/me/email", response_model=UserResponse)

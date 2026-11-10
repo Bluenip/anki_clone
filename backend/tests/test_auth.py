@@ -131,3 +131,28 @@ def test_password_oversized_utf8_rejected(client):
         json={"email": "emojipass@example.com", "username": "EmojiPass", "password": emoji_pass},
     )
     assert resp2.status_code == 422
+
+
+def test_password_reset_flow(client, db_session, user_a, monkeypatch):
+    sent = []
+    monkeypatch.setattr("routers.auth_router.send_reset_email", lambda to, link: sent.append((to, link)))
+
+    client.post("/api/auth/forgot-password", json={"email": "nobody@example.com"})
+    assert sent == []
+    client.post("/api/auth/forgot-password", json={"email": user_a.email})
+    assert len(sent) == 1 and sent[0][0] == user_a.email
+    token = sent[0][1].split("token=", 1)[1]
+
+    # A reset token must not work as a login token.
+    assert client.get("/api/auth/me", headers={"Authorization": f"Bearer {token}"}).status_code == 401
+    # A login token must not work as a reset token.
+    login_token = client.post("/api/auth/login", json={"email": user_a.email, "password": "password123"}).json()["access_token"]
+    assert client.post("/api/auth/reset-password", json={"token": login_token, "new_password": "brandnewpass1"}).status_code == 400
+
+    assert client.post("/api/auth/reset-password", json={"token": token, "new_password": "short"}).status_code == 422
+    assert client.post("/api/auth/reset-password", json={"token": token, "new_password": "brandnewpass1"}).status_code == 200
+    # Single use: the password changed, so the same link is dead.
+    assert client.post("/api/auth/reset-password", json={"token": token, "new_password": "anotherpass1"}).status_code == 400
+
+    assert client.post("/api/auth/login", json={"email": user_a.email, "password": "password123"}).status_code == 401
+    assert client.post("/api/auth/login", json={"email": user_a.email, "password": "brandnewpass1"}).status_code == 200

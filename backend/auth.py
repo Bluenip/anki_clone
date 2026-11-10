@@ -1,3 +1,4 @@
+import hashlib
 import os
 import warnings
 from datetime import datetime, timedelta, timezone
@@ -93,6 +94,35 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
 
+RESET_TOKEN_MINUTES = 30
+
+
+def _password_fingerprint(password_hash: str) -> str:
+    # Binds the reset token to the current hash, so it dies once the password changes.
+    return hashlib.sha256(password_hash.encode("utf-8")).hexdigest()[:16]
+
+
+def create_reset_token(user: User) -> str:
+    return create_access_token(
+        {"sub": str(user.id), "purpose": "reset", "pwf": _password_fingerprint(user.password_hash)},
+        timedelta(minutes=RESET_TOKEN_MINUTES),
+    )
+
+
+def verify_reset_token(token: str, db: Session) -> Optional[User]:
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        user_id = int(payload.get("sub"))
+    except (JWTError, TypeError, ValueError):
+        return None
+    if payload.get("purpose") != "reset":
+        return None
+    user = db.query(User).filter(User.id == user_id).first()
+    if user is None or payload.get("pwf") != _password_fingerprint(user.password_hash):
+        return None
+    return user
+
+
 def get_current_user(
     request: Request,
     credentials: HTTPAuthorizationCredentials = Depends(security),
@@ -107,7 +137,7 @@ def get_current_user(
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         user_id_str = payload.get("sub")
-        if user_id_str is None:
+        if user_id_str is None or payload.get("purpose") is not None:
             raise credentials_exception
         user_id = int(user_id_str)
     except JWTError:

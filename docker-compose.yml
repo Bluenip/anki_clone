@@ -17,6 +17,11 @@ services:
       - ANKI_IMPORT_MIN_FREE_BYTES=${ANKI_IMPORT_MIN_FREE_BYTES:-268435456}
       - APP_ENV=production
       - JWT_SECRET_KEY=${JWT_SECRET_KEY:?JWT_SECRET_KEY must be set in .env or environment}
+      - APP_BASE_URL=${APP_BASE_URL:-http://localhost:3456}
+      - SMTP_HOST=${SMTP_HOST:-smtp.gmail.com}
+      - SMTP_PORT=${SMTP_PORT:-587}
+      - SMTP_USER=${SMTP_USER:-}
+      - SMTP_PASSWORD=${SMTP_PASSWORD:-}
     volumes:
       - anki-data:/data
       - anki-media:/app/media

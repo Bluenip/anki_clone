@@ -10,3 +10,6 @@ export const getMeApi = () => client.get('/api/auth/me');
 
 export const forgotPasswordApi = (email: string) =>
   client.post('/api/auth/forgot-password', { email });
+
+export const resetPasswordApi = (token: string, newPassword: string) =>
+  client.post('/api/auth/reset-password', { token, new_password: newPassword });

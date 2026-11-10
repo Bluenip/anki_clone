@@ -66,6 +66,16 @@ class EmailUpdate(BaseModel):
         return v
 
 
+def _check_new_password(v: str) -> str:
+    if len(v) < 8:
+        raise ValueError("New password must be at least 8 characters")
+    if len(v.encode("utf-8")) > 72:
+        raise ValueError("New password must not exceed 72 bytes (bcrypt maximum limit)")
+    if len(v) > 72:
+        raise ValueError("New password must be at most 72 characters")
+    return v
+
+
 class PasswordUpdate(BaseModel):
     current_password: str
     new_password: str
@@ -80,18 +90,22 @@ class PasswordUpdate(BaseModel):
     @field_validator("new_password")
     @classmethod
     def validate_new_password(cls, v: str) -> str:
-        if len(v) < 8:
-            raise ValueError("New password must be at least 8 characters")
-        if len(v.encode("utf-8")) > 72:
-            raise ValueError("New password must not exceed 72 bytes (bcrypt maximum limit)")
-        if len(v) > 72:
-            raise ValueError("New password must be at most 72 characters")
-        return v
+        return _check_new_password(v)
 
 
 
 class ForgotPasswordRequest(BaseModel):
     email: EmailStr
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str = Field(max_length=2048)
+    new_password: str
+
+    @field_validator("new_password")
+    @classmethod
+    def validate_new_password(cls, v: str) -> str:
+        return _check_new_password(v)
 
 
 class TokenResponse(BaseModel):
