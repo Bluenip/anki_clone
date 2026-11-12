@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { translateServerError } from '../i18n/serverErrors';
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
 // Optional package-only ingress; every path still reaches the same authenticated backend.
@@ -25,6 +26,8 @@ client.interceptors.request.use((config) => {
 client.interceptors.response.use(
   (response) => response,
   (error) => {
+    const data = error.response?.data;
+    if (data && typeof data.detail === 'string') data.detail = translateServerError(data.detail);
     // Let the upload's existing offset reconciliation/retry use the original API.
     // Do not replay mutations here: a lost confirmation may already have committed.
     if (PACKAGE_API_BASE && error.config?.baseURL === PACKAGE_API_BASE &&

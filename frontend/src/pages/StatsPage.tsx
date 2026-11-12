@@ -224,7 +224,7 @@ export const StatsPage = () => {
                     <tr>
                       <th scope="col">{t('stats.timeline')}</th>
                       <th scope="col" style={{ textAlign: 'right' }}>{t('stat.due')}</th>
-                      <th scope="col" aria-hidden="true" style={{ width: '40%' }}>Bar</th>
+                      <th scope="col" aria-hidden="true" style={{ width: '40%' }}>{t('stats.bar')}</th>
                     </tr>
                   </thead>
                   <tbody>

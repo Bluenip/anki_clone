@@ -27,7 +27,10 @@ export const PrefsProvider = ({ children }: { children: ReactNode }) => {
   const [lang, setLangState] = useState<Lang>(initialLang);
   setActiveLang(lang);
 
-  useEffect(() => { document.documentElement.dataset.theme = theme; }, [theme]);
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', theme === 'light' ? '#ffffff' : '#20252b');
+  }, [theme]);
   useEffect(() => { document.documentElement.lang = lang; }, [lang]);
 
   const value = useMemo(() => ({

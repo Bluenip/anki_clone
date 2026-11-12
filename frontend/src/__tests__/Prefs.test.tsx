@@ -38,3 +38,16 @@ describe('theme and language toggles', () => {
     expect(missing).toEqual([]);
   });
 });
+
+describe('server error translation', () => {
+  it('translates known backend details and leaves unknown ones', async () => {
+    const { translateServerError } = await import('../i18n/serverErrors');
+    const { setActiveLang } = await import('../context/prefs-context-base');
+    setActiveLang('vi');
+    expect(translateServerError('Invalid email or password')).toBe('Email hoặc mật khẩu không đúng');
+    expect(translateServerError('File too large. Maximum allowed size is 1024 MiB.')).toBe('Tệp quá lớn. Kích thước tối đa là 1024 MiB.');
+    expect(translateServerError('Something new')).toBe('Something new');
+    setActiveLang('en');
+    expect(translateServerError('Invalid email or password')).toBe('Invalid email or password');
+  });
+});

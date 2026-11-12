@@ -149,16 +149,24 @@ a:hover { color: var(--link-hover); }
   font-size: 1.5rem; font-weight: 700; color: var(--text-primary); text-decoration: none;
 }
 .brand-icon { font-size: 1.5rem; }
-.nav-links { display: flex; gap: 1rem; }
+.nav-links { display: flex; gap: 0.25rem; }
 .menu-item { 
   padding: 0.5rem 0.75rem; cursor: pointer; text-decoration: none; 
   color: var(--text-secondary); transition: var(--transition); 
   border-radius: var(--radius-sm); font-weight: 500; font-size: 1.05rem;
+  white-space: nowrap;
 }
 .menu-item:hover:not(.disabled) { background: var(--surface); color: var(--text-primary); }
 .menu-item.active { color: var(--accent-cyan); font-weight: 600; }
 .menu-item.disabled { opacity: 0.5; cursor: not-allowed; }
-.top-menu-right { display: flex; align-items: center; gap: 1rem; }
+.top-menu-right { display: flex; align-items: center; gap: 0.5rem; }
+.pref-toggle { white-space: nowrap; }
+/* Vietnamese labels are longer; tighten the bar before it would wrap. */
+@media (max-width: 1180px) {
+  .top-menu-bar { padding: 1rem; }
+  .top-menu-left { gap: 1rem; }
+  .menu-item { font-size: 0.95rem; padding: 0.5rem 0.5rem; }
+}
 
 /* ─── Footer ────────────────────────────────────── */
 .footer {
@@ -579,6 +587,12 @@ a:hover { color: var(--link-hover); }
   .card-form { position: static; }
   .shared-layout { grid-template-columns: 1fr; }
   .categories-sidebar { position: static; }
+}
+
+@media (max-width: 960px) {
+  .nav-links, .top-menu-right { display: none; }
+  .hamburger-btn { display: block; }
+  .mobile-nav-menu { display: flex; }
 }
 
 @media (max-width: 768px) {

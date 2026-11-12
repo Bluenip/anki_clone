@@ -592,7 +592,7 @@ const DeckOptionsPageContent = () => {
             {t('nav.decks')}
           </Link>
           <span className="options-breadcrumb-sep">/</span>
-          <span className="options-breadcrumb-current">Options for {deck.name}</span>
+          <span className="options-breadcrumb-current">{t('do.optionsFor', { name: deck.name })}</span>
         </div>
         <div className="options-toolbar-actions">
           {options?.preset_id != null ? (

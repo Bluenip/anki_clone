@@ -478,7 +478,7 @@ const BrowsePage = () => {
                 color: 'var(--accent-blue, #38bdf8)',
               }}
             >
-              {selectionCount} selected
+              {t('browse.selectedShort', { count: selectionCount })}
             </span>
           </div>
 
@@ -562,7 +562,7 @@ const BrowsePage = () => {
               <option value="">{t('browse.chooseDeck')}</option>
               {moveDecks.map(deck => <option key={deck.id} value={deck.id}>{deck.name}</option>)}
             </select>
-            <p>Move {selectionCount} selected cards. Existing review dates stay unchanged.</p>
+            <p>{t('browse.moveHint', { count: selectionCount })}</p>
             <button type="button" className="btn btn-primary" disabled={!targetDeck || actionPending || selectionCount === 0}
               onClick={() => handleBulkAction('move')}>{t('browse.moveSelected')}</button>
             <button type="button" className="btn btn-secondary" disabled={actionPending}
@@ -663,7 +663,7 @@ const BrowsePage = () => {
           <button type="button" className="btn btn-secondary"
             disabled={pageOffset === 0 || loading || saving || actionPending || moveLoading}
             onClick={() => fetchCards(activeQueryRef.current, Math.max(0, pageOffset - PAGE_SIZE))}>{t('browse.prevPage')}</button>
-          <span>Page {Math.floor(pageOffset / PAGE_SIZE) + 1} · {cards.length} cards</span>
+          <span>{t('browse.pageInfo', { page: Math.floor(pageOffset / PAGE_SIZE) + 1, count: cards.length })}</span>
           <button type="button" className="btn btn-secondary"
             disabled={cards.length < PAGE_SIZE || loading || saving || actionPending || moveLoading}
             onClick={() => fetchCards(activeQueryRef.current, pageOffset + PAGE_SIZE)}>{t('browse.nextPage')}</button>
