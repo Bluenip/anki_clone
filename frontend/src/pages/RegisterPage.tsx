@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { registerApi } from '../api/auth';
 import { useAuth } from '../context/useAuth';
+import { usePrefs } from '../context/usePrefs';
 
 const RegisterPage = () => {
   const [email, setEmail] = useState('');
@@ -10,6 +11,7 @@ const RegisterPage = () => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const { login } = useAuth();
+  const { t } = usePrefs();
   const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -21,7 +23,7 @@ const RegisterPage = () => {
       login(res.data.access_token, res.data.user);
       navigate('/decks');
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'Registration failed');
+      setError(err.response?.data?.detail || t('auth.registerFailed'));
     } finally {
       setLoading(false);
     }
@@ -32,29 +34,29 @@ const RegisterPage = () => {
       <div className="auth-card glass-card">
         <div className="auth-header">
           <span className="auth-icon">⚡</span>
-          <h1>Create Account</h1>
-          <p>Start your learning journey</p>
+          <h1>{t('auth.createAccount')}</h1>
+          <p>{t('auth.registerSubtitle')}</p>
         </div>
         {error && <div className="alert alert-error">{error}</div>}
         <form onSubmit={handleSubmit} className="auth-form">
           <div className="form-group">
-            <label htmlFor="username">Username</label>
-            <input id="username" type="text" value={username} onChange={e => setUsername(e.target.value)} placeholder="Your name" required />
+            <label htmlFor="username">{t('auth.username')}</label>
+            <input id="username" type="text" value={username} onChange={e => setUsername(e.target.value)} placeholder={t('auth.yourName')} required />
           </div>
           <div className="form-group">
-            <label htmlFor="email">Email</label>
+            <label htmlFor="email">{t('auth.email')}</label>
             <input id="email" type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="your@email.com" required />
           </div>
           <div className="form-group">
-            <label htmlFor="password">Password</label>
+            <label htmlFor="password">{t('auth.password')}</label>
             <input id="password" type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••" required minLength={6} />
           </div>
           <button type="submit" className="btn btn-primary btn-full" disabled={loading}>
-            {loading ? 'Creating...' : 'Create Account'}
+            {loading ? t('auth.creating') : t('auth.createAccount')}
           </button>
         </form>
         <p className="auth-footer">
-          Already have an account? <Link to="/login">Sign In</Link>
+          {t('auth.haveAccount')} <Link to="/login">{t('auth.signIn')}</Link>
         </p>
       </div>
     </div>

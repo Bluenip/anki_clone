@@ -1,12 +1,14 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { forgotPasswordApi } from '../api/auth';
+import { usePrefs } from '../context/usePrefs';
 
 const ForgotPasswordPage = () => {
   const [email, setEmail] = useState('');
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const { t } = usePrefs();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -18,7 +20,7 @@ const ForgotPasswordPage = () => {
       const res = await forgotPasswordApi(email);
       setMessage(res.data.message);
     } catch {
-      setError('Failed to process request');
+      setError(t('auth.requestFailed'));
     } finally {
       setLoading(false);
     }
@@ -29,8 +31,8 @@ const ForgotPasswordPage = () => {
       <div className="auth-card glass-card">
         <div className="auth-header">
           <span className="auth-icon">🔑</span>
-          <h1>Reset Password</h1>
-          <p>Enter your email address</p>
+          <h1>{t('auth.resetPassword')}</h1>
+          <p>{t('auth.enterEmail')}</p>
         </div>
         
         {error && <div className="alert alert-error">{error}</div>}
@@ -39,7 +41,7 @@ const ForgotPasswordPage = () => {
         {!message && (
           <form onSubmit={handleSubmit} className="auth-form">
             <div className="form-group">
-              <label htmlFor="email">Email</label>
+              <label htmlFor="email">{t('auth.email')}</label>
               <input 
                 id="email" 
                 type="email" 
@@ -50,13 +52,13 @@ const ForgotPasswordPage = () => {
               />
             </div>
             <button type="submit" className="btn btn-primary btn-full" disabled={loading}>
-              {loading ? 'Processing...' : 'Reset Password'}
+              {loading ? t('auth.processing') : t('auth.resetPassword')}
             </button>
           </form>
         )}
         
         <p className="auth-footer">
-          Remembered your password? <Link to="/login">Sign In</Link>
+          {t('auth.remembered')} <Link to="/login">{t('auth.signIn')}</Link>
         </p>
       </div>
     </div>

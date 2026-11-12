@@ -2,6 +2,8 @@ import './Compatibility.css';
 import { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
+import { PrefsProvider } from './context/PrefsContext';
+import { usePrefs } from './context/usePrefs';
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
 import ProtectedRoute from './components/ProtectedRoute';
@@ -27,14 +29,20 @@ const StatsPage = lazy(() => import('./pages/StatsPage'));
 
 import DeckOptionsPage from './pages/DeckOptionsPage';
 
+const LoadingFallback = () => {
+  const { t } = usePrefs();
+  return <div role="status">{t('common.loading')}</div>;
+};
+
 function App() {
   return (
+    <PrefsProvider>
     <AuthProvider>
       <BrowserRouter>
         <div className="app-layout">
           <Navbar />
           <main className="main-content">
-            <Suspense fallback={<div role="status">Loading…</div>}><Routes>
+            <Suspense fallback={<LoadingFallback />}><Routes>
               <Route path="/" element={<Navigate to="/decks" replace />} />
               <Route path="/login" element={<LoginPage />} />
               <Route path="/register" element={<RegisterPage />} />
@@ -63,6 +71,7 @@ function App() {
         </div>
       </BrowserRouter>
     </AuthProvider>
+    </PrefsProvider>
   );
 }
 

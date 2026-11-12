@@ -19,6 +19,8 @@ import {
   type StudyCard,
   type CreateSessionPayload,
 } from '../api/filtered';
+import { usePrefs } from '../context/usePrefs';
+import { tNow } from '../context/prefs-context-base';
 
 const formatSeconds = (sec: number | undefined): string => {
   if (sec === undefined || sec === 0) return 'Exit';
@@ -46,6 +48,7 @@ function errorMessage(error: unknown, fallback: string): string {
 }
 
 export const CustomStudyPage = () => {
+  const { t } = usePrefs();
   const { sessionId: paramSessionId, id: paramId } = useParams<{ sessionId?: string; id?: string }>();
   const [searchParams] = useSearchParams();
   const urlSessionId = paramSessionId || paramId || searchParams.get('session');
@@ -152,7 +155,7 @@ export const CustomStudyPage = () => {
       } catch (err: unknown) {
         if (!isMountedRef.current || seq !== fetchSessionsSeqRef.current) return;
         const anyErr = err as { response?: { data?: { detail?: string } }; message?: string };
-        setSessionsError(anyErr?.response?.data?.detail || anyErr?.message || 'Failed to load sessions');
+        setSessionsError(anyErr?.response?.data?.detail || anyErr?.message || tNow('cs.loadSessionsFailed'));
       } finally {
         if (isMountedRef.current && seq === fetchSessionsSeqRef.current) {
           setLoadingSessions(false);
@@ -215,9 +218,9 @@ export const CustomStudyPage = () => {
       const anyErr = err as { response?: { status?: number; data?: { detail?: string } }; message?: string };
       if (anyErr?.response?.status === 409) {
         setIs409Conflict(true);
-        setCardError(anyErr.response.data?.detail || 'Session version changed. Please reload.');
+        setCardError(anyErr.response.data?.detail || tNow('cs.versionChanged'));
       } else {
-        setCardError(anyErr?.response?.data?.detail || anyErr?.message || 'Failed to load next card');
+        setCardError(anyErr?.response?.data?.detail || anyErr?.message || tNow('cs.loadCardFailed'));
       }
     } finally {
       if (isMountedRef.current && gen === fetchGenRef.current && activeSessionIdRef.current === sessionId) {
@@ -322,11 +325,11 @@ export const CustomStudyPage = () => {
           setReviewError(
             `409 Conflict: ${
               detail ||
-              'This session or card was modified elsewhere. Please reload to sync before continuing.'
+              tNow('cs.modifiedElsewhere')
             }`
           );
         } else {
-          setReviewError(detail || anyErr?.message || 'Failed to submit review');
+          setReviewError(detail || anyErr?.message || tNow('cs.reviewFailed'));
         }
       } finally {
         isSubmittingRef.current = false;
@@ -357,7 +360,7 @@ export const CustomStudyPage = () => {
     } catch (err: unknown) {
       if (!isMountedRef.current || activeSessionIdRef.current !== sid || selectionEpochRef.current !== epoch) return;
       const anyErr = err as { response?: { status?: number; data?: { detail?: string } }; message?: string };
-      setReviewError(anyErr?.response?.data?.detail || anyErr?.message || 'Failed to undo review');
+      setReviewError(anyErr?.response?.data?.detail || anyErr?.message || tNow('study.undoFailed'));
     } finally {
       isSubmittingRef.current = false;
       if (isMountedRef.current) {
@@ -448,7 +451,7 @@ export const CustomStudyPage = () => {
         setIs409Conflict(true);
         setCardError('409 Conflict: Session changed. Please reload.');
       } else {
-        setCardError(anyErr?.response?.data?.detail || anyErr?.message || 'Failed to rebuild session');
+        setCardError(anyErr?.response?.data?.detail || anyErr?.message || t('cs.rebuildFailed'));
       }
     } finally {
       if (isMountedRef.current) {
@@ -480,7 +483,7 @@ export const CustomStudyPage = () => {
         setIs409Conflict(true);
         setCardError('409 Conflict: Session changed. Please reload.');
       } else {
-        setCardError(anyErr?.response?.data?.detail || anyErr?.message || 'Failed to empty session');
+        setCardError(anyErr?.response?.data?.detail || anyErr?.message || t('cs.emptyFailed'));
       }
     } finally {
       if (isMountedRef.current) {
@@ -493,7 +496,7 @@ export const CustomStudyPage = () => {
   const handleDelete = async (session: Session) => {
     const sid = session.id;
     const epoch = selectionEpochRef.current;
-    if (!window.confirm(`Delete custom study session "${session.name}"?`)) {
+    if (!window.confirm(t('cs.confirmDelete', { name: session.name }))) {
       return;
     }
     setActionLoadingId(sid);
@@ -512,7 +515,7 @@ export const CustomStudyPage = () => {
         setIs409Conflict(true);
         setSessionsError('409 Conflict: Session was modified. Please refresh.');
       } else {
-        setSessionsError(anyErr?.response?.data?.detail || anyErr?.message || 'Failed to delete session');
+        setSessionsError(anyErr?.response?.data?.detail || anyErr?.message || t('cs.deleteFailed'));
       }
     } finally {
       if (isMountedRef.current) {
@@ -538,7 +541,7 @@ export const CustomStudyPage = () => {
     e.preventDefault();
     if (createPendingRef.current) return;
     if (!createForm.name.trim()) {
-      setCreateError('Name is required');
+      setCreateError(t('cs.nameRequired'));
       return;
     }
     createPendingRef.current = true;
@@ -575,7 +578,7 @@ export const CustomStudyPage = () => {
         preview_good_seconds: 0,
       });
     } catch (err: unknown) {
-      if (isMountedRef.current) setCreateError(errorMessage(err, 'Failed to create session'));
+      if (isMountedRef.current) setCreateError(errorMessage(err, t('cs.createFailed')));
     } finally {
       createPendingRef.current = false;
       if (isMountedRef.current) setCreating(false);
@@ -610,13 +613,13 @@ export const CustomStudyPage = () => {
             <button
               className="btn btn-ghost btn-sm"
               onClick={handleBackToSessions}
-              aria-label="Back to sessions list"
+              aria-label={t('cs.backToListAria')}
             >
-              ← All Sessions
+              ← {t('cs.allSessions')}
             </button>
           )}
           <h1 style={{ fontSize: '1.75rem', fontWeight: 700, margin: 0 }}>
-            {selectedSession ? selectedSession.name : 'Custom Study'}
+            {selectedSession ? selectedSession.name : t('nav.customStudy')}
           </h1>
         </div>
 
@@ -629,7 +632,7 @@ export const CustomStudyPage = () => {
                 setEditingSession(null); setIsCreateModalOpen(true);
               }}
             >
-              + New Custom Study Session
+              + {t('cs.newSession')}
             </button>
           ) : (
             <>
@@ -637,25 +640,25 @@ export const CustomStudyPage = () => {
                 className="btn btn-ghost btn-sm"
                 disabled={isPending || actionLoadingId === selectedSession.id || loadingCard}
                 onClick={handleUndo}
-                title="Undo last review in this session (Ctrl+Z)"
+                title={t('cs.undoTitle')}
               >
-                ⤺ Undo
+                ⤺ {t('study.undo')}
               </button>
               <button
                 className="btn btn-ghost btn-sm"
                 disabled={isPending || actionLoadingId === selectedSession.id || loadingCard}
                 onClick={() => handleRebuild(selectedSession)}
-                title="Rebuild session with fresh cards matching search criteria"
+                title={t('cs.rebuildTitle')}
               >
-                🔄 Rebuild
+                🔄 {t('cs.rebuild')}
               </button>
               <button
                 className="btn btn-ghost btn-sm"
                 disabled={isPending || actionLoadingId === selectedSession.id || loadingCard}
                 onClick={() => handleEmpty(selectedSession)}
-                title="Empty all remaining cards from this session"
+                title={t('cs.emptyTitle')}
               >
-                🗑️ Empty
+                🗑️ {t('cs.empty')}
               </button>
             </>
           )}
@@ -692,31 +695,31 @@ export const CustomStudyPage = () => {
                   ? 'rgba(34, 197, 94, 0.3)'
                   : 'rgba(245, 158, 11, 0.3)'
               }`,
-              color: selectedSession.reschedule ? '#86efac' : '#fde047',
+              color: selectedSession.reschedule ? 'var(--success-text)' : 'var(--warning-text)',
             }}
           >
             <div>
               <div style={{ fontWeight: 600, fontSize: '0.95rem', marginBottom: '0.2rem' }}>
-                {selectedSession.reschedule ? 'Reschedule Mode (Active)' : 'Preview Mode (Active)'}
+                {selectedSession.reschedule ? t('cs.rescheduleActive') : t('cs.previewActive')}
               </div>
               <div style={{ fontSize: '0.85rem', opacity: 0.9 }}>
                 {selectedSession.reschedule
-                  ? "Reviews modify scheduling and intervals in the card's original home deck. Uses 4 ratings."
-                  : 'Reviews will NOT affect original card schedules. Custom delays repeat in session; Good/Easy can exit.'}
+                  ? t('cs.rescheduleHint')
+                  : t('cs.previewHint')}
               </div>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', whiteSpace: 'nowrap' }}>
               <span
                 className="badge"
                 style={{
-                  background: 'rgba(255,255,255,0.1)',
+                  background: 'rgba(var(--fg-rgb),0.1)',
                   padding: '0.35rem 0.75rem',
                   borderRadius: '20px',
                   fontWeight: 600,
                   fontSize: '0.8rem',
                 }}
               >
-                {selectedSession.remaining} remaining
+                {t('cs.remaining', { count: selectedSession.remaining })}
               </span>
             </div>
           </div>
@@ -726,7 +729,7 @@ export const CustomStudyPage = () => {
             const { name, search, limit, order, reschedule, preview_again_seconds, preview_hard_seconds, preview_good_seconds } = selectedSession;
             setCreateForm({ name, search, limit, order, reschedule, preview_again_seconds, preview_hard_seconds, preview_good_seconds, filters: selectedSession.filters || [] });
             setCreateError(null); setIsCreateModalOpen(true);
-          }}>Edit session settings</button>
+          }}>{t('cs.editSettings')}</button>
           {/* 409 Conflict Guidance or Review Error Banner */}
           {reviewError && (
             <div
@@ -746,7 +749,7 @@ export const CustomStudyPage = () => {
                 <span>{reviewError}</span>
                 {is409Conflict && (
                   <div style={{ fontSize: '0.85rem', marginTop: '0.25rem', opacity: 0.9 }}>
-                    Guidance: A version mismatch occurred. Please reload the session to get the latest cards.
+                    {t('cs.guidance')}
                   </div>
                 )}
               </div>
@@ -757,13 +760,13 @@ export const CustomStudyPage = () => {
                     onClick={handleReloadCurrentSession}
                     disabled={isPending}
                   >
-                    Reload Session
+                    {t('cs.reloadSession')}
                   </button>
                 )}
                 <button
                   className="btn btn-ghost btn-sm"
                   onClick={() => setReviewError(null)}
-                  aria-label="Dismiss error"
+                  aria-label={t('study.dismissError')}
                 >
                   ✕
                 </button>
@@ -789,7 +792,7 @@ export const CustomStudyPage = () => {
                 onClick={() => fetchNextCard(selectedSession.id)}
                 disabled={isPending}
               >
-                Retry
+                {t('common.retry')}
               </button>
             </div>
           )}
@@ -813,7 +816,7 @@ export const CustomStudyPage = () => {
                   }}
                 >
                   <span className="card-label" style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>
-                    {showAnswer ? 'Answer' : 'Question'}
+                    {showAnswer ? t('study.answer') : t('study.question')}
                   </span>
                   <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
                     {card.deck_name}
@@ -825,7 +828,7 @@ export const CustomStudyPage = () => {
                   const sid = selectedSession.id; const epoch = selectionEpochRef.current;
                   isSubmittingRef.current = true; setIsPending(true);
                   try { await client.post(`/api/study/${card.card_id}/action`, { action: 'bury', expected_version: card.version }); if (activeSessionIdRef.current === sid && epoch === selectionEpochRef.current) await fetchNextCard(sid); }
-                  catch (e) { if (activeSessionIdRef.current === sid && epoch === selectionEpochRef.current) setReviewError(errorMessage(e, 'Could not bury card')); }
+                  catch (e) { if (activeSessionIdRef.current === sid && epoch === selectionEpochRef.current) setReviewError(errorMessage(e, t('study.buryFailed'))); }
                   finally { isSubmittingRef.current = false; if (isMountedRef.current) setIsPending(false); }
                 }} />
                 <CardFace
@@ -849,7 +852,7 @@ export const CustomStudyPage = () => {
                     onClick={handleRevealAnswer}
                     disabled={isPending || loadingCard}
                   >
-                    Show Answer (Space)
+                    {t('cs.showAnswer')}
                   </button>
                 ) : (
                   /* 4 Rating Buttons (Active in both Preview and Reschedule) */
@@ -863,7 +866,7 @@ export const CustomStudyPage = () => {
                       disabled={isPending || loadingCard}
                       onClick={() => handleAnswer(1)}
                     >
-                      <span className="rating-label">Again (1)</span>
+                      <span className="rating-label">{t('rate.again')} (1)</span>
                       <span className="rating-interval">
                         {selectedSession.reschedule
                           ? card.intervals?.again?.display || '< 1m'
@@ -875,7 +878,7 @@ export const CustomStudyPage = () => {
                       disabled={isPending || loadingCard}
                       onClick={() => handleAnswer(2)}
                     >
-                      <span className="rating-label">Hard (2)</span>
+                      <span className="rating-label">{t('rate.hard')} (2)</span>
                       <span className="rating-interval">
                         {selectedSession.reschedule
                           ? card.intervals?.hard?.display || '1d'
@@ -887,7 +890,7 @@ export const CustomStudyPage = () => {
                       disabled={isPending || loadingCard}
                       onClick={() => handleAnswer(3)}
                     >
-                      <span className="rating-label">Good (3)</span>
+                      <span className="rating-label">{t('rate.good')} (3)</span>
                       <span className="rating-interval">
                         {selectedSession.reschedule
                           ? card.intervals?.good?.display || '3d'
@@ -899,11 +902,11 @@ export const CustomStudyPage = () => {
                       disabled={isPending || loadingCard}
                       onClick={() => handleAnswer(4)}
                     >
-                      <span className="rating-label">Easy (4)</span>
+                      <span className="rating-label">{t('rate.easy')} (4)</span>
                       <span className="rating-interval">
                         {selectedSession.reschedule
                           ? card.intervals?.easy?.display || '4d'
-                          : 'Exit'}
+                          : t('cs.exit')}
                       </span>
                     </button>
                   </div>
@@ -916,9 +919,9 @@ export const CustomStudyPage = () => {
           {!loadingCard && !card && nextAvailableAt && (
             <div className="study-done glass-card" style={{ width: '100%', textAlign: 'center', padding: '2.5rem' }}>
               <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>⏳</div>
-              <h2 style={{ fontSize: '1.4rem', marginBottom: '0.5rem' }}>Cards are waiting</h2>
+              <h2 style={{ fontSize: '1.4rem', marginBottom: '0.5rem' }}>{t('cs.waiting')}</h2>
               <p style={{ color: 'var(--text-secondary)', marginBottom: '1.5rem' }}>
-                No cards are ready right now. The next card repeats at{' '}
+                {t('cs.waitingText')}{' '}
                 <strong style={{ color: 'var(--accent-cyan)' }}>{formatTime(nextAvailableAt)}</strong>.
               </p>
               <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
@@ -927,14 +930,14 @@ export const CustomStudyPage = () => {
                   onClick={() => fetchNextCard(selectedSession.id)}
                   disabled={isPending}
                 >
-                  Check Now
+                  {t('cs.checkNow')}
                 </button>
                 <button
                   className="btn btn-ghost"
                   onClick={() => handleRebuild(selectedSession)}
                   disabled={isPending}
                 >
-                  Rebuild Session
+                  {t('cs.rebuildSession')}
                 </button>
               </div>
             </div>
@@ -944,9 +947,9 @@ export const CustomStudyPage = () => {
           {!loadingCard && !card && !nextAvailableAt && (
             <div className="study-done glass-card" style={{ width: '100%', textAlign: 'center', padding: '2.5rem' }}>
               <div style={{ fontSize: '3.5rem', marginBottom: '1rem' }}>🎉</div>
-              <h2 style={{ fontSize: '1.4rem', marginBottom: '0.5rem' }}>{selectedSession.remaining > 0 ? 'No cards available' : 'Custom Study Complete!'}</h2>
+              <h2 style={{ fontSize: '1.4rem', marginBottom: '0.5rem' }}>{selectedSession.remaining > 0 ? t('cs.noCards') : t('cs.complete')}</h2>
               <p style={{ color: 'var(--text-secondary)', marginBottom: '1.5rem' }}>
-                {selectedSession.remaining > 0 ? 'Remaining cards are suspended or buried. You can empty the session to return them to regular study.' : 'You have finished all cards in this filtered session.'}
+                {selectedSession.remaining > 0 ? t('cs.remainingHidden') : t('cs.finished')}
               </p>
               <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
                 <button
@@ -954,21 +957,21 @@ export const CustomStudyPage = () => {
                   onClick={() => handleRebuild(selectedSession)}
                   disabled={isPending}
                 >
-                  Rebuild Session
+                  {t('cs.rebuildSession')}
                 </button>
                 <button
                   className="btn btn-ghost"
                   onClick={() => handleEmpty(selectedSession)}
                   disabled={isPending}
                 >
-                  Empty Session
+                  {t('cs.emptySession')}
                 </button>
                 <button
                   className="btn btn-ghost"
                   onClick={handleBackToSessions}
                   disabled={isPending}
                 >
-                  Back to Sessions
+                  {t('cs.backToSessions')}
                 </button>
               </div>
             </div>
@@ -988,15 +991,15 @@ export const CustomStudyPage = () => {
           {!loadingSessions && sessions.length === 0 && (
             <div className="glass-card empty-state" style={{ textAlign: 'center', padding: '3rem 2rem' }}>
               <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>📚</div>
-              <h2 style={{ fontSize: '1.25rem', marginBottom: '0.5rem' }}>No Custom Study Sessions</h2>
+              <h2 style={{ fontSize: '1.25rem', marginBottom: '0.5rem' }}>{t('cs.noSessions')}</h2>
               <p style={{ color: 'var(--text-secondary)', marginBottom: '1.5rem' }}>
-                Create a filtered session to study specific tags, due cards, or review ahead without altering your deck structure.
+                {t('cs.noSessionsText')}
               </p>
               <button
                 className="btn btn-primary"
                 onClick={() => { setEditingSession(null); setIsCreateModalOpen(true); }}
               >
-                Create Filtered Session
+                {t('cs.createFiltered')}
               </button>
             </div>
           )}
@@ -1027,14 +1030,14 @@ export const CustomStudyPage = () => {
                           background: session.reschedule
                             ? 'rgba(34, 197, 94, 0.15)'
                             : 'rgba(245, 158, 11, 0.15)',
-                          color: session.reschedule ? '#86efac' : '#fde047',
+                          color: session.reschedule ? 'var(--success-text)' : 'var(--warning-text)',
                           padding: '0.2rem 0.6rem',
                           borderRadius: '12px',
                           fontSize: '0.75rem',
                           fontWeight: 600,
                         }}
                       >
-                        {session.reschedule ? 'Reschedule' : 'Preview'}
+                        {session.reschedule ? t('cs.reschedule') : t('common.preview')}
                       </span>
                       <span
                         className="badge"
@@ -1047,16 +1050,16 @@ export const CustomStudyPage = () => {
                           fontWeight: 600,
                         }}
                       >
-                        {session.remaining} remaining
+                        {t('cs.remaining', { count: session.remaining })}
                       </span>
                     </div>
 
                     <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-                      <span>Search: <code style={{ color: 'var(--accent-cyan)' }}>{session.search}</code></span>
+                      <span>{t('cs.search')} <code style={{ color: 'var(--accent-cyan)' }}>{session.search}</code></span>
                       <span style={{ margin: '0 0.5rem' }}>•</span>
-                      <span>Limit: {session.limit}</span>
+                      <span>{t('cs.limit')} {session.limit}</span>
                       <span style={{ margin: '0 0.5rem' }}>•</span>
-                      <span>Order: {session.order}</span>
+                      <span>{t('cs.order')} {session.order}</span>
                     </div>
                   </div>
 
@@ -1066,32 +1069,32 @@ export const CustomStudyPage = () => {
                       onClick={() => handleSelectSession(session)}
                       disabled={actionLoadingId === session.id}
                     >
-                      Study
+                      {t('cs.study')}
                     </button>
                     <button
                       className="btn btn-ghost btn-sm"
                       disabled={isPending || actionLoadingId === session.id}
                       onClick={() => handleRebuild(session)}
-                      title="Rebuild session"
+                      title={t('cs.rebuildSession')}
                     >
-                      Rebuild
+                      {t('cs.rebuild')}
                     </button>
                     <button
                       className="btn btn-ghost btn-sm"
                       disabled={isPending || actionLoadingId === session.id}
                       onClick={() => handleEmpty(session)}
-                      title="Empty session"
+                      title={t('cs.emptySession')}
                     >
-                      Empty
+                      {t('cs.empty')}
                     </button>
                     <button
                       className="btn btn-ghost btn-sm"
                       disabled={isPending || actionLoadingId === session.id}
                       onClick={() => handleDelete(session)}
-                      title="Delete session"
+                      title={t('cs.deleteSession')}
                       style={{ color: 'var(--danger)' }}
                     >
-                      Delete
+                      {t('common.delete')}
                     </button>
                   </div>
                 </div>
@@ -1106,7 +1109,7 @@ export const CustomStudyPage = () => {
         <div className="modal-overlay" role="dialog" aria-modal="true">
           <div className="modal glass-card" style={{ maxWidth: '580px', maxHeight: '90vh', overflowY: 'auto' }}>
             <h2 style={{ fontSize: '1.35rem', fontWeight: 700, marginBottom: '1.25rem' }}>
-              {editingSession ? 'Edit Custom Study Session' : 'Create Custom Study Session'}
+              {editingSession ? t('cs.editTitle') : t('cs.createTitle')}
             </h2>
 
             {createError && (
@@ -1119,33 +1122,33 @@ export const CustomStudyPage = () => {
               <fieldset disabled={creating} style={{border: 0, padding: 0, minWidth: 0}}>
               <div className="form-group" style={{ marginBottom: '1rem' }}>
                 <label htmlFor="custom-study-name" style={{ display: 'block', marginBottom: '0.35rem', fontWeight: 500 }}>
-                  Session Name *
+                  {t('cs.sessionName')}
                 </label>
                 <input
                   id="custom-study-name"
                   type="text"
                   required
-                  placeholder="e.g. Cramming Biology"
+                  placeholder={t('cs.namePlaceholder')}
                   value={createForm.name}
                   onChange={(e) => setCreateForm({ ...createForm, name: e.target.value })}
                 />
               </div>
 
               <div className="form-group" style={{ marginBottom: '1rem' }}>
-                <div className="form-group"><label>Study preset<select value="" onChange={e => { if (e.target.value) setCreateForm(old => ({ ...old, search: e.target.value, filters: [], order: 'due' })); }}>
-                <option value="">Choose a preset</option><option value="is:due">Review due cards</option><option value="rated:1:1">Review forgotten cards today</option><option value="is:new">Study new cards</option><option value="added:7">Preview recently added cards</option><option value="is:review -is:due">Review ahead</option><option value="tag:marked">Study marked notes</option>
+                <div className="form-group"><label>{t('cs.preset')}<select value="" onChange={e => { if (e.target.value) setCreateForm(old => ({ ...old, search: e.target.value, filters: [], order: 'due' })); }}>
+                <option value="">{t('cs.choosePreset')}</option><option value="is:due">{t('cs.presetDue')}</option><option value="rated:1:1">{t('cs.presetForgotten')}</option><option value="is:new">{t('cs.presetNew')}</option><option value="added:7">{t('cs.presetRecent')}</option><option value="is:review -is:due">{t('csp.ahead')}</option><option value="tag:marked">{t('cs.presetMarked')}</option>
               </select></label></div>
-              {(createForm.filters || []).map((filter, index) => <fieldset key={index}><legend>Additional filter {index + 1}</legend>
-                <label>Search<input value={filter.search} onChange={e => setCreateForm(old => ({ ...old, filters: old.filters?.map((f,i) => i === index ? { ...f, search: e.target.value } : f) }))} /></label>
-                <label>Limit<input type="number" min="1" max="1000" value={filter.limit} onChange={e => setCreateForm(old => ({ ...old, filters: old.filters?.map((f,i) => i === index ? { ...f, limit: Number(e.target.value) } : f) }))} /></label>
-                <label>Order<select value={filter.order} onChange={e => setCreateForm(old => ({ ...old, filters: old.filters?.map((f,i) => i === index ? { ...f, order: e.target.value as SessionOrder } : f) }))}>{['oldest','newest','random','due','lapses'].map(order => <option key={order}>{order}</option>)}</select></label>
-                <button type="button" onClick={() => setCreateForm(old => ({ ...old, filters: old.filters?.filter((_,i) => i !== index) }))}>Remove filter</button>
+              {(createForm.filters || []).map((filter, index) => <fieldset key={index}><legend>{t('cs.additionalFilter', { n: index + 1 })}</legend>
+                <label>{t('common.search')}<input value={filter.search} onChange={e => setCreateForm(old => ({ ...old, filters: old.filters?.map((f,i) => i === index ? { ...f, search: e.target.value } : f) }))} /></label>
+                <label>{t('cs.limitLabel')}<input type="number" min="1" max="1000" value={filter.limit} onChange={e => setCreateForm(old => ({ ...old, filters: old.filters?.map((f,i) => i === index ? { ...f, limit: Number(e.target.value) } : f) }))} /></label>
+                <label>{t('cs.orderLabel')}<select value={filter.order} onChange={e => setCreateForm(old => ({ ...old, filters: old.filters?.map((f,i) => i === index ? { ...f, order: e.target.value as SessionOrder } : f) }))}>{['oldest','newest','random','due','lapses'].map(order => <option key={order}>{order}</option>)}</select></label>
+                <button type="button" onClick={() => setCreateForm(old => ({ ...old, filters: old.filters?.filter((_,i) => i !== index) }))}>{t('cs.removeFilter')}</button>
               </fieldset>)}
-              <button type="button" disabled={(createForm.filters?.length || 0) >= 9} onClick={() => setCreateForm(old => ({ ...old, filters: [...old.filters || [], { search: 'is:new', limit: 100, order: 'oldest' }] }))}>Add another filter</button>
-              <p>Filters run in order without duplicate cards. Combined limit: 1,000 cards.</p>
+              <button type="button" disabled={(createForm.filters?.length || 0) >= 9} onClick={() => setCreateForm(old => ({ ...old, filters: [...old.filters || [], { search: 'is:new', limit: 100, order: 'oldest' }] }))}>{t('cs.addFilter')}</button>
+              <p>{t('cs.filtersHint')}</p>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
                   <label htmlFor="custom-study-search" style={{ fontWeight: 500, margin: 0 }}>
-                    Search Query
+                    {t('cs.searchQuery')}
                   </label>
                   <button
                     type="button"
@@ -1153,14 +1156,14 @@ export const CustomStudyPage = () => {
                     style={{ fontSize: '0.8rem', padding: '0.2rem 0.5rem' }}
                     onClick={() => setShowSyntaxHelp((prev) => !prev)}
                   >
-                    {showSyntaxHelp ? 'Hide Syntax Guide' : 'Supported Syntax Guide'}
+                    {showSyntaxHelp ? t('cs.hideSyntax') : t('cs.showSyntax')}
                   </button>
                 </div>
 
                 <input
                   id="custom-study-search"
                   type="text"
-                  placeholder="e.g. is:due or tag:exam"
+                  placeholder={t('cs.searchPlaceholder')}
                   value={createForm.search}
                   onChange={(e) => setCreateForm({ ...createForm, search: e.target.value })}
                 />
@@ -1168,7 +1171,7 @@ export const CustomStudyPage = () => {
                 {showSyntaxHelp && (
                   <div
                     style={{
-                      background: 'rgba(0,0,0,0.3)',
+                      background: 'var(--inset)',
                       padding: '0.75rem 1rem',
                       borderRadius: 'var(--radius-sm, 6px)',
                       marginTop: '0.5rem',
@@ -1178,16 +1181,16 @@ export const CustomStudyPage = () => {
                     }}
                   >
                     <div style={{ fontWeight: 600, color: 'var(--accent-cyan)', marginBottom: '0.3rem' }}>
-                      Supported Search Syntax:
+                      {t('cs.syntaxTitle')}
                     </div>
-                    <div><code>is:due</code> — Cards currently due for review (default)</div>
+                    <div><code>is:due</code> — {t('cs.syn.due')}</div>
                     <div><code>is:new</code>, <code>is:learn</code>, <code>is:review</code>, <code>is:suspended</code>, <code>is:buried</code></div>
-                    <div><code>deck:"Deck Name"</code> — Filter by deck</div>
-                    <div><code>tag:tagname</code> or <code>tag:none</code> — Tag filter</div>
-                    <div><code>note:"Note Type"</code> — Note model</div>
-                    <div><code>cid:1,2,3</code> or <code>nid:1,2,3</code> — Card or note IDs</div>
-                    <div><code>prop:ivl&gt;10</code>, <code>prop:reps=0</code>, <code>prop:lapses&gt;=1</code> — Intervals, reps, lapses</div>
-                    <div>Operators: <code>AND</code>, <code>OR</code>, <code>-negation</code>, <code>(groups)</code>, <code>"quoted terms"</code></div>
+                    <div><code>deck:"Deck Name"</code> — {t('cs.syn.deck')}</div>
+                    <div><code>tag:tagname</code> {t('cs.syn.or')} <code>tag:none</code> — {t('cs.syn.tag')}</div>
+                    <div><code>note:"Note Type"</code> — {t('cs.syn.note')}</div>
+                    <div><code>cid:1,2,3</code> {t('cs.syn.or')} <code>nid:1,2,3</code> — {t('cs.syn.ids')}</div>
+                    <div><code>prop:ivl&gt;10</code>, <code>prop:reps=0</code>, <code>prop:lapses&gt;=1</code> — {t('cs.syn.prop')}</div>
+                    <div>{t('cs.syn.operators')} <code>AND</code>, <code>OR</code>, <code>-negation</code>, <code>(groups)</code>, <code>"quoted terms"</code></div>
                   </div>
                 )}
               </div>
@@ -1195,7 +1198,7 @@ export const CustomStudyPage = () => {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
                 <div className="form-group" style={{ margin: 0 }}>
                   <label htmlFor="custom-study-limit" style={{ display: 'block', marginBottom: '0.35rem', fontWeight: 500 }}>
-                    Card Limit (1–1000)
+                    {t('cs.cardLimit')}
                   </label>
                   <input
                     id="custom-study-limit"
@@ -1211,7 +1214,7 @@ export const CustomStudyPage = () => {
 
                 <div className="form-group" style={{ margin: 0 }}>
                   <label htmlFor="custom-study-order" style={{ display: 'block', marginBottom: '0.35rem', fontWeight: 500 }}>
-                    Order
+                    {t('cs.orderLabel')}
                   </label>
                   <select
                     id="custom-study-order"
@@ -1220,11 +1223,11 @@ export const CustomStudyPage = () => {
                       setCreateForm({ ...createForm, order: e.target.value as SessionOrder })
                     }
                   >
-                    <option value="oldest">Oldest first</option>
-                    <option value="newest">Newest first</option>
-                    <option value="random">Random</option>
-                    <option value="due">Due date</option>
-                    <option value="lapses">Most lapses</option>
+                    <option value="oldest">{t('cs.oldest')}</option>
+                    <option value="newest">{t('cs.newest')}</option>
+                    <option value="random">{t('cs.random')}</option>
+                    <option value="due">{t('cs.dueDate')}</option>
+                    <option value="lapses">{t('cs.mostLapses')}</option>
                   </select>
                 </div>
               </div>
@@ -1232,7 +1235,7 @@ export const CustomStudyPage = () => {
               {/* Mode Selection */}
               <div className="form-group" style={{ marginBottom: '1.25rem' }}>
                 <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 600 }}>
-                  Study Mode & Schedule Impact *
+                  {t('cs.studyMode')}
                 </label>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
@@ -1243,7 +1246,7 @@ export const CustomStudyPage = () => {
                       gap: '0.75rem',
                       padding: '0.75rem 1rem',
                       borderRadius: 'var(--radius-sm, 6px)',
-                      background: !createForm.reschedule ? 'rgba(245, 158, 11, 0.1)' : 'rgba(255,255,255,0.03)',
+                      background: !createForm.reschedule ? 'rgba(245, 158, 11, 0.1)' : 'rgba(var(--fg-rgb),0.03)',
                       border: `1px solid ${!createForm.reschedule ? 'rgba(245, 158, 11, 0.4)' : 'var(--glass-border)'}`,
                       cursor: 'pointer',
                     }}
@@ -1257,12 +1260,11 @@ export const CustomStudyPage = () => {
                       style={{ marginTop: '0.2rem' }}
                     />
                     <div>
-                      <div style={{ fontWeight: 600, color: !createForm.reschedule ? '#fde047' : 'var(--text-primary)' }}>
-                        Preview Mode (No Schedule Impact)
+                      <div style={{ fontWeight: 600, color: !createForm.reschedule ? 'var(--warning-text)' : 'var(--text-primary)' }}>
+                        {t('cs.previewMode')}
                       </div>
                       <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '0.2rem' }}>
-                        Does <strong>NOT</strong> change card due dates or intervals in home decks.
-                        Uses custom repeat delays; Good/Easy can exit without home-deck rescheduling.
+                        {t('cs.previewModeHint')}
                       </div>
                     </div>
                   </label>
@@ -1273,7 +1275,7 @@ export const CustomStudyPage = () => {
                       data-testid="preview-delays-panel"
                       style={{
                         padding: '0.75rem 1rem',
-                        background: 'rgba(0,0,0,0.25)',
+                        background: 'var(--inset)',
                         borderRadius: 'var(--radius-sm, 6px)',
                         border: '1px dashed rgba(245, 158, 11, 0.3)',
                         display: 'grid',
@@ -1283,7 +1285,7 @@ export const CustomStudyPage = () => {
                     >
                       <div className="form-group" style={{ margin: 0 }}>
                         <label htmlFor="preview-again-sec" style={{ fontSize: '0.75rem', fontWeight: 500, display: 'block', marginBottom: '0.25rem' }}>
-                          Again Delay (s)
+                          {t('cs.againDelay')}
                         </label>
                         <input
                           id="preview-again-sec"
@@ -1302,7 +1304,7 @@ export const CustomStudyPage = () => {
                       </div>
                       <div className="form-group" style={{ margin: 0 }}>
                         <label htmlFor="preview-hard-sec" style={{ fontSize: '0.75rem', fontWeight: 500, display: 'block', marginBottom: '0.25rem' }}>
-                          Hard Delay (s)
+                          {t('cs.hardDelay')}
                         </label>
                         <input
                           id="preview-hard-sec"
@@ -1321,7 +1323,7 @@ export const CustomStudyPage = () => {
                       </div>
                       <div className="form-group" style={{ margin: 0 }}>
                         <label htmlFor="preview-good-sec" style={{ fontSize: '0.75rem', fontWeight: 500, display: 'block', marginBottom: '0.25rem' }}>
-                          Good Delay (0=Exit)
+                          {t('cs.goodDelay')}
                         </label>
                         <input
                           id="preview-good-sec"
@@ -1348,7 +1350,7 @@ export const CustomStudyPage = () => {
                       gap: '0.75rem',
                       padding: '0.75rem 1rem',
                       borderRadius: 'var(--radius-sm, 6px)',
-                      background: createForm.reschedule ? 'rgba(34, 197, 94, 0.1)' : 'rgba(255,255,255,0.03)',
+                      background: createForm.reschedule ? 'rgba(34, 197, 94, 0.1)' : 'rgba(var(--fg-rgb),0.03)',
                       border: `1px solid ${createForm.reschedule ? 'rgba(34, 197, 94, 0.4)' : 'var(--glass-border)'}`,
                       cursor: 'pointer',
                     }}
@@ -1362,12 +1364,11 @@ export const CustomStudyPage = () => {
                       style={{ marginTop: '0.2rem' }}
                     />
                     <div>
-                      <div style={{ fontWeight: 600, color: createForm.reschedule ? '#86efac' : 'var(--text-primary)' }}>
-                        Reschedule Mode (Alters Home Deck Schedules)
+                      <div style={{ fontWeight: 600, color: createForm.reschedule ? 'var(--success-text)' : 'var(--text-primary)' }}>
+                        {t('cs.rescheduleMode')}
                       </div>
                       <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '0.2rem' }}>
-                        <strong>WILL</strong> modify card intervals and due dates in home decks.
-                        Uses standard 4 ratings (Again, Hard, Good, Easy) based on deck scheduling options.
+                        {t('cs.rescheduleModeHint')}
                       </div>
                     </div>
                   </label>
@@ -1381,14 +1382,14 @@ export const CustomStudyPage = () => {
                   onClick={() => setIsCreateModalOpen(false)}
                   disabled={creating}
                 >
-                  Cancel
+                  {t('common.cancel')}
                 </button>
                 <button
                   type="submit"
                   className="btn btn-primary"
                   disabled={creating}
                 >
-                  {creating ? 'Saving...' : editingSession ? 'Save & Rebuild Session' : 'Create & Build Session'}
+                  {creating ? t('common.saving') : editingSession ? t('cs.saveRebuild') : t('cs.createBuild')}
                 </button>
               </div>
               </fieldset>

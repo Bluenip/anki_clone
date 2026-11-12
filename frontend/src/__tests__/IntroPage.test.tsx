@@ -10,8 +10,8 @@ describe('IntroPage', () => {
     const play = vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue();
     Element.prototype.scrollIntoView = vi.fn();
     const { container } = render(<MemoryRouter><IntroPage /></MemoryRouter>);
-    expect(screen.getByRole('link', { name: /Tạo tài khoản/ })).toBeDefined();
-    fireEvent.click(screen.getByRole('button', { name: /Thêm thẻ mới/ }));
+    expect(screen.getByRole('link', { name: /Create a free account/ })).toBeDefined();
+    fireEvent.click(screen.getByRole('button', { name: /Add new cards/ }));
     expect(container.querySelector('video')!.currentTime).toBe(INTRO_STEPS[5].at);
     expect(play).toHaveBeenCalled();
   });
@@ -19,6 +19,6 @@ describe('IntroPage', () => {
   it('links logged-in users to their decks', () => {
     vi.spyOn(auth, 'useAuth').mockReturnValue({ user: { id: 1 } } as any);
     render(<MemoryRouter><IntroPage /></MemoryRouter>);
-    expect(screen.getByRole('link', { name: /Vào bộ thẻ/ }).getAttribute('href')).toBe('/decks');
+    expect(screen.getByRole('link', { name: /Go to your decks/ }).getAttribute('href')).toBe('/decks');
   });
 });

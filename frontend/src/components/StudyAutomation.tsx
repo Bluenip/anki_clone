@@ -2,11 +2,13 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { RefObject } from 'react';
 import type { CardFaceRef } from './CardFace';
 import type { StudyCard } from '../api/types';
+import { usePrefs } from '../context/usePrefs';
 
 export default function StudyAutomation({ card, face, showAnswer, busy, onReveal, onRate, onBury }: {
   card: StudyCard; face: RefObject<CardFaceRef | null>; showAnswer: boolean; busy: boolean;
   onReveal: () => void; onRate: (rating: number) => void; onBury: () => void;
 }) {
+  const { t } = usePrefs();
   const [elapsed, setElapsed] = useState(0);
   const started = useRef(0);
   const latest = useRef({ busy, onReveal, onRate, onBury });
@@ -39,5 +41,5 @@ export default function StudyAutomation({ card, face, showAnswer, busy, onReveal
     }, 100);
     return () => { clearInterval(timer); currentFace?.stopAudio(); };
   }, [card.card_id, card.settings, showAnswer, face]);
-  return card.settings?.show_on_screen_timer ? <span aria-label="Study timer">{elapsed}s</span> : null;
+  return card.settings?.show_on_screen_timer ? <span aria-label={t('study.timer')}>{elapsed}s</span> : null;
 }

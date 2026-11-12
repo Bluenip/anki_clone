@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { browseSharedDecks, getCategories } from '../api/shared';
 import type { SharedDeck } from '../api/shared';
+import { usePrefs } from '../context/usePrefs';
 
 const SharedDecksPage = () => {
   const [decks, setDecks] = useState<SharedDeck[]>([]);
@@ -9,6 +10,7 @@ const SharedDecksPage = () => {
   const [category, setCategory] = useState('');
   const [categories, setCategories] = useState<any>({});
   const [loading, setLoading] = useState(true);
+  const { t } = usePrefs();
 
   useEffect(() => {
     void getCategories().then(r => setCategories(r.data)).catch(() => {});
@@ -60,40 +62,40 @@ const SharedDecksPage = () => {
   return (
     <div className="page-container">
       <div className="shared-header">
-        <h1>Shared Decks</h1>
-        <p>Browse community-created flashcard decks</p>
+        <h1>{t('shared.title')}</h1>
+        <p>{t('shared.subtitle')}</p>
         <form onSubmit={handleSearch} className="search-bar">
-          <input type="text" placeholder="Search decks..." value={search} onChange={e => setSearch(e.target.value)} className="search-input search-lg" />
-          <button type="submit" className="btn btn-primary">Search</button>
+          <input type="text" placeholder={t('shared.searchPlaceholder')} value={search} onChange={e => setSearch(e.target.value)} className="search-input search-lg" />
+          <button type="submit" className="btn btn-primary">{t('common.search')}</button>
         </form>
       </div>
 
       <div className="shared-layout">
         <aside className="categories-sidebar glass-card">
-          <h3>Languages</h3>
+          <h3>{t('shared.languages')}</h3>
           <ul>{(categories.languages || []).map((c: string) => (
             <li key={c}><button className={`cat-btn ${category === c ? 'active' : ''}`} onClick={() => setCategory(category === c ? '' : c)}>{c}</button></li>
           ))}</ul>
-          <h3>Sciences & Trivia</h3>
+          <h3>{t('shared.sciences')}</h3>
           <ul>{(categories.sciences || []).map((c: string) => (
             <li key={c}><button className={`cat-btn ${category === c ? 'active' : ''}`} onClick={() => setCategory(category === c ? '' : c)}>{c}</button></li>
           ))}</ul>
-          {category && <button className="btn btn-ghost btn-sm" onClick={() => setCategory('')}>Clear filter</button>}
+          {category && <button className="btn btn-ghost btn-sm" onClick={() => setCategory('')}>{t('shared.clearFilter')}</button>}
         </aside>
 
         <main className="shared-content">
           {loading ? <div className="loading-screen"><div className="spinner" /></div> : decks.length === 0 ? (
-            <div className="empty-state glass-card"><span className="empty-icon">🔍</span><h2>No decks found</h2><p>Try a different search or category</p></div>
+            <div className="empty-state glass-card"><span className="empty-icon">🔍</span><h2>{t('shared.noneFound')}</h2><p>{t('shared.tryDifferent')}</p></div>
           ) : (
             <div className="shared-table">
               <div className="shared-table-header">
-                <span className="col-title">Title</span><span className="col-rating">Rating</span>
-                <span className="col-notes">Notes</span><span className="col-dl">Downloads</span>
-                <span className="col-media">Media</span>
+                <span className="col-title">{t('common.title')}</span><span className="col-rating">{t('shared.rating')}</span>
+                <span className="col-notes">{t('shared.notes')}</span><span className="col-dl">{t('shared.downloads')}</span>
+                <span className="col-media">{t('shared.media')}</span>
               </div>
               {decks.map(d => (
                 <Link key={d.id} to={`/shared/${d.id}`} className="shared-row glass-card">
-                  <span className="col-title"><strong>{d.title}</strong><small>by {d.username}</small></span>
+                  <span className="col-title"><strong>{d.title}</strong><small>{t('shared.byUser', { user: d.username })}</small></span>
                   <span className="col-rating">{renderStars(d.rating)} <small>({d.rating_count})</small></span>
                   <span className="col-notes">{d.notes_count}</span>
                   <span className="col-dl">{d.download_count}</span>

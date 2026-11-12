@@ -8,6 +8,8 @@ import type { Card } from '../api/cards';
 import { getCardNote, updateNote } from '../api/notes';
 import type { Note, UpdateNotePayload } from '../api/notes';
 import { sanitizeHtml } from '../utils/sanitize';
+import { usePrefs } from '../context/usePrefs';
+import { tNow } from '../context/prefs-context-base';
 
 const getErrMsg = (err: unknown, fallback: string) => {
   const e = err as { response?: { data?: { detail?: string; message?: string } }; message?: string };
@@ -16,6 +18,7 @@ const getErrMsg = (err: unknown, fallback: string) => {
 };
 
 const CardEditorPageContent = () => {
+  const { t } = usePrefs();
   const { deckId } = useParams<{ deckId: string }>();
   const [cards, setCards] = useState<Card[]>([]);
   const [search, setSearch] = useState('');
@@ -116,7 +119,7 @@ const CardEditorPageContent = () => {
       setEditTags(Array.isArray(note.tags) ? note.tags.join(' ') : '');
     } catch (err: unknown) {
       if (loadSeqRef.current !== seq) return;
-      setEditLoadError(getErrMsg(err, 'Failed to load note'));
+      setEditLoadError(getErrMsg(err, tNow('editor.loadFailed')));
     } finally {
       if (loadSeqRef.current === seq) {
         setEditLoading(false);
@@ -155,7 +158,7 @@ const CardEditorPageContent = () => {
       setBack('');
       await fetchCards();
     } catch (err: unknown) {
-      setAddError(getErrMsg(err, 'Failed to add card'));
+      setAddError(getErrMsg(err, t('editor.addFailed')));
     } finally {
       setAddPending(false);
     }
@@ -197,10 +200,10 @@ const CardEditorPageContent = () => {
       if (status === 409) {
         setIsConflict(true);
         const serverData = (err as { response?: { data?: { detail?: string; message?: string } } })?.response?.data;
-        const msg = serverData?.detail || serverData?.message || 'Conflict: This note was modified elsewhere. Reload latest note to review changes, or cancel.';
+        const msg = serverData?.detail || serverData?.message || t('editor.conflict');
         setSaveError(typeof msg === 'string' ? msg : JSON.stringify(msg));
       } else {
-        setSaveError(getErrMsg(err, 'Failed to save note'));
+        setSaveError(getErrMsg(err, t('editor.saveFailed')));
       }
     } finally {
       if (saveSeqRef.current === saveSeq) {
@@ -211,7 +214,7 @@ const CardEditorPageContent = () => {
 
   const handleDelete = async (id: number) => {
     if (savePending) return;
-    if (!confirm('Delete this card?')) return;
+    if (!confirm(t('editor.confirmDelete'))) return;
     try {
       await deleteCard(id);
       if (editingCard?.id === id) handleCancelEdit();
@@ -232,42 +235,42 @@ const CardEditorPageContent = () => {
   return (
     <div className="page-container">
       <div className="breadcrumb">
-        <Link to="/decks">Decks</Link> <span>/</span>
-        <Link to={`/decks/${deckId}`}>Deck</Link> <span>/</span> <span>Cards</span>
+        <Link to="/decks">{t('nav.decks')}</Link> <span>/</span>
+        <Link to={`/decks/${deckId}`}>{t('add.deck')}</Link> <span>/</span> <span>{t('stats.cardsCol')}</span>
       </div>
 
       <div className="card-editor-layout">
         {editingCard && editLoading && (
-          <div className="card-form glass-card" role="region" aria-label="Edit note">
-            <h2>Edit Note</h2>
+          <div className="card-form glass-card" role="region" aria-label={t('editor.editNoteAria')}>
+            <h2>{t('editor.editNote')}</h2>
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '160px', gap: '1rem' }}>
-              <div className="spinner" role="status" aria-label="Loading note" />
-              <span style={{ color: 'var(--text-secondary)' }}>Loading note...</span>
+              <div className="spinner" role="status" aria-label={t('editor.loadingNote')} />
+              <span style={{ color: 'var(--text-secondary)' }}>{t('editor.loadingNote')}...</span>
             </div>
             <div className="modal-actions">
-              <button type="button" className="btn btn-ghost" onClick={handleCancelEdit}>Cancel</button>
+              <button type="button" className="btn btn-ghost" onClick={handleCancelEdit}>{t('common.cancel')}</button>
             </div>
           </div>
         )}
 
         {editingCard && !editLoading && editLoadError && (
-          <div className="card-form glass-card" role="region" aria-label="Edit note">
-            <h2>Edit Note</h2>
+          <div className="card-form glass-card" role="region" aria-label={t('editor.editNoteAria')}>
+            <h2>{t('editor.editNote')}</h2>
             <div className="alert alert-error" role="alert" style={{ marginBottom: '1rem' }}>{editLoadError}</div>
             <div className="modal-actions">
-              <button type="button" className="btn btn-ghost" onClick={handleCancelEdit}>Cancel</button>
-              <button type="button" className="btn btn-primary" onClick={() => loadNoteForCard(editingCard)}>Retry</button>
+              <button type="button" className="btn btn-ghost" onClick={handleCancelEdit}>{t('common.cancel')}</button>
+              <button type="button" className="btn btn-primary" onClick={() => loadNoteForCard(editingCard)}>{t('common.retry')}</button>
             </div>
           </div>
         )}
 
         {editingCard && !editLoading && !editLoadError && editingNote && (
-          <div className="card-form glass-card" role="region" aria-label="Edit note">
-            <h2>{editingNote.id === null ? 'Edit Legacy Card' : 'Edit Note'}</h2>
+          <div className="card-form glass-card" role="region" aria-label={t('editor.editNoteAria')}>
+            <h2>{editingNote.id === null ? t('editor.editLegacy') : t('editor.editNote')}</h2>
             <div className="note-meta-info" style={{ marginBottom: '1rem', display: 'flex', gap: '1rem', fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
-              <span data-testid="note-type">Note Type: <strong>{editingNote.kind || 'basic'}</strong></span>
-              <span data-testid="sibling-count">Cards (siblings): <strong>{editingNote.cards?.length ?? 1}</strong></span>
-              {editingNote.id === null && <span className="badge">Legacy</span>}
+              <span data-testid="note-type">{t('editor.noteType')} <strong>{editingNote.kind || 'basic'}</strong></span>
+              <span data-testid="sibling-count">{t('editor.siblings')} <strong>{editingNote.cards?.length ?? 1}</strong></span>
+              {editingNote.id === null && <span className="badge">{t('editor.legacy')}</span>}
             </div>
 
             {saveError && (
@@ -295,7 +298,7 @@ const CardEditorPageContent = () => {
                 return (
                   <div className="form-group" key={fieldName}>
                     <label htmlFor={`edit-field-${fieldName}`}>
-                      {fieldName} {isOptional && <span style={{ opacity: 0.6 }}>(optional)</span>}
+                      {fieldName} {isOptional && <span style={{ opacity: 0.6 }}>{t('add.optional')}</span>}
                     </label>
                     <FormattingTools targetId={`edit-field-${fieldName}`} disabled={savePending || mediaBusy > 0} onChange={value => setEditFields(prev => ({ ...prev, [fieldName]: value }))} />
                     <textarea
@@ -306,7 +309,7 @@ const CardEditorPageContent = () => {
                       rows={fieldName === 'Add Reverse' ? 2 : 4}
                       required={!isOptional}
                       disabled={savePending || mediaBusy > 0}
-                      placeholder={`Enter ${fieldName}...`}
+                      placeholder={t('add.enterField', { field: fieldName })}
                     />
                     <MediaTools key={String(editingCard.id) + fieldName} disabled={savePending} onBusyChange={active => setMediaBusy(n => Math.max(0, n + (active ? 1 : -1)))} onInsert={markup => setEditFields(prev => ({ ...prev, [fieldName]: (prev[fieldName] || '') + markup }))} />
                   </div>
@@ -314,7 +317,7 @@ const CardEditorPageContent = () => {
               })}
 
               <div className="form-group">
-                <label htmlFor="edit-tags">Tags</label>
+                <label htmlFor="edit-tags">{t('add.tags')}</label>
                 <input
                   id="edit-tags"
                   aria-label="Tags"
@@ -327,9 +330,9 @@ const CardEditorPageContent = () => {
               </div>
 
               <div className="modal-actions">
-                <button type="button" className="btn btn-ghost" onClick={handleCancelEdit} disabled={savePending || mediaBusy > 0}>Cancel</button>
+                <button type="button" className="btn btn-ghost" onClick={handleCancelEdit} disabled={savePending || mediaBusy > 0}>{t('common.cancel')}</button>
                 <button type="submit" className="btn btn-primary" disabled={savePending || mediaBusy > 0}>
-                  {savePending ? 'Saving...' : 'Update'}
+                  {savePending ? t('common.saving') : t('account.update')}
                 </button>
               </div>
             </form>
@@ -337,31 +340,31 @@ const CardEditorPageContent = () => {
         )}
 
         {!editingCard && (
-          <div className="card-form glass-card" role="region" aria-label="Add card">
-            <h2>Add New Card</h2>
+          <div className="card-form glass-card" role="region" aria-label={t('editor.addCard')}>
+            <h2>{t('editor.addNewCard')}</h2>
             {addError && <div className="alert alert-error" role="alert" style={{ marginBottom: '1rem' }}>{addError}</div>}
             <form onSubmit={handleAddSubmit}>
               <div className="form-group">
-                <label htmlFor="card-front">Front</label>
+                <label htmlFor="card-front">{t('editor.front')}</label>
                 <textarea
                   id="card-front"
                   aria-label="Front"
                   value={front}
                   onChange={(e) => setFront(e.target.value)}
-                  placeholder="Question or term"
+                  placeholder={t('editor.frontPlaceholder')}
                   rows={4}
                   required
                   disabled={addPending}
                 />
               </div>
               <div className="form-group">
-                <label htmlFor="card-back">Back</label>
+                <label htmlFor="card-back">{t('editor.back')}</label>
                 <textarea
                   id="card-back"
                   aria-label="Back"
                   value={back}
                   onChange={(e) => setBack(e.target.value)}
-                  placeholder="Answer or definition"
+                  placeholder={t('editor.backPlaceholder')}
                   rows={4}
                   required
                   disabled={addPending}
@@ -369,11 +372,11 @@ const CardEditorPageContent = () => {
               </div>
               <div className="modal-actions">
                 <button type="submit" className="btn btn-primary" disabled={addPending || !front.trim() || !back.trim()}>
-                  {addPending ? 'Adding...' : 'Add Card'}
+                  {addPending ? t('editor.adding') : t('editor.addCard')}
                 </button>
               </div>
               <div style={{ marginTop: '1rem', textAlign: 'center', fontSize: '0.85rem' }}>
-                <Link to="/add">Add Note (Cloze / Reversed)</Link>
+                <Link to="/add">{t('editor.addNoteLink')}</Link>
               </div>
             </form>
           </div>
@@ -385,29 +388,29 @@ const CardEditorPageContent = () => {
             <input
               type="text"
               className="search-input"
-              placeholder="Search cards..."
+              placeholder={t('editor.searchPlaceholder')}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              aria-label="Search cards"
+              aria-label={t('editor.search')}
             />
           </div>
           {cards.length === 0 ? (
             <div className="empty-state glass-card">
-              <p>No cards yet. Add your first card!</p>
+              <p>{t('editor.empty')}</p>
             </div>
           ) : (
             <div className="cards-grid">
               {cards.map((card) => (
                 <div key={card.id} className="card-item glass-card">
                   <div className="card-item-front">
-                    <strong>Q:</strong> <span dangerouslySetInnerHTML={{ __html: sanitizeHtml(card.front) }} />
+                    <strong>{t('editor.q')}</strong> <span dangerouslySetInnerHTML={{ __html: sanitizeHtml(card.front) }} />
                   </div>
                   <div className="card-item-back">
-                    <strong>A:</strong> <span dangerouslySetInnerHTML={{ __html: sanitizeHtml(card.back) }} />
+                    <strong>{t('editor.a')}</strong> <span dangerouslySetInnerHTML={{ __html: sanitizeHtml(card.back) }} />
                   </div>
                   <div className="card-item-actions">
-                    <button className="btn btn-sm btn-ghost" onClick={() => handleEdit(card)} disabled={savePending || mediaBusy > 0}>Edit</button>
-                    <button className="btn btn-sm btn-danger" onClick={() => handleDelete(card.id)} disabled={savePending || mediaBusy > 0}>Delete</button>
+                    <button className="btn btn-sm btn-ghost" onClick={() => handleEdit(card)} disabled={savePending || mediaBusy > 0}>{t('common.edit')}</button>
+                    <button className="btn btn-sm btn-danger" onClick={() => handleDelete(card.id)} disabled={savePending || mediaBusy > 0}>{t('common.delete')}</button>
                   </div>
                 </div>
               ))}

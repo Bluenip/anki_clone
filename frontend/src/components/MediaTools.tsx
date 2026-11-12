@@ -1,7 +1,9 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import client from '../api/client';
+import { usePrefs } from '../context/usePrefs';
 
 export default function MediaTools({ disabled = false, onInsert, onBusyChange }: { disabled?: boolean; onBusyChange?: (busy: boolean) => void; onInsert: (markup: string) => void }) {
+  const { t } = usePrefs();
   const [busy, setBusy] = useState(false);
   const [recording, setRecording] = useState(false);
   const [error, setError] = useState('');
@@ -33,12 +35,12 @@ export default function MediaTools({ disabled = false, onInsert, onBusyChange }:
     if (pending.current) return;
     pending.current = true; setBusy(true); setError('');
     try {
-      if (file.size > 20 * 1024 * 1024) throw new Error('Media exceeds 20 MB');
+      if (file.size > 20 * 1024 * 1024) throw new Error(t('mt.tooLarge'));
       const form = new FormData(); form.append('file', file, name);
       const { data } = await client.post<{ markup: string }>('/api/media-tools/upload', form, { headers: { 'Content-Type': undefined } });
       if (mounted.current) inserting.current(data.markup);
     } catch (e) {
-      if (mounted.current) setError((e as { response?: { data?: { detail?: string } } }).response?.data?.detail || (e as Error).message || 'Upload failed');
+      if (mounted.current) setError((e as { response?: { data?: { detail?: string } } }).response?.data?.detail || (e as Error).message || t('mt.uploadFailed'));
     } finally { pending.current = false; if (mounted.current) setBusy(false); }
   };
   const record = async () => {
@@ -62,19 +64,19 @@ export default function MediaTools({ disabled = false, onInsert, onBusyChange }:
         r.onstop = null;
         if (r.state !== 'inactive') r.stop();
         stream.getTracks().forEach(t => t.stop()); recorder.current = null;
-        if (mounted.current) { setBusy(false); setRecording(false); setError('Recording failed. Please try again.'); }
+        if (mounted.current) { setBusy(false); setRecording(false); setError(t('mt.recordFailed')); }
       };
       r.start(1000); setRecording(true);
-    } catch (e) { recorder.current = null; acquired?.getTracks().forEach(t => t.stop()); if (mounted.current) { setBusy(false); setError((e as Error).message || 'Microphone unavailable'); } }
+    } catch (e) { recorder.current = null; acquired?.getTracks().forEach(t => t.stop()); if (mounted.current) { setBusy(false); setError((e as Error).message || t('mt.noMic')); } }
     finally { requestingMic.current = false; }
   };
   return <div className="media-tools" style={{ marginBlock: 8 }}>
-    <label>Attach image/audio <input type="file" accept="image/png,image/jpeg,image/gif,image/webp,audio/*,video/webm,video/mp4" disabled={disabled || busy} onChange={e => {
+    <label>{t('mt.attach')} <input type="file" accept="image/png,image/jpeg,image/gif,image/webp,audio/*,video/webm,video/mp4" disabled={disabled || busy} onChange={e => {
       const file = e.target.files?.[0]; e.target.value = ''; if (file) void upload(file, file.name);
     }} /></label>
-    {recording ? <button type="button" onClick={() => recorder.current?.stop()}>Stop recording and attach</button>
-      : <button type="button" disabled={disabled || busy || !navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined'} onClick={() => void record()}>Record audio</button>}
-    {busy && <span role="status">{recording ? 'Recording…' : 'Attaching…'}</span>}
+    {recording ? <button type="button" onClick={() => recorder.current?.stop()}>{t('mt.stop')}</button>
+      : <button type="button" disabled={disabled || busy || !navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined'} onClick={() => void record()}>{t('mt.record')}</button>}
+    {busy && <span role="status">{recording ? t('mt.recording') : t('mt.attaching')}</span>}
     {error && <span role="alert">{error}</span>}
   </div>;
 }

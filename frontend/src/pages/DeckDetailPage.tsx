@@ -5,6 +5,7 @@ import type { Deck } from '../api/decks';
 import { getStudyStats } from '../api/study';
 import type { StudyStats } from '../api/study';
 import { shareDeck } from '../api/shared';
+import { usePrefs } from '../context/usePrefs';
 
 const DeckDetailPage = () => {
   const { id } = useParams<{ id: string }>();
@@ -15,6 +16,7 @@ const DeckDetailPage = () => {
   const [shareCategory, setShareCategory] = useState('Other');
   const [shareDesc, setShareDesc] = useState('');
   const navigate = useNavigate();
+  const { t } = usePrefs();
 
   useEffect(() => {
     if (!id) return;
@@ -23,7 +25,7 @@ const DeckDetailPage = () => {
   }, [id]);
 
   const handleDelete = async () => {
-    if (!deck || !confirm(`Delete "${deck.name}"?`)) return;
+    if (!deck || !confirm(t('deck.confirmDelete', { name: deck.name }))) return;
     await deleteDeck(+id!);
     navigate('/decks');
   };
@@ -44,7 +46,7 @@ const DeckDetailPage = () => {
   return (
     <div className="page-container">
       <div className="breadcrumb">
-        <Link to="/decks">Decks</Link> <span>/</span> <span>{deck.name}</span>
+        <Link to="/decks">{t('nav.decks')}</Link> <span>/</span> <span>{deck.name}</span>
       </div>
       <div className="deck-detail glass-card">
         <div className="deck-detail-header">
@@ -53,20 +55,20 @@ const DeckDetailPage = () => {
             {deck.description && <p className="deck-desc">{deck.description}</p>}
           </div>
           <div className="deck-detail-actions">
-            <Link to={`/study/${id}`} className="btn btn-primary btn-lg">▶ Study Now</Link>
-            <Link to="/custom-study" className="btn btn-ghost">Custom Study</Link>
-            <Link to={`/decks/${id}/cards`} className="btn btn-ghost">Browse Cards</Link>
-            {!deck.is_shared && <button className="btn btn-ghost" onClick={() => setShowShare(true)}>Share</button>}
-            <button className="btn btn-danger" onClick={handleDelete}>Delete</button>
+            <Link to={`/study/${id}`} className="btn btn-primary btn-lg">▶ {t('deck.studyNow')}</Link>
+            <Link to="/custom-study" className="btn btn-ghost">{t('nav.customStudy')}</Link>
+            <Link to={`/decks/${id}/cards`} className="btn btn-ghost">{t('deck.browseCards')}</Link>
+            {!deck.is_shared && <button className="btn btn-ghost" onClick={() => setShowShare(true)}>{t('deck.share')}</button>}
+            <button className="btn btn-danger" onClick={handleDelete}>{t('common.delete')}</button>
           </div>
         </div>
 
         {stats && (
           <div className="stats-grid">
-            <div className="stat-card glass-card"><span className="stat-value stat-new">{stats.new_cards}</span><span className="stat-label">New</span></div>
-            <div className="stat-card glass-card"><span className="stat-value stat-due">{stats.due_cards}</span><span className="stat-label">Due</span></div>
-            <div className="stat-card glass-card"><span className="stat-value">{stats.learned_cards}</span><span className="stat-label">Learned</span></div>
-            <div className="stat-card glass-card"><span className="stat-value">{stats.total_cards}</span><span className="stat-label">Total</span></div>
+            <div className="stat-card glass-card"><span className="stat-value stat-new">{stats.new_cards}</span><span className="stat-label">{t('stat.new')}</span></div>
+            <div className="stat-card glass-card"><span className="stat-value stat-due">{stats.due_cards}</span><span className="stat-label">{t('stat.due')}</span></div>
+            <div className="stat-card glass-card"><span className="stat-value">{stats.learned_cards}</span><span className="stat-label">{t('stat.learned')}</span></div>
+            <div className="stat-card glass-card"><span className="stat-value">{stats.total_cards}</span><span className="stat-label">{t('stat.total')}</span></div>
           </div>
         )}
       </div>
@@ -74,16 +76,16 @@ const DeckDetailPage = () => {
       {showShare && (
         <div className="modal-overlay" onClick={() => setShowShare(false)}>
           <div className="modal glass-card" onClick={e => e.stopPropagation()}>
-            <h2>Share Deck</h2>
+            <h2>{t('deck.shareDeck')}</h2>
             <form onSubmit={handleShare}>
-              <div className="form-group"><label>Title</label><input value={shareTitle} onChange={e => setShareTitle(e.target.value)} required /></div>
-              <div className="form-group"><label>Category</label>
+              <div className="form-group"><label>{t('common.title')}</label><input value={shareTitle} onChange={e => setShareTitle(e.target.value)} required /></div>
+              <div className="form-group"><label>{t('common.category')}</label>
                 <select value={shareCategory} onChange={e => setShareCategory(e.target.value)}>
                   {categories.map(c => <option key={c} value={c}>{c}</option>)}
                 </select>
               </div>
-              <div className="form-group"><label>Description</label><textarea value={shareDesc} onChange={e => setShareDesc(e.target.value)} rows={3} /></div>
-              <div className="modal-actions"><button type="button" className="btn btn-ghost" onClick={() => setShowShare(false)}>Cancel</button><button type="submit" className="btn btn-primary">Share</button></div>
+              <div className="form-group"><label>{t('common.description')}</label><textarea value={shareDesc} onChange={e => setShareDesc(e.target.value)} rows={3} /></div>
+              <div className="modal-actions"><button type="button" className="btn btn-ghost" onClick={() => setShowShare(false)}>{t('common.cancel')}</button><button type="submit" className="btn btn-primary">{t('deck.share')}</button></div>
             </form>
           </div>
         </div>

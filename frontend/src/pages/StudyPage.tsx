@@ -11,6 +11,8 @@ import type { ReviewExtra, StudyCard, StudyStats } from '../api/study';
 import { playFlipSound, playRatingSound, playCompleteSound } from '../sounds';
 import CardFace from '../components/CardFace';
 import type { CardFaceRef } from '../components/CardFace';
+import { usePrefs } from '../context/usePrefs';
+import { tNow } from '../context/prefs-context-base';
 
 function generateUUID(): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
@@ -24,6 +26,7 @@ function generateUUID(): string {
 }
 
 const StudyPageContent = () => {
+  const { t } = usePrefs();
   const { deckId } = useParams<{ deckId: string }>();
   const [card, setCard] = useState<StudyCard | null>(null);
   const [stats, setStats] = useState<StudyStats | null>(null);
@@ -85,7 +88,7 @@ const StudyPageContent = () => {
     } catch (err: any) {
       if (generation !== loadGenerationRef.current) return;
       setLoadError(
-        err?.response?.data?.detail || 'Failed to load card. Please check your connection.'
+        err?.response?.data?.detail || tNow('study.loadFailed')
       );
     } finally {
       if (generation === loadGenerationRef.current) {
@@ -218,7 +221,7 @@ const StudyPageContent = () => {
         pendingReviewRef.current = null;
 
         if (res.data?.is_leech) {
-          setLeechToast(`⚠️ Leech detected! (${res.data.lapse_count} lapses)`);
+          setLeechToast(`⚠️ ${tNow('study.leech', { count: res.data.lapse_count })}`);
         }
 
         reviewedCountRef.current += 1;
@@ -233,7 +236,7 @@ const StudyPageContent = () => {
       } catch (err: any) {
         if (!mountedRef.current) return;
         setAnimating(false);
-        setReviewError(err?.response?.data?.detail || 'Failed to submit review. Please try again.');
+        setReviewError(err?.response?.data?.detail || tNow('study.reviewFailed'));
       } finally {
         isSubmittingRef.current = false;
       }
@@ -256,7 +259,7 @@ const StudyPageContent = () => {
       } catch (err: any) {
         if (!mountedRef.current) return;
         setAnimating(false);
-        setReviewError(err?.response?.data?.detail || `Failed to ${action} card.`);
+        setReviewError(err?.response?.data?.detail || tNow(action === 'bury' ? 'study.buryFailed' : 'study.suspendFailed'));
       } finally {
         isSubmittingRef.current = false;
       }
@@ -277,7 +280,7 @@ const StudyPageContent = () => {
       await fetchCard();
     } catch (err: any) {
       if (!mountedRef.current) return;
-      setReviewError(err?.response?.data?.detail || 'Failed to undo review.');
+      setReviewError(err?.response?.data?.detail || tNow('study.undoFailed'));
     } finally {
       isSubmittingRef.current = false;
       setAnimating(false);
@@ -310,7 +313,7 @@ const StudyPageContent = () => {
           } else if (qAction === 'bury' || qAction === 'bury_card' || qAction === 'bury card') {
             runAction(() => handleCardAction('bury'));
           } else {
-            setReviewError(`Unsupported question action: ${settings.question_action}`);
+            setReviewError(tNow('study.badQuestionAction', { action: String(settings.question_action) }));
           }
         }, qSeconds * 1000);
       }
@@ -333,7 +336,7 @@ const StudyPageContent = () => {
           ) {
             runAction(() => handleCardAction('suspend'));
           } else {
-            setReviewError(`Unsupported answer action: ${settings.answer_action}`);
+            setReviewError(tNow('study.badAnswerAction', { action: String(settings.answer_action) }));
           }
         }, aSeconds * 1000);
       }
@@ -427,16 +430,16 @@ const StudyPageContent = () => {
       <div className="page-container">
         <div className="study-done glass-card">
           <span className="done-icon" role="img" aria-label="error">⚠️</span>
-          <h2>Failed to Load Card</h2>
+          <h2>{t('study.loadFailedTitle')}</h2>
           <p className="error-message" style={{ color: 'var(--accent-red, #ff5555)', margin: '1rem 0' }}>
             {loadError}
           </p>
           <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
             <button className="btn btn-primary" onClick={fetchCard}>
-              Retry
+              {t('common.retry')}
             </button>
             <Link to="/decks" className="btn btn-ghost">
-              Back to Decks
+              {t('study.backToDecks')}
             </Link>
           </div>
         </div>
@@ -450,22 +453,22 @@ const StudyPageContent = () => {
       <div className="page-container">
         <div className="study-done glass-card">
           <span className="done-icon" role="img" aria-label="waiting">⏳</span>
-          <h2>Waiting for Next Card</h2>
+          <h2>{t('study.waiting')}</h2>
           <p>
-            Cards are currently in learning. Next card is ready around{' '}
+            {t('study.waitingText')}{' '}
             <strong>{new Date(stats.next_learning_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</strong>.
           </p>
           <p className="done-stats">
-            Cards reviewed this session: <strong>{reviewedCards.size}</strong>
+            {t('study.reviewedSession')} <strong>{reviewedCards.size}</strong>
           </p>
           {reviewError && <p role="alert">{reviewError}</p>}
-          <button className="btn btn-ghost" disabled={animating} onClick={handleUndo}>Undo last review</button>
+          <button className="btn btn-ghost" disabled={animating} onClick={handleUndo}>{t('study.undoLast')}</button>
           <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center', marginTop: '1.5rem' }}>
             <button className="btn btn-primary" onClick={fetchCard}>
-              Check Again
+              {t('study.checkAgain')}
             </button>
             <Link to="/decks" className="btn btn-ghost">
-              Back to Decks
+              {t('study.backToDecks')}
             </Link>
           </div>
         </div>
@@ -479,15 +482,15 @@ const StudyPageContent = () => {
       <div className="page-container">
         <div className="study-done glass-card">
           <span className="done-icon" role="img" aria-label="party">🎉</span>
-          <h1>Congratulations!</h1>
-          <p>You've finished studying this deck for now.</p>
+          <h1>{t('study.congrats')}</h1>
+          <p>{t('study.finished')}</p>
           <p className="done-stats">
-            Cards reviewed: <strong>{reviewedCards.size}</strong>
+            {t('study.reviewed')} <strong>{reviewedCards.size}</strong>
           </p>
           {reviewError && <p role="alert">{reviewError}</p>}
-          <button className="btn btn-ghost" disabled={animating} onClick={handleUndo}>Undo last review</button>
+          <button className="btn btn-ghost" disabled={animating} onClick={handleUndo}>{t('study.undoLast')}</button>
           <Link to="/decks" className="btn btn-primary btn-lg">
-            Back to Decks
+            {t('study.backToDecks')}
           </Link>
         </div>
       </div>
@@ -514,11 +517,11 @@ const StudyPageContent = () => {
           }}
         >
           <span>{reviewError}</span>
-          <button className="btn btn-ghost btn-sm" onClick={() => { pendingReviewRef.current = null; setReviewError(null); fetchCard(); }}>Reload card</button>
+          <button className="btn btn-ghost btn-sm" onClick={() => { pendingReviewRef.current = null; setReviewError(null); fetchCard(); }}>{t('study.reloadCard')}</button>
           <button
             onClick={() => setReviewError(null)}
             className="btn btn-ghost btn-sm"
-            aria-label="Dismiss error"
+            aria-label={t('study.dismissError')}
           >
             ✕
           </button>
@@ -535,7 +538,7 @@ const StudyPageContent = () => {
       <div className="study-header" style={{ width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
           <Link to={`/decks/${deckId}`} className="btn btn-ghost btn-sm">
-            ← Back
+            ← {t('study.back')}
           </Link>
           <span className="study-deck-name">{card.deck_name}</span>
         </div>
@@ -579,10 +582,10 @@ const StudyPageContent = () => {
           <button
             onClick={handleUndo}
             className="btn btn-ghost btn-sm"
-            title="Undo last review (Ctrl+Z)"
-            aria-label="Undo review"
+            title={t('study.undoTitle')}
+            aria-label={t('study.undoAria')}
           >
-            ⤺ Undo
+            ⤺ {t('study.undo')}
           </button>
         </div>
       </div>
@@ -601,13 +604,13 @@ const StudyPageContent = () => {
             }}
           >
             <div className="card-label" style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>
-              {showAnswer ? 'Answer' : 'Question'}
+              {showAnswer ? t('study.answer') : t('study.question')}
             </div>
             <div className="card-badges" style={{ display: 'flex', gap: '0.5rem' }}>
-              {card.is_new && <span className="badge badge-new">NEW</span>}
+              {card.is_new && <span className="badge badge-new">{t('study.badgeNew')}</span>}
               {isLearning && (
                 <span className="badge badge-learning">
-                  {cardState === 'learning' ? 'LEARNING' : 'RELEARNING'}
+                  {cardState === 'learning' ? t('study.badgeLearning') : t('study.badgeRelearning')}
                 </span>
               )}
             </div>
@@ -632,10 +635,10 @@ const StudyPageContent = () => {
           <button
             onClick={handleReplayAudio}
             className="btn btn-ghost btn-sm"
-            title="Replay Audio (R)"
-            aria-label="Replay audio"
+            title={t('study.replayTitle')}
+            aria-label={t('study.replayAria')}
           >
-            🔊 Replay (R)
+            🔊 {t('study.replay')}
           </button>
 
           <div style={{ display: 'flex', gap: '0.5rem' }}>
@@ -643,18 +646,18 @@ const StudyPageContent = () => {
               disabled={animating}
               onClick={() => handleCardAction('bury')}
               className="btn btn-ghost btn-sm"
-              title="Bury card until tomorrow"
+              title={t('study.buryTitle')}
             >
-              Bury
+              {t('study.bury')}
             </button>
             {showAnswer && (
               <button
                 disabled={animating}
               onClick={() => handleCardAction('suspend')}
                 className="btn btn-ghost btn-sm"
-                title="Suspend card indefinitely"
+                title={t('study.suspendTitle')}
               >
-                Suspend
+                {t('study.suspend')}
               </button>
             )}
           </div>
@@ -667,7 +670,7 @@ const StudyPageContent = () => {
             onClick={handleRevealAnswer}
             disabled={animating}
           >
-            Show Answer
+            {t('study.showAnswer')}
           </button>
         ) : (
           <div className="rating-buttons" style={{ display: 'flex', gap: '0.5rem', width: '100%' }}>
@@ -677,7 +680,7 @@ const StudyPageContent = () => {
               disabled={animating}
               onClick={() => handleReview(1)}
             >
-              <span className="rating-label">Again (1)</span>
+              <span className="rating-label">{t('rate.again')} (1)</span>
               <span className="rating-interval">{card.intervals?.again?.display || '< 1m'}</span>
             </button>
             <button
@@ -686,7 +689,7 @@ const StudyPageContent = () => {
               disabled={animating}
               onClick={() => handleReview(2)}
             >
-              <span className="rating-label">Hard (2)</span>
+              <span className="rating-label">{t('rate.hard')} (2)</span>
               <span className="rating-interval">{card.intervals?.hard?.display || '1d'}</span>
             </button>
             <button
@@ -695,7 +698,7 @@ const StudyPageContent = () => {
               disabled={animating}
               onClick={() => handleReview(3)}
             >
-              <span className="rating-label">Good (3)</span>
+              <span className="rating-label">{t('rate.good')} (3)</span>
               <span className="rating-interval">{card.intervals?.good?.display || '3d'}</span>
             </button>
             <button
@@ -704,7 +707,7 @@ const StudyPageContent = () => {
               disabled={animating}
               onClick={() => handleReview(4)}
             >
-              <span className="rating-label">Easy (4)</span>
+              <span className="rating-label">{t('rate.easy')} (4)</span>
               <span className="rating-interval">{card.intervals?.easy?.display || '4d'}</span>
             </button>
           </div>

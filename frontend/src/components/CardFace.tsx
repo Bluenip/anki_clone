@@ -10,6 +10,7 @@ import {
   useState,
 } from 'react';
 import { sanitizeHtml } from '../utils/sanitize';
+import { usePrefs } from '../context/usePrefs';
 
 export interface CardFaceRef {
   playAudio: (options?: { skipFront?: boolean }) => Promise<void>;
@@ -36,7 +37,7 @@ const CardFace = forwardRef<CardFaceRef, CardFaceProps>(
       html,
       cardCss = '',
       className = '',
-      title = 'Card Content',
+      title,
       frontHtml,
       backHtml,
       showAnswer = false,
@@ -45,6 +46,7 @@ const CardFace = forwardRef<CardFaceRef, CardFaceProps>(
     },
     ref
   ) => {
+    const { t, theme } = usePrefs();
     const iframeRef = useRef<HTMLIFrameElement>(null);
     const isPlayingRef = useRef(false);
     const playbackGeneration = useRef(0);
@@ -79,11 +81,11 @@ const CardFace = forwardRef<CardFaceRef, CardFaceProps>(
       doc.querySelectorAll('audio, video').forEach(media => { media.removeAttribute('autoplay'); media.removeAttribute('loop'); });
       doc.querySelectorAll('[data-tts-voices-list]').forEach(node => {
         const voices = window.speechSynthesis?.getVoices() || [];
-        node.textContent = voices.length ? voices.map(v => `${v.name} (${v.lang})`).join(' · ') : 'No speech voices loaded. Reload after your device installs a voice.';
+        node.textContent = voices.length ? voices.map(v => `${v.name} (${v.lang})`).join(' · ') : t('card.noVoices');
       });
       renderMath(doc.body);
       return doc.body.innerHTML;
-    }, [html]);
+    }, [html, t]);
     const safeCss = useMemo(() => cardCss.replace(/<\/style/gi, '<\\/style'), [cardCss]);
 
     const srcDoc = useMemo(() => {
@@ -103,7 +105,7 @@ const CardFace = forwardRef<CardFaceRef, CardFaceProps>(
       margin: 0;
       padding: 0;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-      color: #e5e7eb;
+      color: ${theme === 'light' ? '#1a1d2e' : '#e5e7eb'};
       background: transparent;
       word-break: break-word;
       overflow-wrap: break-word;
@@ -112,7 +114,7 @@ const CardFace = forwardRef<CardFaceRef, CardFaceProps>(
     audio { display: block; margin: 0.5rem 0; }
     hr#answer {
       border: 0;
-      border-top: 1px dashed rgba(255, 255, 255, 0.2);
+      border-top: 1px dashed ${theme === 'light' ? 'rgba(15, 23, 42, 0.2)' : 'rgba(255, 255, 255, 0.2)'};
       margin: 1.5rem 0;
     }
     ${safeCss}
@@ -122,7 +124,7 @@ const CardFace = forwardRef<CardFaceRef, CardFaceProps>(
   ${cleanHtml}
 </body>
 </html>`;
-    }, [cleanHtml, safeCss]);
+    }, [cleanHtml, safeCss, theme]);
 
     const updateHeight = useCallback(() => {
       const iframe = iframeRef.current;
@@ -336,7 +338,7 @@ const CardFace = forwardRef<CardFaceRef, CardFaceProps>(
           ref={iframeRef}
           srcDoc={srcDoc}
           sandbox="allow-same-origin"
-          title={title}
+          title={title ?? t('card.content')}
           style={{
             width: '100%',
             border: 'none',
@@ -345,12 +347,12 @@ const CardFace = forwardRef<CardFaceRef, CardFaceProps>(
             backgroundColor: 'transparent',
           }}
         />
-        {cleanHtml.includes('data-tts=') && <div><button type="button" onClick={() => void playAudio()}>Read aloud</button>{(!window.speechSynthesis || typeof SpeechSynthesisUtterance === 'undefined') && <p role="status">Speech synthesis is unavailable in this browser.</p>}</div>}
+        {cleanHtml.includes('data-tts=') && <div><button type="button" onClick={() => void playAudio()}>{t('card.readAloud')}</button>{(!window.speechSynthesis || typeof SpeechSynthesisUtterance === 'undefined') && <p role="status">{t('card.noSpeech')}</p>}</div>}
         {typedFields.map(field => <div key={field} style={{ marginBlock: 12 }}>
-          {!showAnswer ? <label>Type answer ({field})<input autoComplete="off" spellCheck={false} onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) { e.preventDefault(); onRevealAnswer?.(); } }} value={typed[field] || ''} onChange={e => setTyped(old => ({ ...old, [field]: e.target.value }))} /></label>
-            : <div role="status"><div>Your answer: {typed[field] || '(empty)'}</div><div>Correct answer: {answers[field] ?? '(not included in back template)'}</div>
-              {answers[field] !== undefined && !matches(field) && <div aria-label="Character comparison" style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{answerDiff(typed[field] || '', answers[field]).map((part, i) => part.kind === 'delete' ? <del key={i} style={{ background: '#7f1d1d', color: '#fff' }}>{part.text}</del> : part.kind === 'insert' ? <ins key={i} style={{ background: '#14532d', color: '#fff' }}>{part.text}</ins> : <span key={i}>{part.text}</span>)}</div>}
-              {answers[field] !== undefined && <strong>{matches(field) ? 'Match' : 'Different — compare your answer before rating'}</strong>}
+          {!showAnswer ? <label>{t('card.typeAnswer', { field })}<input autoComplete="off" spellCheck={false} onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) { e.preventDefault(); onRevealAnswer?.(); } }} value={typed[field] || ''} onChange={e => setTyped(old => ({ ...old, [field]: e.target.value }))} /></label>
+            : <div role="status"><div>{t('card.yourAnswer')} {typed[field] || t('card.empty')}</div><div>{t('card.correctAnswer')} {answers[field] ?? t('card.notInBack')}</div>
+              {answers[field] !== undefined && !matches(field) && <div aria-label={t('card.charComparison')} style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{answerDiff(typed[field] || '', answers[field]).map((part, i) => part.kind === 'delete' ? <del key={i} style={{ background: '#7f1d1d', color: '#fff' }}>{part.text}</del> : part.kind === 'insert' ? <ins key={i} style={{ background: '#14532d', color: '#fff' }}>{part.text}</ins> : <span key={i}>{part.text}</span>)}</div>}
+              {answers[field] !== undefined && <strong>{matches(field) ? t('card.match') : t('card.different')}</strong>}
             </div>}
         </div>)}
         {/* Accessible fallback markup */}

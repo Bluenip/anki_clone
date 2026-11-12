@@ -5,12 +5,14 @@ import { useAuth } from '../context/useAuth';
 
 import { parseMasks, serializeMasks, polygonBounds } from '../utils/imageOcclusion';
 import type { Mask, Point } from '../utils/imageOcclusion';
+import { usePrefs } from '../context/usePrefs';
 
 export default function ImageOcclusionEditor({ fields, onChange, disabled = false, onBusyChange }: {
   fields: Record<string, string>; onChange: (fields: Record<string, string>) => void;
   disabled?: boolean; onBusyChange: (busy: boolean) => void;
 }) {
   const { user } = useAuth();
+  const { t } = usePrefs();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [loaded, setLoaded] = useState('');
@@ -46,8 +48,8 @@ export default function ImageOcclusionEditor({ fields, onChange, disabled = fals
   const updateSelected = (changes: Partial<Mask>) => saveMasks(masks.map((m, i) => i === selectedIndex ? { ...m, ...changes } : m));
   const upload = async (file: File) => {
     if (locked || pending.current) return;
-    if (!['image/png', 'image/jpeg', 'image/webp', 'image/gif'].includes(file.type)) { setError('Choose a PNG, JPEG, WebP or GIF image.'); return; }
-    if (file.size > 20 * 1024 * 1024) { setError('Image exceeds 20 MB.'); return; }
+    if (!['image/png', 'image/jpeg', 'image/webp', 'image/gif'].includes(file.type)) { setError(t('io.badType')); return; }
+    if (file.size > 20 * 1024 * 1024) { setError(t('io.tooLarge')); return; }
     pending.current = true; setBusy(true); onBusyChange(true); setError('');
     try {
       const form = new FormData(); form.append('file', file);
@@ -56,7 +58,7 @@ export default function ImageOcclusionEditor({ fields, onChange, disabled = fals
         latest.current.onChange({ ...latest.current.fields, Image: data.markup });
         setLoaded('');
       }
-    } catch (e) { if (mounted.current) setError((e as { response?: { data?: { detail?: string } } }).response?.data?.detail || 'Image upload failed.'); }
+    } catch (e) { if (mounted.current) setError((e as { response?: { data?: { detail?: string } } }).response?.data?.detail || t('io.uploadFailed')); }
     finally { pending.current = false; if (mounted.current) { setBusy(false); latest.current.onBusyChange(false); } }
   };
   const point = (e: PointerEvent<HTMLDivElement>) => {
@@ -74,31 +76,31 @@ export default function ImageOcclusionEditor({ fields, onChange, disabled = fals
     const id = Math.max(lastOrdinal.current, ...masks.map(m => m.id)) + 1;
     const next: Mask = { id, shape: 'polygon', left: bounds.x, top: bounds.y, width: bounds.width, height: bounds.height, points: vertices, hideAll };
     try { parseMasks(serializeMasks([...masks, next])); }
-    catch { setError('Choose at least three vertices enclosing an area inside the image.'); return; }
+    catch { setError(t('io.badPolygon')); return; }
     lastOrdinal.current = id; saveMasks([...masks, next]); setSelected(masks.length); setVertices([]); setError('');
   };
-  return <section className="form-group" aria-label="Image Occlusion editor" style={{ marginBlock: 16, scrollMarginTop: 80 }}>
-    <p>Draw rectangles, ellipses or polygons over answers in your image. Regions sharing a card number are revealed together. Select a region to preview its answer or adjust its coordinates.</p>
-    <label>Occlusion image <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" disabled={locked} onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) void upload(f); }} /></label>
-    {masks.length > 0 && <p>Replacing the image keeps the existing regions and card identities.</p>}
-    {busy && <p role="status">Uploading image…</p>}
+  return <section className="form-group" aria-label={t('io.editor')} style={{ marginBlock: 16, scrollMarginTop: 80 }}>
+    <p>{t('io.help')}</p>
+    <label>{t('io.image')} <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" disabled={locked} onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) void upload(f); }} /></label>
+    {masks.length > 0 && <p>{t('io.replaceHint')}</p>}
+    {busy && <p role="status">{t('io.uploading')}</p>}
     {(error || parseError) && <p role="alert">{error || parseError}</p>}
-    <label>Mask mode <select value={hideAll ? 'all' : 'one'} disabled={locked || !masks.length} onChange={e => saveMasks(masks.map(m => ({ ...m, hideAll: e.target.value === 'all' })))}>
-      <option value="all">Hide all, guess one</option><option value="one">Hide one, guess one</option>
+    <label>{t('io.maskMode')} <select value={hideAll ? 'all' : 'one'} disabled={locked || !masks.length} onChange={e => saveMasks(masks.map(m => ({ ...m, hideAll: e.target.value === 'all' })))}>
+      <option value="all">{t('io.hideAll')}</option><option value="one">{t('io.hideOne')}</option>
     </select></label>
-    <label>Drawing tool <select aria-label="Drawing tool" disabled={locked} value={tool} onChange={e => { setTool(e.target.value as typeof tool); setVertices([]); setDraft(null); start.current = null; }}><option value="rect">Rectangle</option><option value="ellipse">Ellipse</option><option value="polygon">Polygon</option><option value="text">Text annotation</option></select></label>
-    {tool === 'text' && <p>Click the image to place a text annotation. Annotations stay visible on both sides and do not create a card.</p>}
-    {tool === 'polygon' && <p>Click each corner, then finish the polygon. {vertices.length}/100 vertices.
-      <button type="button" disabled={locked || vertices.length < 3} onClick={finishPolygon}>Finish polygon</button>
-      <button type="button" disabled={locked || !vertices.length} onClick={() => setVertices(v => v.slice(0, -1))}>Undo vertex</button>
-      <button type="button" disabled={locked || !vertices.length} onClick={() => setVertices([])}>Cancel polygon</button>
+    <label>{t('io.tool')} <select aria-label={t('io.tool')} disabled={locked} value={tool} onChange={e => { setTool(e.target.value as typeof tool); setVertices([]); setDraft(null); start.current = null; }}><option value="rect">{t('io.rect')}</option><option value="ellipse">{t('io.ellipse')}</option><option value="polygon">{t('io.polygon')}</option><option value="text">{t('io.text')}</option></select></label>
+    {tool === 'text' && <p>{t('io.textHelp')}</p>}
+    {tool === 'polygon' && <p>{t('io.polygonHelp', { n: vertices.length })}
+      <button type="button" disabled={locked || vertices.length < 3} onClick={finishPolygon}>{t('io.finishPolygon')}</button>
+      <button type="button" disabled={locked || !vertices.length} onClick={() => setVertices(v => v.slice(0, -1))}>{t('io.undoVertex')}</button>
+      <button type="button" disabled={locked || !vertices.length} onClick={() => setVertices([])}>{t('io.cancelPolygon')}</button>
     </p>}
-    {source && <div aria-label="Draw mask on image" style={{ position: 'relative', overflow: 'hidden', containerType: 'inline-size', touchAction: 'none', userSelect: 'none', marginBlock: 12, lineHeight: 0 }}
+    {source && <div aria-label={t('io.draw')} style={{ position: 'relative', overflow: 'hidden', containerType: 'inline-size', touchAction: 'none', userSelect: 'none', marginBlock: 12, lineHeight: 0 }}
       onPointerDown={e => { if (locked || loaded !== source || e.button !== 0 || masks.length >= 100 || Math.max(lastOrdinal.current, ...masks.map(m => m.id)) >= 1000) return; const p = point(e); if (tool === 'text') { saveMasks([...masks, { id: 0, shape: 'text', left: Math.min(p.x, .999), top: Math.min(p.y, .999), width: .001, height: .001, hideAll, text: 'Label', scale: 1, fontSize: .05 }]); setSelected(masks.length); return; } if (tool === 'polygon') { if (vertices.length < 100) setVertices(v => [...v, p]); setShowAnswer(false); return; } start.current = { ...p, pointer: e.pointerId }; e.currentTarget.setPointerCapture?.(e.pointerId); setShowAnswer(false); }}
       onPointerMove={e => { if (!locked) setDraft(rectangle(e)); }}
       onPointerUp={e => { const next = rectangle(e); start.current = null; setDraft(null); if (!locked && next && next.width >= .005 && next.height >= .005) { lastOrdinal.current = next.id; saveMasks([...masks, next]); setSelected(masks.length); } }}
       onPointerCancel={() => { start.current = null; setDraft(null); }}>
-      <img src={source} alt="Image to mask" draggable={false} style={{ width: '100%', display: 'block' }} onLoad={e => { setImageAspect(e.currentTarget.naturalHeight / e.currentTarget.naturalWidth || 1); setLoaded(source); setError(''); }} onError={() => { setLoaded(''); setError('Could not load the image. Upload it again.'); }} />
+      <img src={source} alt={t('io.alt')} draggable={false} style={{ width: '100%', display: 'block' }} onLoad={e => { setImageAspect(e.currentTarget.naturalHeight / e.currentTarget.naturalWidth || 1); setLoaded(source); setError(''); }} onError={() => { setLoaded(''); setError(t('io.loadFailed')); }} />
       {vertices.length > 0 && <svg viewBox="0 0 1 1" preserveAspectRatio="none" aria-label="Polygon in progress" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }}><polyline points={vertices.map(p => `${p.x},${p.y}`).join(' ')} fill="#ffca6480" stroke="#f90" strokeWidth="2" vectorEffect="non-scaling-stroke" />{vertices.map((p, i) => <circle key={i} cx={p.x} cy={p.y} r=".005" fill="#f90" />)}</svg>}
       {[...masks, ...(draft ? [draft] : [])].map((m, i) => {
         const active = m.id === masks[selectedIndex]?.id || i === masks.length;
@@ -114,22 +116,22 @@ export default function ImageOcclusionEditor({ fields, onChange, disabled = fals
     </div>}
     <p>{new Set(masks.filter(m => m.id > 0).map(m => m.id)).size} cards · {masks.length}/100 regions</p>
     {masks.length > 0 && <>
-      <label>Selected region <select aria-label="Selected region" value={selectedIndex} disabled={locked} onChange={e => { setSelected(Number(e.target.value)); setShowAnswer(false); }}>{masks.map((m, i) => <option key={i} value={i}>Region {i + 1} (card {m.id})</option>)}</select></label>
-      <label>Card group <select aria-label="Card group" disabled={locked || masks[selectedIndex]?.shape === 'text'} value={masks[selectedIndex]?.id} onChange={e => {
+      <label>{t('io.selected')} <select aria-label={t('io.selected')} value={selectedIndex} disabled={locked} onChange={e => { setSelected(Number(e.target.value)); setShowAnswer(false); }}>{masks.map((m, i) => <option key={i} value={i}>{t('io.region', { n: i + 1, card: m.id })}</option>)}</select></label>
+      <label>{t('io.group')} <select aria-label={t('io.group')} disabled={locked || masks[selectedIndex]?.shape === 'text'} value={masks[selectedIndex]?.id} onChange={e => {
         const id = e.target.value === 'new' ? Math.max(lastOrdinal.current, ...masks.map(m => m.id)) + 1 : Number(e.target.value);
         if (id > 1000) return;
         lastOrdinal.current = Math.max(lastOrdinal.current, id, ...masks.map(m => m.id));
         saveMasks(masks.map((m, i) => i === selectedIndex ? { ...m, id } : m));
-      }}>{[...new Set(masks.filter(m => m.id > 0 || masks[selectedIndex]?.id === 0).map(m => m.id))].map(id => <option key={id} value={id}>Card {id}</option>)}<option value="new" disabled={Math.max(...masks.map(m => m.id)) >= 1000}>New separate card</option></select></label>
-      <button className="btn btn-sm btn-ghost" style={{ marginBlock: 8, marginRight: 8 }} type="button" disabled={locked} onClick={() => setShowAnswer(v => !v)}>{showAnswer ? 'Preview question' : 'Preview answer'}</button>
-      <button className="btn btn-sm btn-danger" style={{ marginBlock: 8 }} type="button" disabled={locked} onClick={() => { lastOrdinal.current = Math.max(lastOrdinal.current, ...masks.map(m => m.id)); saveMasks(masks.filter((_, i) => i !== selectedIndex)); setSelected(null); }}>Delete selected region</button>
-      <label>Rotation (degrees)<input aria-label="Mask rotation" type="number" min="-360" max="360" step="any" disabled={locked} value={masks[selectedIndex]?.angle || 0} onChange={e => { const angle = Number(e.target.value); if (Number.isFinite(angle) && Math.abs(angle) <= 360) updateSelected({ angle }); }} /></label>
-      <label>Color<input aria-label="Mask color" type="color" disabled={locked} value={/^#[0-9a-f]{6}$/i.test(masks[selectedIndex]?.fill || '') ? masks[selectedIndex].fill : '#ffca64'} onChange={e => updateSelected({ fill: e.target.value })} /></label>
-      <button type="button" disabled={locked} onClick={() => updateSelected({ fill: undefined })}>Reset color</button>
+      }}>{[...new Set(masks.filter(m => m.id > 0 || masks[selectedIndex]?.id === 0).map(m => m.id))].map(id => <option key={id} value={id}>{t('nt.card', { n: id })}</option>)}<option value="new" disabled={Math.max(...masks.map(m => m.id)) >= 1000}>{t('io.newCard')}</option></select></label>
+      <button className="btn btn-sm btn-ghost" style={{ marginBlock: 8, marginRight: 8 }} type="button" disabled={locked} onClick={() => setShowAnswer(v => !v)}>{showAnswer ? t('io.previewQuestion') : t('io.previewAnswer')}</button>
+      <button className="btn btn-sm btn-danger" style={{ marginBlock: 8 }} type="button" disabled={locked} onClick={() => { lastOrdinal.current = Math.max(lastOrdinal.current, ...masks.map(m => m.id)); saveMasks(masks.filter((_, i) => i !== selectedIndex)); setSelected(null); }}>{t('io.deleteRegion')}</button>
+      <label>{t('io.rotation')}<input aria-label="Mask rotation" type="number" min="-360" max="360" step="any" disabled={locked} value={masks[selectedIndex]?.angle || 0} onChange={e => { const angle = Number(e.target.value); if (Number.isFinite(angle) && Math.abs(angle) <= 360) updateSelected({ angle }); }} /></label>
+      <label>{t('io.color')}<input aria-label="Mask color" type="color" disabled={locked} value={/^#[0-9a-f]{6}$/i.test(masks[selectedIndex]?.fill || '') ? masks[selectedIndex].fill : '#ffca64'} onChange={e => updateSelected({ fill: e.target.value })} /></label>
+      <button type="button" disabled={locked} onClick={() => updateSelected({ fill: undefined })}>{t('io.resetColor')}</button>
       {masks[selectedIndex]?.shape === 'text' && <>
-        <label>Annotation text<input aria-label="Annotation text" maxLength={2000} disabled={locked} value={masks[selectedIndex].text || ''} onChange={e => { if (e.target.value) updateSelected({ text: e.target.value }); }} /></label>
-        <label>Text size (% image height)<input aria-label="Annotation size" type="number" min=".1" max="100" step="any" disabled={locked} value={(masks[selectedIndex].fontSize || .05) * 100} onChange={e => { const size = Number(e.target.value) / 100; if (size >= .001 && size <= 1) updateSelected({ fontSize: size }); }} /></label>
-        <label>Text scale<input aria-label="Annotation scale" type="number" min=".01" max="100" step="any" disabled={locked} value={masks[selectedIndex].scale || 1} onChange={e => { const scale = Number(e.target.value); if (scale >= .01 && scale <= 100) updateSelected({ scale }); }} /></label>
+        <label>{t('io.annotation')}<input aria-label="Annotation text" maxLength={2000} disabled={locked} value={masks[selectedIndex].text || ''} onChange={e => { if (e.target.value) updateSelected({ text: e.target.value }); }} /></label>
+        <label>{t('io.textSize')}<input aria-label="Annotation size" type="number" min=".1" max="100" step="any" disabled={locked} value={(masks[selectedIndex].fontSize || .05) * 100} onChange={e => { const size = Number(e.target.value) / 100; if (size >= .001 && size <= 1) updateSelected({ fontSize: size }); }} /></label>
+        <label>{t('io.textScale')}<input aria-label="Annotation scale" type="number" min=".01" max="100" step="any" disabled={locked} value={masks[selectedIndex].scale || 1} onChange={e => { const scale = Number(e.target.value); if (scale >= .01 && scale <= 100) updateSelected({ scale }); }} /></label>
       </>}
       {(['left', 'top', 'width', 'height'] as const).filter(key => masks[selectedIndex]?.shape !== 'text' || key === 'left' || key === 'top').map(key => <label key={key} style={{ display: 'inline-block', maxWidth: 120, margin: 4 }}>{key} (%)<input aria-label={`Mask ${key} (%)`} type="number" min="0" max="100" step="any" value={Number(((masks[selectedIndex]?.[key] ?? 0) * 100).toFixed(3))} disabled={locked} onChange={e => {
         const value = Number(e.target.value) / 100;
@@ -144,7 +146,7 @@ export default function ImageOcclusionEditor({ fields, onChange, disabled = fals
         });
         if (next.every(m => m.width > 0 && m.height > 0 && m.left >= 0 && m.top >= 0 && m.left + m.width <= 1.000001 && m.top + m.height <= 1.000001)) saveMasks(next);
       }} /></label>)}
-      <p>Deleting or regrouping away a card with study history is blocked when saving. Other regions keep their card identities.</p>
+      <p>{t('io.deleteHint')}</p>
     </>}
   </section>;
 }

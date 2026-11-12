@@ -7,6 +7,8 @@ import type { DeckOptionsResponse } from '../api/options';
 import { OptionsPresets } from '../components/OptionsPresets';
 import type { Deck } from '../api/types';
 import '../DeckOptions.css';
+import { usePrefs } from '../context/usePrefs';
+import { tNow } from '../context/prefs-context-base';
 
 export interface DeckSettings {
   // Daily limits (active)
@@ -345,6 +347,7 @@ const validateAndApplyLoadedSettings = (rawJson: string): DeckSettings => {
 };
 
 const DeckOptionsPageContent = () => {
+  const { t } = usePrefs();
   const { deckId } = useParams<{ deckId: string }>();
   const [deck, setDeck] = useState<Deck | null>(null);
   const [options, setOptions] = useState<DeckOptionsResponse | null>(null);
@@ -395,7 +398,7 @@ const DeckOptionsPageContent = () => {
         setSaveError(null);
       })
       .catch((err: unknown) => {
-        if (!cancelled) setLoadError(err instanceof Error ? err.message : 'Failed to load deck options.');
+        if (!cancelled) setLoadError(err instanceof Error ? err.message : tNow('do.loadFailed'));
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -416,7 +419,7 @@ const DeckOptionsPageContent = () => {
       setSuccessMessage(null);
       setSaveError(null);
     } catch (err: unknown) {
-      setSaveError(err instanceof Error ? err.message : 'Failed to apply updated options.');
+      setSaveError(err instanceof Error ? err.message : t('do.applyFailed'));
     }
   };
 
@@ -507,7 +510,7 @@ const DeckOptionsPageContent = () => {
     const errors = validateAll(settings);
     if (Object.keys(errors).length > 0) {
       setValidationErrors(errors);
-      setSaveError('Please correct the validation errors before saving.');
+      setSaveError(t('do.fixErrors'));
       return;
     }
 
@@ -521,12 +524,12 @@ const DeckOptionsPageContent = () => {
       if (res?.data) {
         setOptions(res.data);
       }
-      setSuccessMessage('Settings saved successfully!');
+      setSuccessMessage(t('do.saved'));
     } catch (err: any) {
       if (err?.response?.status === 409) {
-        setSaveError('Preset conflict: Settings were modified elsewhere. Please reload before saving.');
+        setSaveError(t('op.conflict'));
       } else {
-        setSaveError(err?.response?.data?.detail || (err instanceof Error ? err.message : 'Failed to save settings.'));
+        setSaveError(err?.response?.data?.detail || (err instanceof Error ? err.message : t('do.saveFailed')));
       }
     } finally {
       setIsSaving(false);
@@ -535,9 +538,9 @@ const DeckOptionsPageContent = () => {
 
   if (loading || (!loadError && deck !== null && deck.id !== Number(deckId))) {
     return (
-      <div className="options-loading-container" role="status" aria-label="Loading options">
+      <div className="options-loading-container" role="status" aria-label={t('do.loadingAria')}>
         <div className="spinner" />
-        <p className="loading-text">Loading deck options...</p>
+        <p className="loading-text">{t('do.loading')}</p>
       </div>
     );
   }
@@ -546,14 +549,14 @@ const DeckOptionsPageContent = () => {
     return (
       <div className="options-container">
         <div className="options-error-panel" role="alert">
-          <h3>Failed to load deck options</h3>
+          <h3>{t('do.h.failed_to_load_deck_options')}</h3>
           <p className="error-message">{loadError}</p>
           <div className="error-actions">
             <button type="button" className="btn btn-primary" onClick={() => { setLoading(true); setLoadError(null); setLoadAttempt(value => value + 1); }}>
-              Retry
+              {t('common.retry')}
             </button>
             <Link to="/decks" className="btn btn-secondary">
-              Back to Decks
+              {t('study.backToDecks')}
             </Link>
           </div>
         </div>
@@ -565,11 +568,11 @@ const DeckOptionsPageContent = () => {
     return (
       <div className="options-container">
         <div className="options-error-panel" role="alert">
-          <h3>Deck not found</h3>
-          <p className="error-message">The requested deck could not be found.</p>
+          <h3>{t('do.h.deck_not_found')}</h3>
+          <p className="error-message">{t('do.notFoundText')}</p>
           <div className="error-actions">
             <Link to="/decks" className="btn btn-secondary">
-              Back to Decks
+              {t('study.backToDecks')}
             </Link>
           </div>
         </div>
@@ -586,7 +589,7 @@ const DeckOptionsPageContent = () => {
       <div className="options-toolbar">
         <div className="options-breadcrumb">
           <Link to="/decks" className="options-back-link">
-            Decks
+            {t('nav.decks')}
           </Link>
           <span className="options-breadcrumb-sep">/</span>
           <span className="options-breadcrumb-current">Options for {deck.name}</span>
@@ -603,10 +606,10 @@ const DeckOptionsPageContent = () => {
           ) : (
             <div
               className="options-scope-badge"
-              title="Settings are stored directly on this deck."
+              title={t('do.perDeckTitle')}
             >
               <span className="badge-dot" aria-hidden="true" />
-              <span>Per-deck settings</span>
+              <span>{t('do.perDeck')}</span>
             </div>
           )}
           <button
@@ -616,7 +619,7 @@ const DeckOptionsPageContent = () => {
             disabled={isSaving || presetBusy || hasValidationErrors}
             aria-busy={isSaving}
           >
-            {isSaving ? 'Saving...' : 'Save'}
+            {isSaving ? t('common.saving') : t('do.save')}
           </button>
         </div>
       </div>
@@ -625,7 +628,7 @@ const DeckOptionsPageContent = () => {
       {saveError && (
         <div className="options-alert options-alert-error" role="alert">
           <span>{saveError}</span>
-          <button type="button" className="btn btn-ghost" onClick={() => { setLoading(true); setLoadAttempt(v => v+1); }}>Reload options</button>
+          <button type="button" className="btn btn-ghost" onClick={() => { setLoading(true); setLoadAttempt(v => v+1); }}>{t('do.reload')}</button>
         </div>
       )}
       {successMessage && (
@@ -637,7 +640,7 @@ const DeckOptionsPageContent = () => {
       {/* Options Presets and Daily Limits Overrides Panels */}
       {options && (
         <details className="options-preset-details">
-        <summary>Presets and daily limit overrides</summary>
+        <summary>{t('do.presetsSummary')}</summary>
         <OptionsPresets
           deckId={Number(deckId)}
           options={options}
@@ -652,7 +655,7 @@ const DeckOptionsPageContent = () => {
         />
         </details>
       )}
-      {settings.fsrs && <p>FSRS uses the learning steps, desired retention and maximum interval below. SM-2 ease and interval modifiers are retained for switching back.</p>}
+      {settings.fsrs && <p>{t('do.fsrsHint')}</p>}
 
       {/* Two Desktop Columns / One Mobile Column */}
       <div className="options-grid">
@@ -662,13 +665,13 @@ const DeckOptionsPageContent = () => {
           <section className="options-card options-panel">
             <div className="options-card-header">
               <div className="options-card-title-group">
-                <h3>Daily Limits</h3>
+                <h3>{t('do.h.daily_limits')}</h3>
               </div>
             </div>
             <div className="options-row-with-error">
               <div className="options-row-main">
                 <label htmlFor="new_cards_per_day" className="options-label">
-                  New cards/day
+                  {t('op.newCardsDay')}
                 </label>
                 <input
                   id="new_cards_per_day"
@@ -695,7 +698,7 @@ const DeckOptionsPageContent = () => {
             <div className="options-row-with-error">
               <div className="options-row-main">
                 <label htmlFor="maximum_reviews_per_day" className="options-label">
-                  Maximum reviews/day
+                  {t('op.maxReviewsDay')}
                 </label>
                 <input
                   id="maximum_reviews_per_day"
@@ -723,11 +726,11 @@ const DeckOptionsPageContent = () => {
 
             <div className="options-row">
               <label htmlFor="new_cards_ignore_review_limit" className="options-label">
-                New cards ignore review limit
+                {t('do.newIgnoreLimit')}
               </label>
               <ToggleSwitch
                 id="new_cards_ignore_review_limit"
-                label="New cards ignore review limit"
+                label={t('do.newIgnoreLimit')}
                 checked={settings.new_cards_ignore_review_limit}
                 onChange={(val) => handleToggleChange('new_cards_ignore_review_limit', val)}
               />
@@ -735,11 +738,11 @@ const DeckOptionsPageContent = () => {
 
             <div className="options-row">
               <label htmlFor="limits_start_from_top" className="options-label">
-                Limits start from top
+                {t('do.limitsTop')}
               </label>
               <ToggleSwitch
                 id="limits_start_from_top"
-                label="Limits start from top"
+                label={t('do.limitsTop')}
                 checked={settings.limits_start_from_top}
                 onChange={(val) => handleToggleChange('limits_start_from_top', val)}
               />
@@ -750,14 +753,14 @@ const DeckOptionsPageContent = () => {
           <section className="options-card options-panel">
             <div className="options-card-header">
               <div className="options-card-title-group">
-                <h3>New Cards</h3>
+                <h3>{t('do.h.new_cards')}</h3>
               </div>
             </div>
 
             <div className="options-row-with-error">
               <div className="options-row-main">
                 <label htmlFor="learning_steps" className="options-label">
-                  Learning steps
+                  {t('do.learningSteps')}
                 </label>
                 <input
                   id="learning_steps"
@@ -783,7 +786,7 @@ const DeckOptionsPageContent = () => {
             <div className="options-row-with-error">
               <div className="options-row-main">
                 <label htmlFor="graduating_interval" className="options-label">
-                  Graduating interval (days)
+                  {t('do.graduating')}
                 </label>
                 <input
                   id="graduating_interval"
@@ -811,7 +814,7 @@ const DeckOptionsPageContent = () => {
             <div className="options-row-with-error">
               <div className="options-row-main">
                 <label htmlFor="easy_interval" className="options-label">
-                  Easy interval (days)
+                  {t('do.easyInterval')}
                 </label>
                 <input
                   id="easy_interval"
@@ -838,7 +841,7 @@ const DeckOptionsPageContent = () => {
 
             <div className="options-row">
               <label htmlFor="insertion_order" className="options-label">
-                Insertion order (sequential only)
+                {t('do.insertion')}
               </label>
               <select
                 id="insertion_order"
@@ -847,8 +850,8 @@ const DeckOptionsPageContent = () => {
                 value={settings.insertion_order}
                 onChange={(e) => handleTextChange('insertion_order', e.target.value)}
               >
-                <option>Sequential (oldest cards first)</option>
-                <option>Random</option>
+                <option value="Sequential (oldest cards first)">{t('do.opt.sequential_oldest_cards_first')}</option>
+                <option value="Random">{t('do.opt.random')}</option>
               </select>
             </div>
           </section>
@@ -857,14 +860,14 @@ const DeckOptionsPageContent = () => {
           <section className="options-card options-panel">
             <div className="options-card-header">
               <div className="options-card-title-group">
-                <h3>Lapses</h3>
+                <h3>{t('do.h.lapses')}</h3>
               </div>
             </div>
 
             <div className="options-row-with-error">
               <div className="options-row-main">
                 <label htmlFor="relearning_steps" className="options-label">
-                  Relearning steps
+                  {t('do.relearning')}
                 </label>
                 <input
                   id="relearning_steps"
@@ -890,7 +893,7 @@ const DeckOptionsPageContent = () => {
             <div className="options-row-with-error">
               <div className="options-row-main">
                 <label htmlFor="minimum_interval" className="options-label">
-                  Minimum interval (days)
+                  {t('do.minInterval')}
                 </label>
                 <input
                   id="minimum_interval"
@@ -918,7 +921,7 @@ const DeckOptionsPageContent = () => {
             <div className="options-row-with-error">
               <div className="options-row-main">
                 <label htmlFor="leech_threshold" className="options-label">
-                  Leech threshold
+                  {t('do.leechThreshold')}
                 </label>
                 <input
                   id="leech_threshold"
@@ -944,7 +947,7 @@ const DeckOptionsPageContent = () => {
 
             <div className="options-row">
               <label htmlFor="leech_action" className="options-label">
-                Leech action
+                {t('do.leechAction')}
               </label>
               <select
                 id="leech_action"
@@ -952,8 +955,8 @@ const DeckOptionsPageContent = () => {
                 value={settings.leech_action}
                 onChange={(e) => handleTextChange('leech_action', e.target.value)}
               >
-                <option>Tag Only</option>
-                <option>Suspend Card</option>
+                <option value="Tag Only">{t('do.opt.tag_only')}</option>
+                <option value="Suspend Card">{t('do.opt.suspend_card')}</option>
               </select>
             </div>
           </section>
@@ -963,13 +966,13 @@ const DeckOptionsPageContent = () => {
             <fieldset style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
             <div className="options-card-header">
               <div className="options-card-title-group">
-                <h3>Display Order</h3>
+                <h3>{t('do.h.display_order')}</h3>
               </div>
             </div>
 
             <div className="options-row">
               <label htmlFor="new_card_gather_order" className="options-label">
-                New card gather order
+                {t('do.gatherOrder')}
               </label>
               <select
                 id="new_card_gather_order"
@@ -977,18 +980,18 @@ const DeckOptionsPageContent = () => {
                 value={settings.new_card_gather_order}
                 onChange={(e) => handleTextChange('new_card_gather_order', e.target.value)}
               >
-                <option>Deck</option>
-                <option>Deck, then random notes</option>
-                <option>Ascending position</option>
-                <option>Descending position</option>
-                <option>Random notes</option>
-                <option>Random cards</option>
+                <option value="Deck">{t('do.opt.deck')}</option>
+                <option value="Deck, then random notes">{t('do.opt.deck_then_random_notes')}</option>
+                <option value="Ascending position">{t('do.opt.ascending_position')}</option>
+                <option value="Descending position">{t('do.opt.descending_position')}</option>
+                <option value="Random notes">{t('do.opt.random_notes')}</option>
+                <option value="Random cards">{t('do.opt.random_cards')}</option>
               </select>
             </div>
 
             <div className="options-row">
               <label htmlFor="new_card_sort_order" className="options-label">
-                New card sort order
+                {t('do.sortOrder')}
               </label>
               <select
                 id="new_card_sort_order"
@@ -996,17 +999,17 @@ const DeckOptionsPageContent = () => {
                 value={settings.new_card_sort_order}
                 onChange={(e) => handleTextChange('new_card_sort_order', e.target.value)}
               >
-                <option>Card type, then order gathered</option>
-                <option>Order gathered</option>
-                <option>Card type, then random</option>
-                <option>Random note, then card type</option>
-                <option>Random</option>
+                <option value="Card type, then order gathered">{t('do.opt.card_type_then_order_gathered')}</option>
+                <option value="Order gathered">{t('do.opt.order_gathered')}</option>
+                <option value="Card type, then random">{t('do.opt.card_type_then_random')}</option>
+                <option value="Random note, then card type">{t('do.opt.random_note_then_card_type')}</option>
+                <option value="Random">{t('do.opt.random')}</option>
               </select>
             </div>
 
             <div className="options-row">
               <label htmlFor="new_review_order" className="options-label">
-                New/review order
+                {t('do.newReviewOrder')}
               </label>
               <select
                 id="new_review_order"
@@ -1014,15 +1017,15 @@ const DeckOptionsPageContent = () => {
                 value={settings.new_review_order}
                 onChange={(e) => handleTextChange('new_review_order', e.target.value)}
               >
-                <option>Mix with reviews</option>
-                <option>Show before reviews</option>
-                <option>Show after reviews</option>
+                <option value="Mix with reviews">{t('do.opt.mix_with_reviews')}</option>
+                <option value="Show before reviews">{t('do.opt.show_before_reviews')}</option>
+                <option value="Show after reviews">{t('do.opt.show_after_reviews')}</option>
               </select>
             </div>
 
             <div className="options-row">
               <label htmlFor="interday_learning_review_order" className="options-label">
-                Interday learning/review order
+                {t('do.interdayOrder')}
               </label>
               <select
                 id="interday_learning_review_order"
@@ -1032,15 +1035,15 @@ const DeckOptionsPageContent = () => {
                   handleTextChange('interday_learning_review_order', e.target.value)
                 }
               >
-                <option>Mix with reviews</option>
-                <option>Show before reviews</option>
-                <option>Show after reviews</option>
+                <option value="Mix with reviews">{t('do.opt.mix_with_reviews')}</option>
+                <option value="Show before reviews">{t('do.opt.show_before_reviews')}</option>
+                <option value="Show after reviews">{t('do.opt.show_after_reviews')}</option>
               </select>
             </div>
 
             <div className="options-row">
               <label htmlFor="review_sort_order" className="options-label">
-                Review sort order
+                {t('do.reviewSort')}
               </label>
               <select
                 id="review_sort_order"
@@ -1048,14 +1051,14 @@ const DeckOptionsPageContent = () => {
                 value={settings.review_sort_order}
                 onChange={(e) => handleTextChange('review_sort_order', e.target.value)}
               >
-                <option>Due date, then random</option>
-                <option>Due date, then deck</option>
-                <option>Deck, then due date</option>
-                <option>Ascending intervals</option>
-                <option>Descending intervals</option>
-                <option>Ascending ease</option>
-                <option>Descending ease</option>
-                <option>Relative overdueness</option>
+                <option value="Due date, then random">{t('do.opt.due_date_then_random')}</option>
+                <option value="Due date, then deck">{t('do.opt.due_date_then_deck')}</option>
+                <option value="Deck, then due date">{t('do.opt.deck_then_due_date')}</option>
+                <option value="Ascending intervals">{t('do.opt.ascending_intervals')}</option>
+                <option value="Descending intervals">{t('do.opt.descending_intervals')}</option>
+                <option value="Ascending ease">{t('do.opt.ascending_ease')}</option>
+                <option value="Descending ease">{t('do.opt.descending_ease')}</option>
+                <option value="Relative overdueness">{t('do.opt.relative_overdueness')}</option>
               </select>
             </div>
           </fieldset></section>
@@ -1064,13 +1067,13 @@ const DeckOptionsPageContent = () => {
           <section className="options-card options-panel">
             <div className="options-card-header">
               <div className="options-card-title-group">
-                <h3>FSRS</h3>
+                <h3>{t('do.h.fsrs')}</h3>
               </div>
             </div>
 
             <div className="options-row">
               <label htmlFor="fsrs" className="options-label">
-                FSRS
+                {t('do.fsrs')}
               </label>
               <ToggleSwitch
                 id="fsrs"
@@ -1082,24 +1085,24 @@ const DeckOptionsPageContent = () => {
 
             <div className="options-row">
               <label htmlFor="fsrs_fuzz" className="options-label">
-                Spread future review dates (fuzz)
+                {t('do.fuzz')}
               </label>
               <ToggleSwitch
                 id="fsrs_fuzz"
-                label="Spread future review dates (fuzz)"
+                label={t('do.fuzz')}
                 checked={settings.fsrs_fuzz}
                 disabled={!settings.fsrs}
                 onChange={(val) => handleToggleChange('fsrs_fuzz', val)}
               />
             </div>
             <p className="options-description">
-              Slightly varies future FSRS review intervals. Existing due dates stay unchanged.
+              {t('do.fuzzHint')}
             </p>
 
             <div className="options-row-with-error">
               <div className="options-row-main">
                 <label htmlFor="fsrs_desired_retention" className="options-label">
-                  Desired retention (%)
+                  {t('do.retention')}
                 </label>
                 <input
                   id="fsrs_desired_retention"
@@ -1133,12 +1136,12 @@ const DeckOptionsPageContent = () => {
             </div>
 
             {settings.fsrs && <FsrsOptimizer key={deckId} deckId={Number(deckId)} onUse={parameters => setSettings(old => ({ ...old, fsrs_parameters: parameters }))} />}
-            {settings.fsrs_parameters && <details className="fsrs-parameters"><summary>Current FSRS parameters</summary><pre style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{JSON.stringify(settings.fsrs_parameters)}</pre><button type="button" onClick={() => setSettings(old => ({ ...old, fsrs_parameters: null }))}>Reset to default parameters</button></details>}
+            {settings.fsrs_parameters && <details className="fsrs-parameters"><summary>{t('do.currentParams')}</summary><pre style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{JSON.stringify(settings.fsrs_parameters)}</pre><button type="button" onClick={() => setSettings(old => ({ ...old, fsrs_parameters: null }))}>{t('do.resetParams')}</button></details>}
 
             <div className="options-row-with-error">
               <div className="options-row-main">
                 <label htmlFor="timezone" className="options-label">
-                  Timezone
+                  {t('do.timezone')}
                 </label>
                 <input
                   id="timezone"
@@ -1164,7 +1167,7 @@ const DeckOptionsPageContent = () => {
             <div className="options-row-with-error">
               <div className="options-row-main">
                 <label htmlFor="day_starts_at" className="options-label">
-                  Day starts at (hours past midnight)
+                  {t('do.dayStarts')}
                 </label>
                 <input
                   id="day_starts_at"
@@ -1192,7 +1195,7 @@ const DeckOptionsPageContent = () => {
             <div className="options-row-with-error">
               <div className="options-row-main">
                 <label htmlFor="learning_ahead_seconds" className="options-label">
-                  Learning ahead limit (seconds)
+                  {t('do.learnAhead')}
                 </label>
                 <input
                   id="learning_ahead_seconds"
@@ -1227,27 +1230,27 @@ const DeckOptionsPageContent = () => {
           <section className="options-card options-panel">
             <div className="options-card-header">
               <div className="options-card-title-group">
-                <h3>Burying</h3>
+                <h3>{t('do.h.burying')}</h3>
               </div>
             </div>
             <div className="options-row">
               <label htmlFor="bury_new_siblings" className="options-label">
-                Bury new siblings
+                {t('do.buryNew')}
               </label>
               <ToggleSwitch
                 id="bury_new_siblings"
-                label="Bury new siblings"
+                label={t('do.buryNew')}
                 checked={settings.bury_new_siblings}
                 onChange={(val) => handleToggleChange('bury_new_siblings', val)}
               />
             </div>
             <div className="options-row">
               <label htmlFor="bury_review_siblings" className="options-label">
-                Bury review siblings
+                {t('do.buryReview')}
               </label>
               <ToggleSwitch
                 id="bury_review_siblings"
-                label="Bury review siblings"
+                label={t('do.buryReview')}
                 checked={settings.bury_review_siblings}
                 onChange={(val) => handleToggleChange('bury_review_siblings', val)}
               />
@@ -1257,11 +1260,11 @@ const DeckOptionsPageContent = () => {
                 htmlFor="bury_interday_learning_siblings"
                 className="options-label"
               >
-                Bury interday learning siblings
+                {t('do.buryInterday')}
               </label>
               <ToggleSwitch
                 id="bury_interday_learning_siblings"
-                label="Bury interday learning siblings"
+                label={t('do.buryInterday')}
                 checked={settings.bury_interday_learning_siblings}
                 onChange={(val) => handleToggleChange('bury_interday_learning_siblings', val)}
               />
@@ -1272,16 +1275,16 @@ const DeckOptionsPageContent = () => {
           <section className="options-card options-panel">
             <div className="options-card-header">
               <div className="options-card-title-group">
-                <h3>Audio</h3>
+                <h3>{t('do.h.audio')}</h3>
               </div>
             </div>
             <div className="options-row">
               <label htmlFor="dont_play_audio_automatically" className="options-label">
-                Don't play audio automatically
+                {t('do.noAutoAudio')}
               </label>
               <ToggleSwitch
                 id="dont_play_audio_automatically"
-                label="Don't play audio automatically"
+                label={t('do.noAutoAudio')}
                 checked={settings.dont_play_audio_automatically}
                 onChange={(val) => handleToggleChange('dont_play_audio_automatically', val)}
               />
@@ -1291,11 +1294,11 @@ const DeckOptionsPageContent = () => {
                 htmlFor="skip_question_when_replaying_answer"
                 className="options-label"
               >
-                Skip question when replaying answer
+                {t('do.skipQuestion')}
               </label>
               <ToggleSwitch
                 id="skip_question_when_replaying_answer"
-                label="Skip question when replaying answer"
+                label={t('do.skipQuestion')}
                 checked={settings.skip_question_when_replaying_answer}
                 onChange={(val) =>
                   handleToggleChange('skip_question_when_replaying_answer', val)
@@ -1308,13 +1311,13 @@ const DeckOptionsPageContent = () => {
           <section className="options-card options-panel">
             <div className="options-card-header">
               <div className="options-card-title-group">
-                <h3>Timers</h3>
+                <h3>{t('do.h.timers')}</h3>
               </div>
             </div>
             <div className="options-row-with-error">
               <div className="options-row-main">
                 <label htmlFor="maximum_answer_seconds" className="options-label">
-                  Maximum answer seconds
+                  {t('do.maxAnswer')}
                 </label>
                 <input
                   id="maximum_answer_seconds"
@@ -1342,11 +1345,11 @@ const DeckOptionsPageContent = () => {
             </div>
             <div className="options-row">
               <label htmlFor="show_on_screen_timer" className="options-label">
-                Show on-screen timer
+                {t('do.showTimer')}
               </label>
               <ToggleSwitch
                 id="show_on_screen_timer"
-                label="Show on-screen timer"
+                label={t('do.showTimer')}
                 checked={settings.show_on_screen_timer}
                 onChange={(val) => handleToggleChange('show_on_screen_timer', val)}
               />
@@ -1356,11 +1359,11 @@ const DeckOptionsPageContent = () => {
                 htmlFor="stop_on_screen_timer_on_answer"
                 className="options-label"
               >
-                Stop on-screen timer on answer
+                {t('do.stopTimer')}
               </label>
               <ToggleSwitch
                 id="stop_on_screen_timer_on_answer"
-                label="Stop on-screen timer on answer"
+                label={t('do.stopTimer')}
                 checked={settings.stop_on_screen_timer_on_answer}
                 onChange={(val) => handleToggleChange('stop_on_screen_timer_on_answer', val)}
               />
@@ -1371,13 +1374,13 @@ const DeckOptionsPageContent = () => {
           <section className="options-card options-panel">
             <div className="options-card-header">
               <div className="options-card-title-group">
-                <h3>Auto Advance</h3>
+                <h3>{t('do.h.auto_advance')}</h3>
               </div>
             </div>
             <div className="options-row-with-error">
               <div className="options-row-main">
                 <label htmlFor="seconds_to_show_question_for" className="options-label">
-                  Seconds to show question for
+                  {t('do.secondsQuestion')}
                 </label>
                 <input
                   id="seconds_to_show_question_for"
@@ -1408,7 +1411,7 @@ const DeckOptionsPageContent = () => {
             <div className="options-row-with-error">
               <div className="options-row-main">
                 <label htmlFor="seconds_to_show_answer_for" className="options-label">
-                  Seconds to show answer for
+                  {t('do.secondsAnswer')}
                 </label>
                 <input
                   id="seconds_to_show_answer_for"
@@ -1438,18 +1441,18 @@ const DeckOptionsPageContent = () => {
             </div>
             <div className="options-row">
               <label htmlFor="wait_for_audio" className="options-label">
-                Wait for audio
+                {t('do.waitAudio')}
               </label>
               <ToggleSwitch
                 id="wait_for_audio"
-                label="Wait for audio"
+                label={t('do.waitAudio')}
                 checked={settings.wait_for_audio}
                 onChange={(val) => handleToggleChange('wait_for_audio', val)}
               />
             </div>
             <div className="options-row">
               <label htmlFor="question_action" className="options-label">
-                Question action
+                {t('do.questionAction')}
               </label>
               <select
                 id="question_action"
@@ -1457,12 +1460,12 @@ const DeckOptionsPageContent = () => {
                 value={settings.question_action}
                 onChange={(e) => handleTextChange('question_action', e.target.value)}
               >
-                <option>Show Answer</option>
+                <option value="Show Answer">{t('do.opt.show_answer')}</option>
               </select>
             </div>
             <div className="options-row">
               <label htmlFor="answer_action" className="options-label">
-                Answer action
+                {t('do.answerAction')}
               </label>
               <select
                 id="answer_action"
@@ -1470,11 +1473,11 @@ const DeckOptionsPageContent = () => {
                 value={settings.answer_action}
                 onChange={(e) => handleTextChange('answer_action', e.target.value)}
               >
-                <option>Bury Card</option>
-                <option>Good</option>
-                <option>Hard</option>
-                <option>Again</option>
-                <option>Easy</option>
+                <option value="Bury Card">{t('do.opt.bury_card')}</option>
+                <option value="Good">{t('do.opt.good')}</option>
+                <option value="Hard">{t('do.opt.hard')}</option>
+                <option value="Again">{t('do.opt.again')}</option>
+                <option value="Easy">{t('do.opt.easy')}</option>
               </select>
             </div>
           </section>
@@ -1483,23 +1486,23 @@ const DeckOptionsPageContent = () => {
           <section className="options-card options-panel">
             <div className="options-card-header">
               <div className="options-card-title-group">
-                <h3>Easy Days</h3>
+                <h3>{t('do.h.easy_days')}</h3>
                 </div>
             </div>
-            <p>Future review dates prefer weekdays with more capacity, within the allowed interval window. Existing due dates and learning steps stay as scheduled.</p>
-            <label><input type="checkbox" checked={settings.load_balancing ?? false} onChange={e => setSettings(old => ({ ...old, load_balancing: e.target.checked }))} />Balance review load across eligible days</label>
+            <p>{t('do.easyDaysHint')}</p>
+            <label><input type="checkbox" checked={settings.load_balancing ?? false} onChange={e => setSettings(old => ({ ...old, load_balancing: e.target.checked }))} />{t('do.balance')}</label>
             <div className="easy-days-header" aria-hidden="true">
               <span />
               <div className="easy-days-labels">
-                <span className="easy-days-label-min">Minimum</span>
-                <span className="easy-days-label-mid">Reduced</span>
-                <span className="easy-days-label-max">Normal</span>
+                <span className="easy-days-label-min">{t('do.minimum')}</span>
+                <span className="easy-days-label-mid">{t('do.reduced')}</span>
+                <span className="easy-days-label-max">{t('do.normal')}</span>
               </div>
             </div>
             {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day) => (
               <div className="slider-row" key={day}>
                 <label htmlFor={`easy_days_${day}`} className="day-label">
-                  {day}
+                  {t(`day.${day.toLowerCase() as 'mon'}`)}
                 </label>
                 <input
                   id={`easy_days_${day}`}
@@ -1519,14 +1522,14 @@ const DeckOptionsPageContent = () => {
           <section className="options-card options-panel">
             <div className="options-card-header">
               <div className="options-card-title-group">
-                <h3>Advanced</h3>
+                <h3>{t('do.h.advanced')}</h3>
               </div>
             </div>
 
             <div className="options-row-with-error">
               <div className="options-row-main">
                 <label htmlFor="maximum_interval" className="options-label">
-                  Maximum interval (days)
+                  {t('do.maxInterval')}
                 </label>
                 <input
                   id="maximum_interval"
@@ -1553,7 +1556,7 @@ const DeckOptionsPageContent = () => {
             <div className="options-row-with-error">
               <div className="options-row-main">
                 <label htmlFor="starting_ease" className="options-label">
-                  Starting ease
+                  {t('do.startingEase')}
                 </label>
                 <input
                   id="starting_ease"
@@ -1581,7 +1584,7 @@ const DeckOptionsPageContent = () => {
             <div className="options-row-with-error">
               <div className="options-row-main">
                 <label htmlFor="easy_bonus" className="options-label">
-                  Easy bonus
+                  {t('do.easyBonus')}
                 </label>
                 <input
                   id="easy_bonus"
@@ -1609,7 +1612,7 @@ const DeckOptionsPageContent = () => {
             <div className="options-row-with-error">
               <div className="options-row-main">
                 <label htmlFor="interval_modifier" className="options-label">
-                  Interval modifier
+                  {t('do.intervalModifier')}
                 </label>
                 <input
                   id="interval_modifier"
@@ -1637,7 +1640,7 @@ const DeckOptionsPageContent = () => {
             <div className="options-row-with-error">
               <div className="options-row-main">
                 <label htmlFor="hard_interval" className="options-label">
-                  Hard interval
+                  {t('do.hardInterval')}
                 </label>
                 <input
                   id="hard_interval"
@@ -1665,7 +1668,7 @@ const DeckOptionsPageContent = () => {
             <div className="options-row-with-error">
               <div className="options-row-main">
                 <label htmlFor="new_interval" className="options-label">
-                  New interval
+                  {t('do.newInterval')}
                 </label>
                 <input
                   id="new_interval"
@@ -1692,18 +1695,18 @@ const DeckOptionsPageContent = () => {
 
             <div className="options-row" style={{ marginTop: '0.75rem' }}>
               <label htmlFor="custom_scheduling" className="options-label disabled">
-                Custom scheduling
+                {t('do.customScheduling')}
               </label>
               <ToggleSwitch
                 id="custom_scheduling"
-                label="Custom scheduling"
+                label={t('do.customScheduling')}
                 checked={settings.custom_scheduling}
                 disabled={true}
                 onChange={(val) => handleToggleChange('custom_scheduling', val)}
               />
             </div>
             <p className="options-inactive-notice" style={{ marginTop: '0.5rem' }}>
-              Custom scheduling scripts are not yet active on the backend. Settings are retained.
+              {t('do.customHint')}
             </p>
           </section>
         </div>

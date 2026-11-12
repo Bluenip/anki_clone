@@ -7,6 +7,8 @@ import { listDecks, getTodaySummary, createDeck, deleteDeck, updateDeck, importC
 import type { Deck as DeckData, TextImportOptions } from '../api/decks';
 import { getNoteTypes } from '../api/notes';
 import type { NoteType } from '../api/notes';
+import { usePrefs } from '../context/usePrefs';
+import { tNow } from '../context/prefs-context-base';
 
 const BUILTIN_NOTE_TYPES: NoteType[] = [
   { kind: 'basic', name: 'Basic', fields: ['Front', 'Back'] },
@@ -25,6 +27,9 @@ async function exportFailure(error: unknown, fallback: string): Promise<string> 
 }
 
 const DecksPage = () => {
+  const { t } = usePrefs();
+  // shortcut: upload progress text comes from api/packageUpload.ts in English only; translate there if it matters.
+  const [uploadStatus, setUploadStatus] = useState('');
   const [decks, setDecks] = useState<DeckData[]>([]);
   const [collapsedDecks, setCollapsedDecks] = useState<Set<string>>(new Set());
   const deckRows = useMemo(() => visibleDeckRows(decks, collapsedDecks), [decks, collapsedDecks]);
@@ -107,7 +112,6 @@ const DecksPage = () => {
   const [importingApkg, setImportingApkg] = useState(() => !!sessionStorage.getItem('anki-package-import'));
   const [packageJobId, setPackageJobId] = useState<string | null>(() => sessionStorage.getItem('anki-package-import'));
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
-  const [uploadStatus, setUploadStatus] = useState('Uploading…');
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const uploadController = useRef<AbortController | null>(null);
   const closePackageJob = () => {
@@ -204,7 +208,7 @@ const DecksPage = () => {
       sessionStorage.setItem('anki-package-import', res.data.id);
     } catch (err: any) {
       if (err?.name !== 'PackageUploadPaused') setUploadFile(null);
-      if (err?.code !== 'ERR_CANCELED' && err?.name !== 'AbortError') setOperationError(err?.response?.data?.detail || err?.message || 'Failed to upload package.');
+      if (err?.code !== 'ERR_CANCELED' && err?.name !== 'AbortError') setOperationError(err?.response?.data?.detail || err?.message || t('decks.uploadFailed'));
     } finally {
       setUploadProgress(null);
       uploadController.current = null;
@@ -219,11 +223,11 @@ const DecksPage = () => {
     
     const collectionRestore = file.name.toLowerCase().endsWith('.colpkg');
     if (collectionRestore && decks.length > 0) {
-      setOperationError('Use Backups & restore to preview and restore into a collection that already contains cards.');
+      setOperationError(t('decks.useBackups'));
       e.target.value = '';
       return;
     }
-    if (collectionRestore && !window.confirm('Restore this collection package, including all decks, media and study history, into your empty collection?')) {
+    if (collectionRestore && !window.confirm(t('decks.confirmRestore'))) {
       e.target.value = '';
       return;
     }
@@ -235,7 +239,7 @@ const DecksPage = () => {
         openImportModal(decks.length > 0 ? decks[0].id : 0, undefined, ev.target?.result as string);
         setImportSeparator(file.name.toLowerCase().endsWith('.csv') ? ',' : '\t');
       };
-      reader.onerror = () => setOperationError('Could not read the selected file.');
+      reader.onerror = () => setOperationError(t('decks.readFailed'));
       reader.readAsText(file);
     }
     e.target.value = '';
@@ -248,7 +252,7 @@ const DecksPage = () => {
       setDecks(res.data);
       setTodaySummary(summary?.data ?? null);
     } catch {
-      setLoadError('Failed to load decks. Please try again.');
+      setLoadError(tNow('decks.loadFailed'));
     } finally {
       setLoading(false);
     }
@@ -380,7 +384,7 @@ const DecksPage = () => {
       closeCreateModal();
       fetchDecks();
     } catch (err: any) {
-      setCreateModalError(err?.response?.data?.detail || 'Failed to create deck.');
+      setCreateModalError(err?.response?.data?.detail || t('decks.createFailed'));
     } finally {
       setPending(false);
     }
@@ -388,14 +392,14 @@ const DecksPage = () => {
 
   const handleDelete = async (id: number) => {
     const target=decks.find(deck=>deck.id===id);
-    if (confirm(`Delete "${target?.name || 'this deck'}" and its subdecks (${target?.total_cards ?? 0} cards)? This removes their study history.`)) {
+    if (confirm(t('decks.confirmDelete', { name: target?.name || t('decks.thisDeck'), count: target?.total_cards ?? 0 }))) {
       setPending(true);
       setOperationError(null);
       try {
         await deleteDeck(id);
         fetchDecks();
       } catch {
-        setOperationError('Failed to delete deck.');
+        setOperationError(t('decks.deleteFailed'));
       } finally {
         setPending(false);
       }
@@ -403,7 +407,7 @@ const DecksPage = () => {
   };
 
   const handleRename = async (id: number, oldName: string) => {
-    const newName = prompt('Enter new name:', oldName);
+    const newName = prompt(t('decks.enterNewName'), oldName);
     if (newName && newName !== oldName) {
       setPending(true);
       setOperationError(null);
@@ -411,7 +415,7 @@ const DecksPage = () => {
         await updateDeck(id, { name: newName });
         fetchDecks();
       } catch {
-        setOperationError('Failed to rename deck.');
+        setOperationError(t('decks.renameFailed'));
       } finally {
         setPending(false);
       }
@@ -436,7 +440,7 @@ const DecksPage = () => {
       window.URL.revokeObjectURL(url);
       closeExportModal();
     } catch (error: unknown) {
-      setOperationError(await exportFailure(error, 'Failed to export deck.'));
+      setOperationError(await exportFailure(error, t('decks.exportFailed')));
     } finally {
       setExporting(false);
     }
@@ -457,7 +461,7 @@ const DecksPage = () => {
       link.remove();
       URL.revokeObjectURL(url);
     } catch (error: unknown) {
-      setOperationError(await exportFailure(error, 'Failed to export collection.'));
+      setOperationError(await exportFailure(error, t('decks.exportCollectionFailed')));
     } finally {
       setExporting(false);
     }
@@ -528,7 +532,7 @@ const DecksPage = () => {
       if (!previewIsCurrent) setImportPreview({ fingerprint: importFingerprint, message: res.data.message });
       else { closeImportModal(); fetchDecks(); }
     } catch (err: any) {
-      setImportModalError(err?.response?.data?.detail || 'Failed to import cards.');
+      setImportModalError(err?.response?.data?.detail || t('decks.importFailed'));
     } finally {
       setPending(false);
     }
@@ -539,59 +543,59 @@ const DecksPage = () => {
   return (
     <div className="page-container decks-page">
       <header className="decks-heading">
-        <div><p className="decks-eyebrow">YOUR COLLECTION</p><h1>Decks</h1><p>Make a little progress, every day.</p></div>
+        <div><p className="decks-eyebrow">{t('decks.eyebrow')}</p><h1>{t('nav.decks')}</h1><p>{t('decks.subtitle')}</p></div>
         <div className="decks-primary-actions">
-          <button className="btn btn-ghost" onClick={e => { openerRef.current = e.currentTarget; setShowFileImport(true); }} disabled={importingApkg || pending}>{importingApkg ? 'Importing...' : 'Import File'}</button>
-          <button className="btn btn-primary" onClick={openCreateModal} disabled={pending}>Create Deck</button>
+          <button className="btn btn-ghost" onClick={e => { openerRef.current = e.currentTarget; setShowFileImport(true); }} disabled={importingApkg || pending}>{importingApkg ? t('decks.importing') : t('decks.importFile')}</button>
+          <button className="btn btn-primary" onClick={openCreateModal} disabled={pending}>{t('decks.createDeck')}</button>
         </div>
       </header>
       
       {operationError && (
         <div className="alert alert-error" role="alert" style={{ marginBottom: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <span>{operationError}</span>
-          <button onClick={() => setOperationError(null)} className="btn btn-ghost btn-sm" aria-label="Dismiss error">✕</button>
+          <button onClick={() => setOperationError(null)} className="btn btn-ghost btn-sm" aria-label={t('study.dismissError')}>✕</button>
         </div>
       )}
 
       {loadError && decks.length > 0 && (
         <div className="alert alert-error" role="alert" style={{ marginBottom: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <span>{loadError}</span>
-          <button onClick={() => setLoadError(null)} className="btn btn-ghost btn-sm" aria-label="Dismiss error">✕</button>
+          <button onClick={() => setLoadError(null)} className="btn btn-ghost btn-sm" aria-label={t('study.dismissError')}>✕</button>
         </div>
       )}
 
-      {uploadProgress !== null && <section className="glass-card package-import-progress" aria-label="Package upload">
-        <p role="status">{uploadStatus} {uploadProgress}%</p>
-        <progress max={100} value={uploadProgress} aria-label="Upload progress" />
-        <button className="btn btn-ghost" onClick={() => uploadController.current?.abort()}>Cancel upload</button>
+      {uploadProgress !== null && <section className="glass-card package-import-progress" aria-label={t('decks.packageUpload')}>
+        <p role="status">{uploadStatus || t('decks.uploading')} {uploadProgress}%</p>
+        <progress max={100} value={uploadProgress} aria-label={t('decks.uploadProgress')} />
+        <button className="btn btn-ghost" onClick={() => uploadController.current?.abort()}>{t('decks.cancelUpload')}</button>
       </section>}
-      {uploadFile && uploadProgress === null && !importingApkg && <section className="glass-card package-import-progress" aria-label="Paused upload">
-        <p>{uploadFile.name} — received parts are saved. You can continue without starting over.</p>
-        <button className="btn btn-primary" onClick={() => void uploadPackage(uploadFile, uploadFile.name.toLowerCase().endsWith('.colpkg'))}>Resume upload</button>
-        <button className="btn btn-ghost" onClick={() => { setUploadFile(null); setOperationError(null); void discardPackageUpload(); }}>Cancel upload</button>
+      {uploadFile && uploadProgress === null && !importingApkg && <section className="glass-card package-import-progress" aria-label={t('decks.pausedUpload')}>
+        <p>{uploadFile.name} — {t('decks.partsSaved')}</p>
+        <button className="btn btn-primary" onClick={() => void uploadPackage(uploadFile, uploadFile.name.toLowerCase().endsWith('.colpkg'))}>{t('decks.resumeUpload')}</button>
+        <button className="btn btn-ghost" onClick={() => { setUploadFile(null); setOperationError(null); void discardPackageUpload(); }}>{t('decks.cancelUpload')}</button>
       </section>}
       {packageJobId && <PackageImportPanel key={packageJobId} id={packageJobId} onBusy={setImportingApkg} onComplete={fetchDecks} onClose={closePackageJob} />}
 
       <div className="desktop-deck-table">
         <div className="deck-list-header">
-          <div className="col-name">Deck</div>
-          <span>New</span>
-          <span>Learn</span>
-          <span>Due</span>
+          <div className="col-name">{t('add.deck')}</div>
+          <span>{t('stat.new')}</span>
+          <span>{t('decks.learn')}</span>
+          <span>{t('stat.due')}</span>
           <span></span>
         </div>
         
         {loadError && decks.length === 0 ? (
           <div role="alert" style={{ padding: '2rem', textAlign: 'center' }}>
             <p style={{ color: '#ef4444', marginBottom: '1rem' }}>{loadError}</p>
-            <button className="btn btn-primary" onClick={fetchDecks}>Retry</button>
+            <button className="btn btn-primary" onClick={fetchDecks}>{t('common.retry')}</button>
           </div>
         ) : decks.length === 0 ? (
           <div className="decks-empty">
             <div className="decks-empty-icon" aria-hidden="true"><svg viewBox="0 0 48 48" fill="none"><rect x="8" y="12" width="29" height="29" rx="5" stroke="currentColor" strokeWidth="2"/><path d="M16 7h21a5 5 0 0 1 5 5v20M17 23h11M17 30h7" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg></div>
-            <h2>Your next learning journey starts here</h2>
-            <p>Create your first deck or import cards you already have.</p>
-            <span>Supports Anki packages, CSV and text files</span>
+            <h2>{t('decks.emptyTitle')}</h2>
+            <p>{t('decks.emptyText')}</p>
+            <span>{t('decks.emptySupports')}</span>
           </div>
         ) : (
           deckRows.map(({ name, label, depth, deck, children }) => (
@@ -599,14 +603,14 @@ const DecksPage = () => {
               <div className="col-name deck-tree-name" style={{ paddingInlineStart: `${depth * 24}px` }}>
                 {children.size > 0 ? (
                   <button type="button" className="deck-tree-toggle"
-                    aria-label={`${collapsedDecks.has(name) ? 'Expand' : 'Collapse'} ${name}`}
+                    aria-label={`${collapsedDecks.has(name) ? t('decks.expand') : t('decks.collapse')} ${name}`}
                     aria-expanded={!collapsedDecks.has(name)} onClick={() => toggleDeck(name)}>
                     <span aria-hidden="true">{collapsedDecks.has(name) ? '+' : '−'}</span>
                   </button>
                 ) : <span className="deck-tree-spacer" aria-hidden="true" />}
                 {deck ? <Link className="deck-tree-label" to={`/decks/${deck.id}`} title={name}>{label}</Link>
                   : <button type="button" className="deck-tree-label deck-tree-group" title={name}
-                      aria-label={`Toggle group ${name}`} onClick={() => toggleDeck(name)}>{label}</button>}
+                      aria-label={t('decks.toggleGroup', { name })} onClick={() => toggleDeck(name)}>{label}</button>}
               </div>
               <div className="col-stat stat-new">{deck ? deck.new_cards || 0 : '—'}</div>
               <div className="col-stat stat-learn">{deck ? deck.learn_cards || 0 : '—'}</div>
@@ -617,7 +621,7 @@ const DecksPage = () => {
                 <button 
                   className="gear-btn" 
                   onClick={(e) => { e.stopPropagation(); setActiveDropdown(activeDropdown === deck.id ? null : deck.id); }}
-                  aria-label={`Options for deck ${deck.name}`}
+                  aria-label={t('decks.optionsFor', { name: deck.name })}
                   aria-expanded={activeDropdown === deck.id}
                   aria-haspopup="menu"
                 >
@@ -625,11 +629,11 @@ const DecksPage = () => {
                 </button>
                 {activeDropdown === deck.id && (
                   <div className="gear-dropdown" role="menu" onClick={(e) => e.stopPropagation()}>
-                    <button className="gear-dropdown-item" role="menuitem" disabled={pending} onClick={() => { setActiveDropdown(null); handleRename(deck.id, deck.name); }}>Rename</button>
-                    <button className="gear-dropdown-item" role="menuitem" onClick={() => { setActiveDropdown(null); navigate(`/decks/${deck.id}/options`); }}>Options</button>
-                    <button className="gear-dropdown-item" role="menuitem" onClick={(e) => { setActiveDropdown(null); openExportModal(deck.id, deck.name, e); }}>Export</button>
-                    <button className="gear-dropdown-item" role="menuitem" onClick={(e) => { setActiveDropdown(null); openImportModal(deck.id, e); }}>Import Cards</button>
-                    <button className="gear-dropdown-item" role="menuitem" disabled={pending} style={{ color: '#ef4444' }} onClick={() => { setActiveDropdown(null); handleDelete(deck.id); }}>Delete</button>
+                    <button className="gear-dropdown-item" role="menuitem" disabled={pending} onClick={() => { setActiveDropdown(null); handleRename(deck.id, deck.name); }}>{t('decks.rename')}</button>
+                    <button className="gear-dropdown-item" role="menuitem" onClick={() => { setActiveDropdown(null); navigate(`/decks/${deck.id}/options`); }}>{t('decks.options')}</button>
+                    <button className="gear-dropdown-item" role="menuitem" onClick={(e) => { setActiveDropdown(null); openExportModal(deck.id, deck.name, e); }}>{t('decks.export')}</button>
+                    <button className="gear-dropdown-item" role="menuitem" onClick={(e) => { setActiveDropdown(null); openImportModal(deck.id, e); }}>{t('decks.importCards')}</button>
+                    <button className="gear-dropdown-item" role="menuitem" disabled={pending} style={{ color: '#ef4444' }} onClick={() => { setActiveDropdown(null); handleDelete(deck.id); }}>{t('common.delete')}</button>
                   </div>
                 )}
                 </>}
@@ -640,35 +644,35 @@ const DecksPage = () => {
       </div>
 
       <div className="studied-today">
-        {todaySummary ? `Studied ${todaySummary.reviews} cards in ${todaySummary.seconds} seconds today (${todaySummary.seconds_per_card}s/card)` : 'Study activity unavailable'}
+        {todaySummary ? t('decks.studiedToday', { reviews: todaySummary.reviews, seconds: todaySummary.seconds, per: todaySummary.seconds_per_card }) : t('decks.activityUnavailable')}
       </div>
 
-      <section className="collection-tools" aria-label="Collection tools">
-        <div className="collection-tools-copy"><h2>Collection tools</h2><p>Discover cards, export your collection, or manage backups.</p></div>
+      <section className="collection-tools" aria-label={t('decks.tools')}>
+        <div className="collection-tools-copy"><h2>{t('decks.tools')}</h2><p>{t('decks.toolsText')}</p></div>
         <div className="collection-tools-actions">
-          <a className="btn btn-ghost" href="https://ankiweb.net/shared/decks" target="_blank" rel="noopener noreferrer">Get Shared <span aria-hidden="true">↗</span></a>
-          <button className="btn btn-ghost" onClick={handleCollectionExport} disabled={exporting || importingApkg}>{exporting ? 'Exporting…' : 'Export collection (.colpkg)'}</button>
-          <Link className="btn btn-ghost" to="/backups">Backups &amp; restore</Link>
+          <a className="btn btn-ghost" href="https://ankiweb.net/shared/decks" target="_blank" rel="noopener noreferrer">{t('decks.getShared')} <span aria-hidden="true">↗</span></a>
+          <button className="btn btn-ghost" onClick={handleCollectionExport} disabled={exporting || importingApkg}>{exporting ? t('decks.exporting') : t('decks.exportCollection')}</button>
+          <Link className="btn btn-ghost" to="/backups">{t('backups.title')}</Link>
         </div>
       </section>
-      <input type="file" accept=".txt,.csv,.tsv,.apkg,.colpkg" hidden ref={fileInputRef} onChange={handleFileUpload} aria-label="Upload file for import" />
-      {showFileImport && <div className="modal-overlay" onClick={closeFileImport} role="dialog" aria-modal="true" aria-label="Import file">
+      <input type="file" accept=".txt,.csv,.tsv,.apkg,.colpkg" hidden ref={fileInputRef} onChange={handleFileUpload} aria-label={t('decks.uploadForImport')} />
+      {showFileImport && <div className="modal-overlay" onClick={closeFileImport} role="dialog" aria-modal="true" aria-label={t('decks.importFileAria')}>
         <div className="modal glass-card file-import-modal" ref={fileImportModalRef} onClick={e => e.stopPropagation()}>
-          <h2>Import your cards</h2>
-          <p className="import-intro">Choose an Anki package, CSV or text file. Package options below apply to .apkg and .colpkg files.</p>
-        <div className="form-group"><label htmlFor="package-media">Media name collisions</label><select id="package-media" value={mediaConflicts} disabled={importingApkg} onChange={e => setMediaConflicts(e.target.value as 'error' | 'rename')}><option value="error">Stop and report conflict</option><option value="rename">Keep both files and update incoming references</option></select></div>
-        <div className="form-group"><label htmlFor="package-duplicates">Existing package notes</label><select id="package-duplicates" value={packageDuplicates} disabled={importingApkg} onChange={e => setPackageDuplicates(e.target.value as typeof packageDuplicates)}><option value="newer">Update if incoming note is newer</option><option value="skip">Keep existing notes</option><option value="update">Update existing notes</option><option value="add">Import separate copies</option></select></div>
-        <label className="package-history"><input type="checkbox" checked={importScheduling} disabled={importingApkg} onChange={e => setImportScheduling(e.target.checked)} /> Import APKG study history</label>
+          <h2>{t('decks.importYourCards')}</h2>
+          <p className="import-intro">{t('decks.importIntro')}</p>
+        <div className="form-group"><label htmlFor="package-media">{t('decks.mediaCollisions')}</label><select id="package-media" value={mediaConflicts} disabled={importingApkg} onChange={e => setMediaConflicts(e.target.value as 'error' | 'rename')}><option value="error">{t('decks.mediaStop')}</option><option value="rename">{t('decks.mediaRename')}</option></select></div>
+        <div className="form-group"><label htmlFor="package-duplicates">{t('decks.existingPackageNotes')}</label><select id="package-duplicates" value={packageDuplicates} disabled={importingApkg} onChange={e => setPackageDuplicates(e.target.value as typeof packageDuplicates)}><option value="newer">{t('decks.pkgNewer')}</option><option value="skip">{t('decks.pkgSkip')}</option><option value="update">{t('decks.pkgUpdate')}</option><option value="add">{t('decks.pkgAdd')}</option></select></div>
+        <label className="package-history"><input type="checkbox" checked={importScheduling} disabled={importingApkg} onChange={e => setImportScheduling(e.target.checked)} /> {t('decks.importHistory')}</label>
 
-          <p className="import-hint">To replace an existing collection, use <Link to="/backups">Backups &amp; restore</Link>.</p>
-          <div className="modal-actions"><button className="btn btn-ghost" onClick={closeFileImport}>Cancel</button><button className="btn btn-primary" disabled={importingApkg || pending} onClick={() => fileInputRef.current?.click()}>Choose file</button></div>
+          <p className="import-hint">{t('decks.replaceHint')} <Link to="/backups">{t('backups.title')}</Link>.</p>
+          <div className="modal-actions"><button className="btn btn-ghost" onClick={closeFileImport}>{t('common.cancel')}</button><button className="btn btn-primary" disabled={importingApkg || pending} onClick={() => fileInputRef.current?.click()}>{t('decks.chooseFile')}</button></div>
         </div>
       </div>}
 
       {showCreateModal && (
-        <div className="modal-overlay" onClick={closeCreateModal} role="dialog" aria-modal="true" aria-label="Create new deck">
+        <div className="modal-overlay" onClick={closeCreateModal} role="dialog" aria-modal="true" aria-label={t('decks.createNewDeckAria')}>
           <div className="modal glass-card" ref={createModalRef} onClick={e => e.stopPropagation()}>
-            <h2>Create New Deck</h2>
+            <h2>{t('decks.createNewDeck')}</h2>
             {createModalError && (
               <div className="alert alert-error" role="alert" style={{ marginBottom: '1rem' }}>
                 {createModalError}
@@ -676,7 +680,7 @@ const DecksPage = () => {
             )}
             <form onSubmit={handleCreateDeck}>
               <div className="form-group">
-                <label htmlFor="new-deck-name">Deck Name</label>
+                <label htmlFor="new-deck-name">{t('decks.deckName')}</label>
                 <input
                   id="new-deck-name"
                   autoFocus
@@ -688,8 +692,8 @@ const DecksPage = () => {
                 />
               </div>
               <div className="modal-actions">
-                <button type="button" className="btn btn-ghost" onClick={closeCreateModal} disabled={pending}>Cancel</button>
-                <button type="submit" className="btn btn-primary" disabled={pending || !newDeckName.trim()}>{pending ? 'Creating...' : 'Create'}</button>
+                <button type="button" className="btn btn-ghost" onClick={closeCreateModal} disabled={pending}>{t('common.cancel')}</button>
+                <button type="submit" className="btn btn-primary" disabled={pending || !newDeckName.trim()}>{pending ? t('auth.creating') : t('decks.create')}</button>
               </div>
             </form>
           </div>
@@ -697,9 +701,9 @@ const DecksPage = () => {
       )}
 
       {showImportModal && (
-        <div className="modal-overlay cards-import-overlay" onClick={closeImportModal} role="dialog" aria-modal="true" aria-label="Import cards">
+        <div className="modal-overlay cards-import-overlay" onClick={closeImportModal} role="dialog" aria-modal="true" aria-label={t('decks.importCardsAria')}>
           <div className="modal glass-card cards-import-modal" ref={importModalRef} onClick={e => e.stopPropagation()}>
-            <h2>Import Cards</h2>
+            <h2>{t('decks.importCards')}</h2>
             {importModalError && (
               <div className="alert alert-error" role="alert" style={{ marginBottom: '1rem' }}>
                 {importModalError}
@@ -708,7 +712,7 @@ const DecksPage = () => {
             <form onSubmit={handleImport}>
               <div className="cards-import-body">
               <div className="form-group">
-                <label htmlFor="import-deck-select">Target Deck</label>
+                <label htmlFor="import-deck-select">{t('decks.targetDeck')}</label>
                 <select 
                   id="import-deck-select"
                   value={importDeckId || ''} 
@@ -716,16 +720,16 @@ const DecksPage = () => {
                   disabled={pending}
                   required
                 >
-                  <option value="" disabled>Select a deck...</option>
+                  <option value="" disabled>{t('add.selectDeck')}</option>
                   {decks.map(d => (
                     <option key={d.id} value={d.id}>{d.name}</option>
                   ))}
                 </select>
               </div>
               <div className="form-group">
-                <label htmlFor="import-text">Basic notes: Front and Back (quoted multiline fields supported)</label>
-                <label>Duplicate search scope<select value={matchScope} disabled={pending} onChange={e => setMatchScope(e.target.value as typeof matchScope)}><option value="deck">Selected deck</option><option value="collection">Entire collection (keep existing decks)</option></select></label>
-                  <label>Duplicate match<select value={matchFields} disabled={pending} onChange={e => setMatchFields(e.target.value as typeof matchFields)}><option value="first">First field</option><option value="all">All fields</option></select></label>
+                <label htmlFor="import-text">{t('decks.basicNotes')}</label>
+                <label>{t('decks.dupScope')}<select value={matchScope} disabled={pending} onChange={e => setMatchScope(e.target.value as typeof matchScope)}><option value="deck">{t('decks.scopeDeck')}</option><option value="collection">{t('decks.scopeCollection')}</option></select></label>
+                  <label>{t('decks.dupMatch')}<select value={matchFields} disabled={pending} onChange={e => setMatchFields(e.target.value as typeof matchFields)}><option value="first">{t('decks.firstField')}</option><option value="all">{t('decks.allFields')}</option></select></label>
                   <textarea
                   id="import-text"
                   rows={8} 
@@ -737,45 +741,45 @@ const DecksPage = () => {
                 />
               </div>
               <div className="form-group">
-                <label htmlFor="import-separator">Separator</label>
+                <label htmlFor="import-separator">{t('decks.separator')}</label>
                 <select
                   id="import-separator"
                   value={importSeparator}
                   onChange={e => setImportSeparator(e.target.value)}
                   disabled={pending}
                 >
-                  <option value={'\t'}>Tab (Excel paste)</option>
-                  <option value=",">Comma (,)</option>
-                  <option value=";">Semicolon (;)</option>
-                  <option value="-">Dash (-)</option>
-                  <option value="|">Pipe (|)</option>
+                  <option value={'\t'}>{t('decks.sepTab')}</option>
+                  <option value=",">{t('decks.sepComma')}</option>
+                  <option value=";">{t('decks.sepSemicolon')}</option>
+                  <option value="-">{t('decks.sepDash')}</option>
+                  <option value="|">{t('decks.sepPipe')}</option>
                 </select>
               </div>
               <div className="form-group">
-                <label htmlFor="duplicate-policy">Existing notes (GUID, otherwise first field in this deck)</label>
+                <label htmlFor="duplicate-policy">{t('decks.existingNotes')}</label>
                 <select id="duplicate-policy" value={duplicatePolicy} disabled={pending} onChange={e => setDuplicatePolicy(e.target.value as 'add' | 'skip' | 'update')}>
-                  <option value="add">Add new (existing GUIDs are rejected)</option>
-                  <option value="skip">Skip duplicates</option>
-                  <option value="update">Update content, keep study progress</option>
+                  <option value="add">{t('decks.dupAdd')}</option>
+                  <option value="skip">{t('decks.dupSkip')}</option>
+                  <option value="update">{t('decks.dupUpdate')}</option>
                 </select>
               </div>
               <div className="form-group">
-                <label className="import-checkbox-label"><input type="checkbox" checked={hasHeader} disabled={pending} onChange={e => setHasHeader(e.target.checked)} /> First data row is a column header</label>
-                <label className="import-checkbox-label"><input type="checkbox" checked={allowHtml} disabled={pending} onChange={e => setAllowHtml(e.target.checked)} /> Allow HTML in fields</label>
-                <label className="import-checkbox-label"><input type="checkbox" checked={useFileDecks} disabled={pending} onChange={e => setUseFileDecks(e.target.checked)} /> Use deck names from file (may create decks)</label>
+                <label className="import-checkbox-label"><input type="checkbox" checked={hasHeader} disabled={pending} onChange={e => setHasHeader(e.target.checked)} /> {t('decks.hasHeader')}</label>
+                <label className="import-checkbox-label"><input type="checkbox" checked={allowHtml} disabled={pending} onChange={e => setAllowHtml(e.target.checked)} /> {t('decks.allowHtml')}</label>
+                <label className="import-checkbox-label"><input type="checkbox" checked={useFileDecks} disabled={pending} onChange={e => setUseFileDecks(e.target.checked)} /> {t('decks.fileDecks')}</label>
                 {!advancedMode && (
-                  <label className="import-checkbox-label"><input type="checkbox" checked={swapColumns} disabled={pending} onChange={e => setSwapColumns(e.target.checked)} /> Swap Front and Back columns</label>
+                  <label className="import-checkbox-label"><input type="checkbox" checked={swapColumns} disabled={pending} onChange={e => setSwapColumns(e.target.checked)} /> {t('decks.swap')}</label>
                 )}
-                <label className="import-checkbox-label"><input type="checkbox" checked={advancedMode} disabled={pending} onChange={e => { setAdvancedMode(e.target.checked); setImportModalError(null); }} /> Advanced mapping (note kind, columns, tags)</label>
+                <label className="import-checkbox-label"><input type="checkbox" checked={advancedMode} disabled={pending} onChange={e => { setAdvancedMode(e.target.checked); setImportModalError(null); }} /> {t('decks.advanced')}</label>
               </div>
 
               {advancedMode && (
-                <div className="advanced-import-options" style={{ background: 'rgba(255,255,255,0.05)', padding: '1rem', borderRadius: '8px', marginBottom: '1rem' }}>
+                <div className="advanced-import-options" style={{ background: 'rgba(var(--fg-rgb),0.05)', padding: '1rem', borderRadius: '8px', marginBottom: '1rem' }}>
                   <div className="form-group">
-                    <label htmlFor="advanced-kind-select">Note type</label>
+                    <label htmlFor="advanced-kind-select">{t('nt.noteType')}</label>
                     <select
                       id="advanced-kind-select"
-                      aria-label="Note type"
+                      aria-label={t('nt.noteType')}
                       value={advancedKind}
                       onChange={e => handleKindChange(e.target.value)}
                       disabled={pending}
@@ -789,14 +793,14 @@ const DecksPage = () => {
                   </div>
 
                   <div className="form-group">
-                    <label>Field column mapping (0-based)</label>
+                    <label>{t('decks.fieldMapping')}</label>
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.75rem', marginTop: '0.25rem' }}>
                       {currentNoteType.fields.map((field, idx) => (
                         <div key={field}>
                           <label htmlFor={`field-col-${field}`} style={{ fontSize: '0.85rem' }}>{field} column</label>
                           <input
                             id={`field-col-${field}`}
-                            aria-label={`Column for ${field}`}
+                            aria-label={t('decks.columnFor', { field })}
                             type="number"
                             min="0"
                             max="99"
@@ -812,10 +816,10 @@ const DecksPage = () => {
 
                   <div className="form-group" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
                     <div>
-                      <label htmlFor="import-tags-col" style={{ fontSize: '0.85rem' }}>Tags column (optional, 0-based)</label>
+                      <label htmlFor="import-tags-col" style={{ fontSize: '0.85rem' }}>{t('decks.tagsColumn')}</label>
                       <input
                         id="import-tags-col"
-                        aria-label="Tags column"
+                        aria-label={t('decks.tagsColumnAria')}
                         type="number"
                         min="0"
                         max="99"
@@ -826,7 +830,7 @@ const DecksPage = () => {
                       />
                     </div>
                     <div>
-                      <label htmlFor="import-guid-col" style={{ fontSize: '0.85rem' }}>GUID column (optional, 0-based)</label>
+                      <label htmlFor="import-guid-col" style={{ fontSize: '0.85rem' }}>{t('decks.guidColumn')}</label>
                       <input
                         id="import-guid-col"
                         aria-label="GUID column"
@@ -842,10 +846,10 @@ const DecksPage = () => {
                   </div>
 
                   <div className="form-group">
-                    <label htmlFor="import-global-tags" style={{ fontSize: '0.85rem' }}>Global tags (optional, space-separated)</label>
+                    <label htmlFor="import-global-tags" style={{ fontSize: '0.85rem' }}>{t('decks.globalTags')}</label>
                     <input
                       id="import-global-tags"
-                      aria-label="Global tags"
+                      aria-label={t('decks.globalTagsAria')}
                       type="text"
                       placeholder="e.g. tag1 tag2"
                       value={globalTags}
@@ -856,12 +860,12 @@ const DecksPage = () => {
                 </div>
               )}
 
-              <details className="import-format-help"><summary>Supported formats and mapping details</summary><p>Basic two-field import and advanced built-in note types (Basic, Reversed, Optional Reversed, Cloze) with custom column mapping, tags, and GUIDs are supported. Existing custom note types are available above. Mixed note types are now supported; templates/media/history still require APKG, custom note types must already exist. Extra unmapped fields are rejected to prevent data loss. Anki file directives override separator/HTML settings.</p></details>
+              <details className="import-format-help"><summary>{t('decks.formatsSummary')}</summary><p>{t('decks.formatsText')}</p></details>
               {previewIsCurrent && <p role="status">{importPreview?.message} No changes made yet. Confirm to apply.</p>}
               </div>
               <div className="modal-actions cards-import-actions">
-                <button type="button" className="btn btn-ghost" onClick={closeImportModal} disabled={pending}>Cancel</button>
-                <button type="submit" className="btn btn-primary" disabled={pending || !importText.trim()}>{pending ? 'Processing...' : previewIsCurrent ? 'Confirm Import' : 'Preview Import'}</button>
+                <button type="button" className="btn btn-ghost" onClick={closeImportModal} disabled={pending}>{t('common.cancel')}</button>
+                <button type="submit" className="btn btn-primary" disabled={pending || !importText.trim()}>{pending ? t('auth.processing') : previewIsCurrent ? t('decks.confirmImport') : t('decks.previewImport')}</button>
               </div>
             </form>
           </div>
@@ -869,24 +873,24 @@ const DecksPage = () => {
       )}
 
       {showExportModal && (
-        <div className="modal-overlay" onClick={closeExportModal} role="dialog" aria-modal="true" aria-label="Export deck">
+        <div className="modal-overlay" onClick={closeExportModal} role="dialog" aria-modal="true" aria-label={t('decks.exportDeck')}>
           <div className="modal glass-card" ref={exportModalRef} onClick={e => e.stopPropagation()}>
-            <h2>Export Deck</h2>
+            <h2>{t('decks.exportDeck')}</h2>
             <div className="form-group">
-              <label htmlFor="export-deck-name">Deck</label>
+              <label htmlFor="export-deck-name">{t('add.deck')}</label>
               <input id="export-deck-name" type="text" value={exportDeckName} readOnly style={{ opacity: 0.7 }} />
             </div>
             <div className="form-group">
-              <label htmlFor="export-format">File format</label>
+              <label htmlFor="export-format">{t('decks.fileFormat')}</label>
               <select id="export-format" value={exportFormat} disabled={exporting} onChange={e => setExportFormat(e.target.value as typeof exportFormat)}>
-                <option value="apkg">Anki deck package (.apkg)</option>
-                <option value="csv">Notes CSV (.csv)</option>
-                <option value="txt">Notes text (.txt, tab-separated)</option>
-                <option value="tsv">Notes TSV (.tsv)</option>
+                <option value="apkg">{t('decks.fmtApkg')}</option>
+                <option value="csv">{t('decks.fmtCsv')}</option>
+                <option value="txt">{t('decks.fmtTxt')}</option>
+                <option value="tsv">{t('decks.fmtTsv')}</option>
               </select>
             </div>
-            {exportFormat !== 'apkg' && <p>Text exports contain source fields, tags and GUIDs. Mixed note types are now supported; templates/media/history still require APKG, custom note types must already exist. Raw HTML is preserved; spreadsheet formula escaping is not applied.</p>}
-            {exportFormat === 'apkg' && <label><input type="checkbox" checked={modernPackage} onChange={e => setModernPackage(e.target.checked)} disabled={exporting} /> Modern Anki package (preserves FSRS memory when study history is included)</label>}
+            {exportFormat !== 'apkg' && <p>{t('decks.textExportHint')}</p>}
+            {exportFormat === 'apkg' && <label><input type="checkbox" checked={modernPackage} onChange={e => setModernPackage(e.target.checked)} disabled={exporting} /> {t('decks.modernPackage')}</label>}
             <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
               <input 
                 type="checkbox" 
@@ -896,17 +900,17 @@ const DecksPage = () => {
                 style={{ width: 'auto' }}
                 disabled={exporting || exportFormat !== 'apkg'}
               />
-              <label htmlFor="include-scheduling" style={{ margin: 0 }}>Include scheduling information</label>
+              <label htmlFor="include-scheduling" style={{ margin: 0 }}>{t('decks.includeScheduling')}</label>
             </div>
             <div className="modal-actions">
-              <button type="button" className="btn btn-ghost" onClick={closeExportModal} disabled={exporting}>Cancel</button>
+              <button type="button" className="btn btn-ghost" onClick={closeExportModal} disabled={exporting}>{t('common.cancel')}</button>
               <button 
                 type="button" 
                 className="btn btn-primary" 
                 onClick={handleExport} 
                 disabled={exporting}
               >
-                {exporting ? 'Exporting...' : 'Export'}
+                {exporting ? t('decks.exporting') : t('decks.export')}
               </button>
             </div>
           </div>

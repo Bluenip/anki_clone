@@ -2,11 +2,13 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import client from '../api/client';
 import { useAuth } from '../context/useAuth';
+import { usePrefs } from '../context/usePrefs';
 
 const AccountPage = () => {
   const [activeTab, setActiveTab] = useState<'email' | 'password'>('email');
   const navigate = useNavigate();
   const { logout } = useAuth();
+  const { t } = usePrefs();
   
   // Email Form State
   const [newEmail, setNewEmail] = useState('');
@@ -24,10 +26,10 @@ const AccountPage = () => {
     setError(''); setSuccess('');
     try {
       await client.put('/api/auth/me/email', { new_email: newEmail, password: emailPassword });
-      setSuccess('Email updated successfully!');
+      setSuccess(t('account.emailUpdated'));
       setEmailPassword('');
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to update email');
+      setError(err.response?.data?.detail || t('account.emailFailed'));
     }
   };
 
@@ -36,22 +38,22 @@ const AccountPage = () => {
     setError(''); setSuccess('');
     try {
       await client.put('/api/auth/me/password', { current_password: currentPassword, new_password: newPassword });
-      setSuccess('Password updated successfully!');
+      setSuccess(t('account.passwordUpdated'));
       setCurrentPassword('');
       setNewPassword('');
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to update password');
+      setError(err.response?.data?.detail || t('account.passwordFailed'));
     }
   };
 
   const handleRemoveAccount = async () => {
-    if (window.confirm("Delete your account and all its decks, cards, study history, images, audio, backups and import uploads? This action cannot be undone.")) {
+    if (window.confirm(t('account.confirmDelete'))) {
       try {
         await client.delete('/api/auth/me');
         logout();
         navigate('/login');
       } catch (err: any) {
-        setError(err.response?.data?.detail || 'Failed to delete account. Please retry.');
+        setError(err.response?.data?.detail || t('account.deleteFailed'));
       }
     }
   };
@@ -59,9 +61,9 @@ const AccountPage = () => {
   return (
     <div className="page-container account-page">
       <div className="account-header">
-        <h1>Account Settings</h1>
+        <h1>{t('account.title')}</h1>
         <button className="btn btn-ghost" style={{ color: 'var(--accent-cyan)' }} onClick={handleRemoveAccount}>
-          Remove Account
+          {t('account.remove')}
         </button>
       </div>
 
@@ -75,14 +77,14 @@ const AccountPage = () => {
             style={{ textAlign: 'left', justifyContent: 'flex-start' }}
             onClick={() => { setActiveTab('email'); setError(''); setSuccess(''); }}
           >
-            Change Email
+            {t('account.changeEmail')}
           </button>
           <button 
             className={`btn ${activeTab === 'password' ? 'btn-primary' : 'btn-ghost'}`}
             style={{ textAlign: 'left', justifyContent: 'flex-start' }}
             onClick={() => { setActiveTab('password'); setError(''); setSuccess(''); }}
           >
-            Change Password
+            {t('account.changePassword')}
           </button>
         </div>
 
@@ -92,7 +94,7 @@ const AccountPage = () => {
               <div className="form-group">
                 <input 
                   type="email" 
-                  placeholder="New email" 
+                  placeholder={t('account.newEmail')} 
                   value={newEmail} 
                   onChange={e => setNewEmail(e.target.value)} 
                   required 
@@ -101,14 +103,14 @@ const AccountPage = () => {
               <div className="form-group">
                 <input 
                   type="password" 
-                  placeholder="Current password" 
+                  placeholder={t('account.currentPassword')} 
                   value={emailPassword} 
                   onChange={e => setEmailPassword(e.target.value)} 
                   required 
                 />
               </div>
               <div>
-                <button type="submit" className="btn btn-primary">Update</button>
+                <button type="submit" className="btn btn-primary">{t('account.update')}</button>
               </div>
             </form>
           )}
@@ -118,7 +120,7 @@ const AccountPage = () => {
               <div className="form-group">
                 <input 
                   type="password" 
-                  placeholder="Current password" 
+                  placeholder={t('account.currentPassword')} 
                   value={currentPassword} 
                   onChange={e => setCurrentPassword(e.target.value)} 
                   required 
@@ -127,14 +129,14 @@ const AccountPage = () => {
               <div className="form-group">
                 <input 
                   type="password" 
-                  placeholder="New password" 
+                  placeholder={t('auth.newPassword')} 
                   value={newPassword} 
                   onChange={e => setNewPassword(e.target.value)} 
                   required 
                 />
               </div>
               <div>
-                <button type="submit" className="btn btn-primary">Update</button>
+                <button type="submit" className="btn btn-primary">{t('account.update')}</button>
               </div>
             </form>
           )}

@@ -4,16 +4,16 @@
   max-width: 1360px;
   margin: 0 auto;
   padding: 1.5rem 1rem 3rem 1rem;
-  color: var(--text-primary, #f1f5f9);
+  color: var(--text-primary);
   --text-primary: #f3f3f3;
   --text-muted: #a0a0a0;
-  --surface: #393939;
+  --surface: var(--opt-panel);
   font-family: Arial, sans-serif;
 }
 
 body:has(.options-container),
 .main-content:has(.options-container) {
-  background: #2c2c2c;
+  background: var(--opt-bg);
 }
 
 /* Compact Toolbar */
@@ -23,8 +23,8 @@ body:has(.options-container),
   align-items: center;
   margin-bottom: 1.25rem;
   padding: 0.75rem 1rem;
-  background: var(--surface, #1e222b);
-  border: 1px solid var(--glass-border, rgba(255, 255, 255, 0.08));
+  background: var(--surface);
+  border: 1px solid var(--glass-border, rgba(var(--fg-rgb),0.08));
   border-radius: 6px;
   flex-wrap: wrap;
   gap: 0.75rem;
@@ -39,22 +39,22 @@ body:has(.options-container),
 }
 
 .options-back-link {
-  color: var(--text-muted, #94a3b8);
+  color: var(--text-muted);
   text-decoration: none;
   transition: color 0.15s ease;
 }
 
 .options-back-link:hover {
-  color: var(--text-primary, #f1f5f9);
+  color: var(--text-primary);
 }
 
 .options-breadcrumb-sep {
-  color: var(--text-muted, #64748b);
+  color: var(--text-muted);
   user-select: none;
 }
 
 .options-breadcrumb-current {
-  color: var(--text-primary, #f8fafc);
+  color: var(--text-primary);
   font-weight: 600;
 }
 
@@ -72,9 +72,9 @@ body:has(.options-container),
   padding: 0.25rem 0.65rem;
   font-size: 0.78rem;
   font-weight: 500;
-  color: var(--text-muted, #cbd5e1);
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: var(--text-muted);
+  background: rgba(var(--fg-rgb),0.05);
+  border: 1px solid rgba(var(--fg-rgb),0.12);
   border-radius: 9999px;
   user-select: none;
 }
@@ -116,13 +116,13 @@ body:has(.options-container),
 .options-alert-error {
   background: rgba(239, 68, 68, 0.12);
   border: 1px solid rgba(239, 68, 68, 0.4);
-  color: #fca5a5;
+  color: var(--danger-text);
 }
 
 .options-alert-success {
   background: rgba(34, 197, 94, 0.12);
   border: 1px solid rgba(34, 197, 94, 0.4);
-  color: #86efac;
+  color: var(--success-text);
 }
 
 @keyframes fadeIn {
@@ -152,8 +152,8 @@ body:has(.options-container),
 
 /* Gray Panels Closer to Native Anki */
 .options-card.options-panel {
-  background: #353535;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--opt-panel);
+  border: 1px solid rgba(var(--fg-rgb),0.08);
   border-radius: 12px;
   padding: 1.15rem 1.25rem;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
@@ -165,7 +165,7 @@ body:has(.options-container),
   justify-content: space-between;
   margin-bottom: 0.85rem;
   padding-bottom: 0.65rem;
-  border-bottom: 1px solid #262626;
+  border-bottom: 1px solid var(--line);
 }
 
 .options-card-title-group {
@@ -179,7 +179,7 @@ body:has(.options-container),
   font-weight: 400;
   line-height: 1.15;
   margin: 0;
-  color: var(--text-primary, #f8fafc);
+  color: var(--text-primary);
 }
 
 /* Status Pill for Inactive Groups */
@@ -190,18 +190,18 @@ body:has(.options-container),
   font-weight: 600;
   padding: 0.15rem 0.45rem;
   border-radius: 4px;
-  background: rgba(255, 255, 255, 0.07);
-  color: var(--text-muted, #94a3b8);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(var(--fg-rgb),0.07);
+  color: var(--text-muted);
+  border: 1px solid rgba(var(--fg-rgb),0.1);
   user-select: none;
 }
 
 .options-inactive-notice {
   font-size: 0.78rem;
-  color: var(--text-muted, #94a3b8);
+  color: var(--text-muted);
   margin: 0 0 0.85rem 0;
   padding: 0.4rem 0.65rem;
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(var(--fg-rgb),0.03);
   border-left: 3px solid rgba(148, 163, 184, 0.4);
   border-radius: 2px;
   line-height: 1.4;
@@ -240,7 +240,7 @@ body:has(.options-container),
 }
 
 .field-error {
-  color: #f87171;
+  color: var(--danger-text);
   font-size: 0.75rem;
   margin-top: 0.2rem;
   align-self: flex-end;
@@ -248,12 +248,12 @@ body:has(.options-container),
 }
 
 .options-label {
-  color: var(--text-primary, #e2e8f0);
+  color: var(--text-primary);
   font-weight: 500;
 }
 
 .options-label.disabled {
-  color: var(--text-muted, #64748b);
+  color: var(--text-muted);
 }
 
 /* Inputs & Selects */
@@ -264,10 +264,10 @@ body:has(.options-container),
 .options-row-main input[type="number"],
 .options-row-main select {
   width: min(45%, 270px);
-  background: #2b2b2b;
-  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: var(--opt-input);
+  border: 1px solid rgba(var(--fg-rgb),0.14);
   border-radius: 4px;
-  color: var(--text-primary, #f1f5f9);
+  color: var(--text-primary);
   padding: 0.35rem 0.5rem;
   font-family: inherit;
   font-size: 0.85rem;
@@ -283,8 +283,8 @@ body:has(.options-container),
 
 .options-row select option,
 .options-row-main select option {
-  background: #181b20;
-  color: #f1f5f9;
+  background: var(--input-bg);
+  color: var(--text-primary);
 }
 
 .options-row input:focus,
@@ -305,19 +305,19 @@ body:has(.options-container),
 .options-row-main select:disabled {
   opacity: 0.55;
   cursor: not-allowed;
-  background: rgba(255, 255, 255, 0.03);
-  border-color: rgba(255, 255, 255, 0.08);
+  background: rgba(var(--fg-rgb),0.03);
+  border-color: rgba(var(--fg-rgb),0.08);
 }
 
 /* Semantic Toggle Switch Button */
 button.toggle-switch {
   width: 38px;
   height: 20px;
-  background: rgba(255, 255, 255, 0.12);
+  background: rgba(var(--fg-rgb),0.12);
   border-radius: 10px;
   position: relative;
   cursor: pointer;
-  border: 1px solid rgba(255, 255, 255, 0.18);
+  border: 1px solid rgba(var(--fg-rgb),0.18);
   padding: 0;
   margin: 0;
   outline: none;
@@ -337,7 +337,7 @@ button.toggle-switch:focus-visible {
   left: 2px;
   width: 14px;
   height: 14px;
-  background: #94a3b8;
+  background: var(--text-secondary);
   border-radius: 50%;
   transition: transform 0.2s ease, background-color 0.2s ease;
 }
@@ -369,7 +369,7 @@ button.toggle-switch.disabled {
   display: flex;
   justify-content: space-between;
   font-size: 0.7rem;
-  color: var(--text-muted, #94a3b8);
+  color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: 0.05em;
   padding: 0 4px;
@@ -401,12 +401,12 @@ button.toggle-switch.disabled {
 
 .day-label {
   font-size: 0.8rem;
-  color: var(--text-muted, #94a3b8);
+  color: var(--text-muted);
   font-weight: 500;
 }
 
 .day-label.disabled {
-  color: #64748b;
+  color: var(--text-muted);
 }
 
 .glass-slider {
@@ -414,7 +414,7 @@ button.toggle-switch.disabled {
   appearance: none;
   width: 100%;
   height: 4px;
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(var(--fg-rgb),0.1);
   border-radius: 2px;
   outline: none;
 }
@@ -436,7 +436,7 @@ button.toggle-switch.disabled {
 
 .glass-slider.disabled::-webkit-slider-thumb {
   cursor: not-allowed;
-  background: #64748b;
+  background: var(--text-muted);
 }
 
 /* Loading & Error States with Retry */
@@ -450,7 +450,7 @@ button.toggle-switch.disabled {
 }
 
 .loading-text {
-  color: var(--text-muted, #94a3b8);
+  color: var(--text-muted);
   font-size: 0.95rem;
 }
 
@@ -458,7 +458,7 @@ button.toggle-switch.disabled {
   max-width: 500px;
   margin: 4rem auto;
   padding: 2rem;
-  background: #23272e;
+  background: var(--opt-panel);
   border: 1px solid rgba(239, 68, 68, 0.35);
   border-radius: 8px;
   text-align: center;
@@ -466,12 +466,12 @@ button.toggle-switch.disabled {
 
 .options-error-panel h3 {
   margin-top: 0;
-  color: #fca5a5;
+  color: var(--danger-text);
   font-size: 1.25rem;
 }
 
 .options-error-panel .error-message {
-  color: var(--text-muted, #94a3b8);
+  color: var(--text-muted);
   margin-bottom: 1.5rem;
   font-size: 0.9rem;
 }
@@ -524,4 +524,9 @@ button.toggle-switch.disabled {
     align-self: flex-start;
     text-align: left;
   }
+}
+
+:root[data-theme="light"] .options-container {
+  --text-primary: #1a1d2e;
+  --text-muted: #4b5368;
 }
