@@ -14,9 +14,26 @@
 }
 .note-types-page button:hover, .media-tools button:hover, .formatting-tools button:hover { background: var(--opt-hover); }
 .note-types-page :disabled, .media-tools :disabled, .formatting-tools :disabled { opacity: .55; cursor: wait; }
-.note-types-page input:focus, .note-types-page textarea:focus, .card-face-container input:focus { outline: 2px solid #66bfff; outline-offset: 2px; }
+.note-types-page input:focus, .note-types-page textarea:focus, .card-face-container input:focus { outline: 2px solid var(--accent-cyan); outline-offset: 2px; }
 .media-tools label { display: block; font-size: .85rem; }
 .media-tools input { margin-block: .4rem; font-size: .85rem; }
 .formatting-tools button { font-size: .8rem; padding: .3rem .55rem; }
 .flag-selector { display: flex; align-items: center; gap: .75rem; flex-wrap: wrap; margin-block: .75rem; }
 .flag-selector select { width: auto; }
+
+/* Buttons and file pickers without their own style class follow the app's ghost button look.
+   :where() keeps specificity at zero so any page- or component-specific rule still wins. */
+:where(.main-content button:not([class]):not([role="switch"])),
+:where(.main-content input[type="file"])::file-selector-button {
+  background: var(--surface); color: var(--text-primary);
+  border: 1px solid var(--glass-border); border-radius: var(--radius-sm);
+  padding: .45rem .9rem; margin: .2rem .4rem .2rem 0;
+  font: inherit; font-size: .875rem; font-weight: 500; cursor: pointer;
+  transition: var(--transition);
+}
+:where(.main-content button:not([class]):not([role="switch"]):hover:not(:disabled)),
+:where(.main-content input[type="file"]:hover)::file-selector-button {
+  background: var(--surface-hover); border-color: color-mix(in srgb, var(--accent-cyan) 35%, transparent);
+}
+:where(.main-content button:not([class]):disabled) { opacity: .55; cursor: not-allowed; }
+:where(.main-content input[type="file"]) { color: var(--text-secondary); font: inherit; font-size: .875rem; }

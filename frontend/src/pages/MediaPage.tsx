@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import client from '../api/client';
 import { usePrefs } from '../context/usePrefs';
+import BackButton from '../components/BackButton';
 export default function MediaPage() {
   const [result, setResult] = useState<{ total: number; missing: string[]; unused: string[] }>();
   const [busy, setBusy] = useState(false);
@@ -13,7 +14,7 @@ export default function MediaPage() {
     catch { setError(t('media.checkFailed')); }
     finally { setBusy(false); }
   };
-  return <div className="page-container"><h1>{t('media.title')}</h1>
+  return <div className="page-container"><div className="page-nav"><BackButton fallback="/note-types" /></div><h1>{t('media.title')}</h1>
     <p>{t('media.description')}</p>
     <button className="btn btn-primary" disabled={busy} onClick={() => void check()}>{busy ? t('media.checking') : t('media.title')}</button>
     {error && <p role="alert">{error}</p>}

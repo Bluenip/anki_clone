@@ -3,7 +3,7 @@
 .add-note-heading { display: flex; justify-content: space-between; align-items: center; gap: 20px; margin-bottom: 28px; }
 .add-note-heading h1 { font-size: 28px; margin: 4px 0 8px; }
 .add-note-heading p { color: var(--text-secondary); margin: 0; }
-.add-note-heading .add-note-eyebrow { color: var(--accent-primary, #00d4ff); font-size: 11px; letter-spacing: .12em; font-weight: 700; }
+.add-note-heading .add-note-eyebrow { color: var(--accent-text); font-size: 11px; letter-spacing: .12em; font-weight: 700; }
 .add-note-heading a { font-size: 13px; flex-shrink: 0; }
 .add-note-settings, .add-note-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
 .add-note-settings { padding: 20px; border: 1px solid var(--border-color); background: var(--input-bg); border-radius: 12px; margin-bottom: 16px; }

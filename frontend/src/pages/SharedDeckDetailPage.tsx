@@ -4,6 +4,7 @@ import { getSharedDeck, downloadSharedDeck, rateSharedDeck } from '../api/shared
 import type { SharedDeck } from '../api/shared';
 import { useAuth } from '../context/useAuth';
 import { usePrefs } from '../context/usePrefs';
+import BackButton from '../components/BackButton';
 
 const SharedDeckDetailPage = () => {
   const { id } = useParams<{ id: string }>();
@@ -35,8 +36,11 @@ const SharedDeckDetailPage = () => {
 
   return (
     <div className="page-container">
-      <div className="breadcrumb">
-        <Link to="/shared">{t('shared.title')}</Link> <span>/</span> <span>{deck.title}</span>
+      <div className="page-nav">
+        <BackButton fallback="/shared" />
+        <div className="breadcrumb">
+          <Link to="/shared">{t('shared.title')}</Link> <span>/</span> <span>{deck.title}</span>
+        </div>
       </div>
       <div className="shared-detail glass-card">
         <div className="shared-detail-header">

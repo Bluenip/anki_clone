@@ -10,6 +10,7 @@ import type { Note, UpdateNotePayload } from '../api/notes';
 import { sanitizeHtml } from '../utils/sanitize';
 import { usePrefs } from '../context/usePrefs';
 import { tNow } from '../context/prefs-context-base';
+import BackButton from '../components/BackButton';
 
 const getErrMsg = (err: unknown, fallback: string) => {
   const e = err as { response?: { data?: { detail?: string; message?: string } }; message?: string };
@@ -234,9 +235,12 @@ const CardEditorPageContent = () => {
 
   return (
     <div className="page-container">
-      <div className="breadcrumb">
-        <Link to="/decks">{t('nav.decks')}</Link> <span>/</span>
-        <Link to={`/decks/${deckId}`}>{t('add.deck')}</Link> <span>/</span> <span>{t('stats.cardsCol')}</span>
+      <div className="page-nav">
+        <BackButton fallback={`/decks/${deckId}`} />
+        <div className="breadcrumb">
+          <Link to="/decks">{t('nav.decks')}</Link> <span>/</span>
+          <Link to={`/decks/${deckId}`}>{t('add.deck')}</Link> <span>/</span> <span>{t('stats.cardsCol')}</span>
+        </div>
       </div>
 
       <div className="card-editor-layout">

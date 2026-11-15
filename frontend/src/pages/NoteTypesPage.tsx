@@ -4,6 +4,7 @@ import client from '../api/client';
 import CardFace from '../components/CardFace';
 import { usePrefs } from '../context/usePrefs';
 import { tNow } from '../context/prefs-context-base';
+import BackButton from '../components/BackButton';
 
 type Template = { name: string; qfmt: string; afmt: string };
 type Model = { id?: number; revision?: string; name: string; fields: string[]; templates: Template[]; css: string; latex_header?: string; latex_footer?: string };
@@ -74,6 +75,7 @@ export default function NoteTypesPage() {
     finally { pending.current = false; setBusy(false); }
   };
   return <div className="page-container note-types-page" style={{ maxWidth: 1000 }}>
+    <div className="page-nav"><BackButton fallback="/add" /></div>
     <h1>{t('nt.title')}</h1><p><Link to="/media">{t('nt.checkMedia')}</Link></p>
     <p>{t('nt.description')}</p>
     {error && <p role="alert" className="alert alert-error">{error}</p>}

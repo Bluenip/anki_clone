@@ -22,6 +22,11 @@ services:
       - SMTP_PORT=${SMTP_PORT:-587}
       - SMTP_USER=${SMTP_USER:-}
       - SMTP_PASSWORD=${SMTP_PASSWORD:-}
+      # Pronunciation audio for vocabulary (optional; leave unset to disable)
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - GEMINI_TTS_MODEL=${GEMINI_TTS_MODEL:-gemini-3.8-flash-lite-tts}
+      - GEMINI_TTS_VOICE=${GEMINI_TTS_VOICE:-Kore}
+      - GEMINI_TTS_RPM=${GEMINI_TTS_RPM:-8}
     volumes:
       - anki-data:/data
       - anki-media:/app/media

@@ -348,6 +348,11 @@ describe('StudyControls and CardFace reviewer UI', () => {
 
     const srcDoc = iframe?.getAttribute('srcdoc') || '';
 
+    // The frame must declare the host's color-scheme, or browsers paint an opaque white
+    // backdrop behind it and light card text becomes unreadable in dark mode.
+    expect(srcDoc).toMatch(/<meta name="color-scheme" content="(dark|light)" \/>/);
+    expect(srcDoc).toMatch(/:root \{ color-scheme: (dark|light); \}/);
+
     // CSP meta tag with script-src 'none'
     expect(srcDoc).toContain("script-src 'none'");
     expect(srcDoc).toContain("default-src 'none'");

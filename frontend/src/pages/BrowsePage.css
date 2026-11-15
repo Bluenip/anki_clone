@@ -8,11 +8,11 @@
 .browser-page .browse-editor { align-self: start; position: sticky; top: 90px; }
 .browser-page .btn { min-height: 36px; padding: 8px 12px; border-radius: 8px; font-size: 12px; line-height: 1.3; box-shadow: none; }
 .browser-page .btn-secondary { background: rgba(var(--fg-rgb),0.02); color: var(--text-primary); border: 1px solid rgba(var(--fg-rgb),0.086); }
-.browser-page .btn-secondary:not(:disabled):hover { background: #70d8ed10; border-color: #70d8ed55; }
+.browser-page .btn-secondary:not(:disabled):hover { background: color-mix(in srgb, var(--accent-text) 6%, transparent); border-color: color-mix(in srgb, var(--accent-text) 33%, transparent); }
 .browser-page button:disabled { background: rgba(var(--fg-rgb),0.012); border-color: rgba(var(--fg-rgb),0.047); color: var(--text-secondary); opacity: .55; box-shadow: none; cursor: not-allowed; }
 .browser-page input:not([type="checkbox"]), .browser-page select, .browser-page textarea { min-width: 0; color: var(--text-primary); background: var(--input-bg); border: 1px solid rgba(var(--fg-rgb),0.11); border-radius: 8px; font: inherit; }
 .browser-page input:not([type="checkbox"]), .browser-page select { padding: 10px 12px; font-size: 13px; }
-.browser-page input[type="checkbox"] { width: 15px; height: 15px; accent-color: #22d3ee; flex-shrink: 0; }
+.browser-page input[type="checkbox"] { width: 15px; height: 15px; accent-color: var(--accent-cyan); flex-shrink: 0; }
 .browser-page :is(button,input,textarea,select,a):focus-visible { outline: 2px solid var(--accent-text); outline-offset: 2px; }
 .browser-page .browse-search { margin-bottom: 12px; gap: 10px; }
 .browser-page .browse-search input { width: 100%; }
@@ -23,7 +23,7 @@
 .browser-page .bulk-schedule-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 0 0 14px; border-bottom: 1px solid rgba(var(--fg-rgb),0.051); margin-bottom: 14px; }
 .browse-due-input { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-secondary); }
 .browser-page .browse-due-input input { width: 70px; padding: 8px; }
-.browser-page .browse-delete:not(:disabled) { color: var(--danger-text); border-color: #fda4af30; }
+.browser-page .browse-delete:not(:disabled) { color: var(--danger-text); border-color: color-mix(in srgb, var(--danger-text) 19%, transparent); }
 .browser-page .flag-selector { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; font-size: 12px; color: var(--text-secondary); margin: 0 0 16px; }
 .browser-page .flag-selector select { width: auto; min-width: 145px; padding: 8px 10px; }
 .browser-page nav[aria-label="Search result pages"] { justify-content: space-between; padding-top: 10px; font-size: 12px; color: var(--text-secondary); }
@@ -33,8 +33,8 @@
 .browser-page .browse-table td { padding: 13px 10px; font-size: 13px; border-bottom: 1px solid rgba(var(--fg-rgb),0.031); }
 .browser-page .browse-table th:nth-child(2), .browser-page .browse-table th:nth-child(3) { width: 26%; }
 .browser-page .browse-table tr:hover { background: rgba(var(--fg-rgb),0.016); }
-.browser-page .browse-table tr.selected { background: #22d3ee12; }
-.browser-page .browse-table tr.selected td:first-child { box-shadow: inset 3px 0 #22d3ee; }
+.browser-page .browse-table tr.selected { background: color-mix(in srgb, var(--accent-cyan) 7%, transparent); }
+.browser-page .browse-table tr.selected td:first-child { box-shadow: inset 3px 0 var(--accent-cyan); }
 .browser-page .editor-content { height: auto; }
 .browser-page .editor-header { flex-wrap: wrap; gap: 12px; border-bottom: 1px solid rgba(var(--fg-rgb),0.071); padding-bottom: 16px; }
 .browser-page .editor-header h2 { font-size: 19px; letter-spacing: -.3px; margin: 0; }
@@ -42,7 +42,7 @@
 .browser-page .editor-textarea { padding: 14px; min-height: 150px; line-height: 1.7; font-size: 14px; }
 .browser-page .form-group label { color: var(--text-primary); margin-bottom: 10px; }
 .browser-page .browse-save-actions { padding-top: 16px; border-top: 1px solid rgba(var(--fg-rgb),0.071); }
-.browser-page [role="group"] { padding: 16px; border: 1px solid #70d8ed25; border-radius: 10px; background: #70d8ed05; }
+.browser-page [role="group"] { padding: 16px; border: 1px solid color-mix(in srgb, var(--accent-text) 15%, transparent); border-radius: 10px; background: color-mix(in srgb, var(--accent-text) 2%, transparent); }
 .browser-page [role="group"] p { font-size: 12px; line-height: 1.6; color: var(--text-secondary); margin: 10px 0; }
 .browser-page [role="group"] button { margin-right: 8px; }
 @media (max-width: 1000px) {

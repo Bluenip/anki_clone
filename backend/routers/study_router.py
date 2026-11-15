@@ -123,7 +123,50 @@ def get_next_study_card(
             'note_id':card.note_link.note_id if card.note_link else None,
             'card_css':css_for_web(card.note_link.note.note_type.css, current_user.id) if card.note_link else '',
             'rendered':rendered,
-            'settings':effective_settings(card.deck)}
+            'settings':effective_settings(card.deck),
+            'quiz':_quiz_exercise(db, card, progress, current_user.id)}
+
+
+def _quiz_exercise(db, card, progress, user_id):
+    from quiz import build
+    from deck_options import effective_settings
+    try:
+        return build(db, card, effective_settings(card.deck), progress,
+                     card.scheduling.version if card.scheduling else 0, user_id)
+    except (ValueError, KeyError, TypeError):
+        # A malformed note must never block studying; fall back to the normal flip flow.
+        return None
+
+
+def _quiz_grade(db, card, user_id, answer):
+    from quiz import grade
+    from deck_options import effective_settings
+    progress = db.query(StudyProgress).filter_by(card_id=card.id, user_id=user_id).first()
+    try:
+        return grade(db, card, effective_settings(card.deck), progress,
+                     card.scheduling.version if card.scheduling else 0,
+                     answer.response if answer else '', answer.hint_used if answer else False)
+    except (ValueError, KeyError, TypeError):
+        return None
+
+
+class QuizCheckRequest(BaseModel):
+    response: str = Field(default='', max_length=2000)
+    hint_used: bool = False
+
+
+@router.post('/{card_id}/quiz/check')
+def check_quiz(card_id: int, data: QuizCheckRequest,
+               current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Grade an exercise answer without changing scheduling; the review call re-grades it."""
+    card = db.query(Card).join(Deck, Deck.id == Card.deck_id).filter(
+        Card.id == card_id, Deck.user_id == current_user.id).first()
+    if not card:
+        raise HTTPException(status_code=404, detail="Card not found")
+    result = _quiz_grade(db, card, current_user.id, data)
+    if result is None:
+        raise HTTPException(status_code=409, detail='This card has no exercise; reload the study queue')
+    return result
 
 
 @router.post("/{card_id}/review", response_model=ReviewResponse)
@@ -146,6 +189,13 @@ def review_card(
     )
     if not card:
         raise HTTPException(status_code=404, detail="Card not found")
+
+    graded = _quiz_grade(db, card, current_user.id, data.quiz)
+    if graded is not None:
+        if data.quiz is None:
+            raise HTTPException(status_code=400, detail='This deck requires answering the exercise before rating')
+        # The server, not the student, decides the rating in quiz mode.
+        data.rating = graded['rating']
 
     from review_service import review
     try:

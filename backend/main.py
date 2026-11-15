@@ -114,6 +114,9 @@ app.include_router(stats_router.router)
 from routers import note_types_router
 app.include_router(note_types_router.router)
 
+from routers import tts_router
+app.include_router(tts_router.router)
+
 from routers import media_router
 app.include_router(media_router.router)
 
