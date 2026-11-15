@@ -24,9 +24,13 @@ services:
       - SMTP_PASSWORD=${SMTP_PASSWORD:-}
       # Pronunciation audio for vocabulary (optional; leave unset to disable)
       - GEMINI_API_KEY=${GEMINI_API_KEY:-}
-      - GEMINI_TTS_MODEL=${GEMINI_TTS_MODEL:-gemini-3.8-flash-lite-tts}
+      # Each model has its own free daily quota (10 requests); the job moves to the next when one runs out.
+      - GEMINI_TTS_MODELS=${GEMINI_TTS_MODELS:-gemini-3.8-flash-lite-tts,gemini-3.8-flash-tts}
       - GEMINI_TTS_VOICE=${GEMINI_TTS_VOICE:-Kore}
-      - GEMINI_TTS_RPM=${GEMINI_TTS_RPM:-8}
+      - GEMINI_TTS_BATCH=${GEMINI_TTS_BATCH:-40}
+      # Free tier allows 3 requests per minute per model.
+      - GEMINI_TTS_RPM=${GEMINI_TTS_RPM:-3}
+      - GEMINI_VERIFY_MODEL=${GEMINI_VERIFY_MODEL:-gemini-3.5-flash-lite}
     volumes:
       - anki-data:/data
       - anki-media:/app/media
