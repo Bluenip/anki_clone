@@ -1,11 +1,18 @@
 import client from './client';
-export type { StudyCard, StudyStats, StudyInterval } from './types';
+export type { StudyCard, StudyStats, StudyInterval, QuizExercise, QuizResult } from './types';
+import type { QuizResult } from './types';
+
+export interface QuizAnswer {
+  response: string;
+  hint_used: boolean;
+}
 
 export interface ReviewExtra {
   study_deck_id?: number;
   duration_ms?: number;
   request_id?: string;
   expected_version?: number;
+  quiz?: QuizAnswer;
 }
 
 export const getNextCard = (deckId: number) => client.get(`/api/study/${deckId}`);
@@ -22,3 +29,6 @@ export const cardAction = (cardId: number, action: 'bury' | 'suspend', expected_
     action,
     ...(expected_version !== undefined ? { expected_version } : {}),
   });
+
+export const checkQuiz = (cardId: number, answer: QuizAnswer) =>
+  client.post<QuizResult>(`/api/study/${cardId}/quiz/check`, answer);

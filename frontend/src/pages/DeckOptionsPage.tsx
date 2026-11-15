@@ -2,6 +2,7 @@ import FsrsOptimizer from '../components/FsrsOptimizer';
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { getDeck } from '../api/decks';
+import { getNoteTypes } from '../api/notes';
 import { getDeckOptions, saveDeckOptions } from '../api/options';
 import type { DeckOptionsResponse } from '../api/options';
 import { OptionsPresets } from '../components/OptionsPresets';
@@ -9,6 +10,9 @@ import type { Deck } from '../api/types';
 import '../DeckOptions.css';
 import { usePrefs } from '../context/usePrefs';
 import { tNow } from '../context/prefs-context-base';
+
+const QUIZ_TYPES = ['multiple_choice', 'listening', 'typing', 'cloze', 'scramble'] as const;
+const TTS_LANGS = ['en-US', 'en-GB', 'ja-JP', 'zh-CN', 'ko-KR', 'fr-FR', 'de-DE', 'vi-VN'];
 
 export interface DeckSettings {
   // Daily limits (active)
@@ -68,6 +72,15 @@ export interface DeckSettings {
 
   // Easy Days
   easy_days: Record<string, number>;
+
+  // Student test mode
+  quiz_mode: boolean;
+  quiz_types: string[];
+  quiz_copy_new_cards: boolean;
+  quiz_word_field: string;
+  quiz_meaning_field: string;
+  quiz_example_field: string;
+  quiz_tts_lang: string;
   load_balancing?: boolean;
 
   // FSRS (active)
@@ -138,6 +151,15 @@ const DEFAULT_SETTINGS: DeckSettings = {
   bury_new_siblings: false,
   bury_review_siblings: false,
   bury_interday_learning_siblings: false,
+
+  // Student test mode
+  quiz_mode: false,
+  quiz_types: [...QUIZ_TYPES],
+  quiz_copy_new_cards: true,
+  quiz_word_field: '',
+  quiz_meaning_field: '',
+  quiz_example_field: '',
+  quiz_tts_lang: '',
 
   // Easy Days
   load_balancing: false,
@@ -307,6 +329,12 @@ const validateAndApplyLoadedSettings = (rawJson: string): DeckSettings => {
       throw new Error('Saved setting fsrs_desired_retention has an invalid value; it was not overwritten.');
     }
   }
+  if ('quiz_types' in loaded) {
+    const q = loaded.quiz_types;
+    if (!Array.isArray(q) || q.some(item => typeof item !== 'string' || !(QUIZ_TYPES as readonly string[]).includes(item))) {
+      throw new Error('Saved setting quiz_types has an invalid value; it was not overwritten.');
+    }
+  }
   if ('day_starts_at' in loaded) {
     const d = loaded.day_starts_at;
     if (typeof d !== 'number' || !Number.isInteger(d) || d < 0 || d > 23) {
@@ -359,6 +387,27 @@ const DeckOptionsPageContent = () => {
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
   const [settings, setSettings] = useState<DeckSettings>(DEFAULT_SETTINGS);
+  const [fieldNames, setFieldNames] = useState<string[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    getNoteTypes()
+      .then(res => {
+        if (cancelled) return;
+        const names = new Set<string>();
+        for (const model of res.data || []) for (const field of model.fields || []) names.add(field);
+        setFieldNames([...names]);
+      })
+      .catch(() => undefined);
+    return () => { cancelled = true; };
+  }, []);
+  const setQuiz = <K extends keyof DeckSettings>(field: K, value: DeckSettings[K]) => {
+    if (isSaving || presetBusy) return;
+    setSettings(prev => ({ ...prev, [field]: value }));
+    setSuccessMessage(null);
+    setSaveError(null);
+  };
+  const fieldOptions = (current: string) =>
+    [...new Set([...fieldNames, ...(current ? [current] : [])])].map(name => <option key={name} value={name}>{name}</option>);
 
   const [loadAttempt, setLoadAttempt] = useState(0);
   useEffect(() => {
@@ -616,7 +665,7 @@ const DeckOptionsPageContent = () => {
             type="button"
             className="btn btn-primary options-save-btn"
             onClick={handleSave}
-            disabled={isSaving || presetBusy || hasValidationErrors}
+            disabled={isSaving || presetBusy || hasValidationErrors || settings.quiz_types.length === 0}
             aria-busy={isSaving}
           >
             {isSaving ? t('common.saving') : t('do.save')}
@@ -1269,6 +1318,71 @@ const DeckOptionsPageContent = () => {
                 onChange={(val) => handleToggleChange('bury_interday_learning_siblings', val)}
               />
             </div>
+          </section>
+
+          {/* Student test mode */}
+          <section className="options-card options-panel" data-testid="quiz-options">
+            <div className="options-card-header">
+              <div className="options-card-title-group">
+                <h3>{t('do.h.quiz')}</h3>
+              </div>
+            </div>
+            <p className="options-help" style={{ color: 'var(--text-secondary)', marginTop: 0 }}>{t('do.quizIntro')}</p>
+            <div className="options-row">
+              <label htmlFor="quiz_mode" className="options-label">{t('do.quizMode')}</label>
+              <ToggleSwitch id="quiz_mode" label={t('do.quizMode')} checked={settings.quiz_mode}
+                onChange={val => handleToggleChange('quiz_mode', val)} />
+            </div>
+            {settings.quiz_mode && (
+              <>
+                <div className="options-row">
+                  <label htmlFor="quiz_copy_new_cards" className="options-label">{t('do.quizCopy')}</label>
+                  <ToggleSwitch id="quiz_copy_new_cards" label={t('do.quizCopy')} checked={settings.quiz_copy_new_cards}
+                    onChange={val => handleToggleChange('quiz_copy_new_cards', val)} />
+                </div>
+                <fieldset className="options-row" style={{ border: 'none', padding: 0, margin: 0, flexWrap: 'wrap', gap: '0.5rem 1.25rem' }}>
+                  <legend className="options-label" style={{ marginBottom: '0.5rem' }}>{t('do.quizTypes')}</legend>
+                  {QUIZ_TYPES.map(kind => (
+                    <label key={kind} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>
+                      <input type="checkbox" checked={settings.quiz_types.includes(kind)}
+                        onChange={e => setQuiz('quiz_types', e.target.checked
+                          ? QUIZ_TYPES.filter(k => k === kind || settings.quiz_types.includes(k))
+                          : settings.quiz_types.filter(k => k !== kind))} />
+                      {t(`quiz.type.${kind}`)}
+                    </label>
+                  ))}
+                </fieldset>
+                {settings.quiz_types.length === 0 && <p role="alert" style={{ color: 'var(--danger-text, var(--danger))' }}>{t('do.quizTypesRequired')}</p>}
+                <div className="options-row">
+                  <label htmlFor="quiz_word_field" className="options-label">{t('do.quizWordField')}</label>
+                  <select id="quiz_word_field" value={settings.quiz_word_field} onChange={e => setQuiz('quiz_word_field', e.target.value)}>
+                    <option value="">{t('do.quizFieldAuto')}</option>
+                    {fieldOptions(settings.quiz_word_field)}
+                  </select>
+                </div>
+                <div className="options-row">
+                  <label htmlFor="quiz_meaning_field" className="options-label">{t('do.quizMeaningField')}</label>
+                  <select id="quiz_meaning_field" value={settings.quiz_meaning_field} onChange={e => setQuiz('quiz_meaning_field', e.target.value)}>
+                    <option value="">{t('do.quizFieldAuto')}</option>
+                    {fieldOptions(settings.quiz_meaning_field)}
+                  </select>
+                </div>
+                <div className="options-row">
+                  <label htmlFor="quiz_example_field" className="options-label">{t('do.quizExampleField')}</label>
+                  <select id="quiz_example_field" value={settings.quiz_example_field} onChange={e => setQuiz('quiz_example_field', e.target.value)}>
+                    <option value="">{t('do.quizExampleAuto')}</option>
+                    {fieldOptions(settings.quiz_example_field)}
+                  </select>
+                </div>
+                <div className="options-row">
+                  <label htmlFor="quiz_tts_lang" className="options-label">{t('do.quizTtsLang')}</label>
+                  <select id="quiz_tts_lang" value={settings.quiz_tts_lang} onChange={e => setQuiz('quiz_tts_lang', e.target.value)}>
+                    <option value="">{t('do.quizTtsAuto')}</option>
+                    {[...new Set([...TTS_LANGS, ...(settings.quiz_tts_lang ? [settings.quiz_tts_lang] : [])])].map(lang => <option key={lang} value={lang}>{lang}</option>)}
+                  </select>
+                </div>
+              </>
+            )}
           </section>
 
           {/* Audio (Active) */}

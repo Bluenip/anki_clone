@@ -60,6 +60,13 @@ const mockDefaultSettings: DeckSettings = {
   timezone: 'UTC',
   day_starts_at: 0,
   learning_ahead_seconds: 0,
+  quiz_mode: false,
+  quiz_types: ['multiple_choice', 'listening', 'typing', 'cloze', 'scramble'],
+  quiz_copy_new_cards: true,
+  quiz_word_field: '',
+  quiz_meaning_field: '',
+  quiz_example_field: '',
+  quiz_tts_lang: '',
 };
 
 const createMockOptions = (overrides?: Partial<DeckOptionsResponse>): DeckOptionsResponse => ({

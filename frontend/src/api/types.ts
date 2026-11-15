@@ -85,6 +85,33 @@ export interface StudyCard {
   card_css?: string;
   rendered?: boolean;
   settings?: Record<string, unknown>;
+  quiz?: QuizExercise | null;
+}
+
+export type QuizType = 'multiple_choice' | 'listening' | 'typing' | 'cloze' | 'scramble' | 'copy';
+
+/** A graded exercise; the expected answer stays on the server. */
+export interface QuizExercise {
+  type: QuizType;
+  direction: 'meaning_to_word' | 'word_to_meaning' | 'note';
+  meaning: string;
+  word?: string;
+  example?: string;
+  sentence?: string;
+  letters?: string[];
+  options?: string[];
+  hint?: string;
+  answer_length: number;
+  audio: string | null;
+  tts: { text: string; lang: string } | null;
+}
+
+export interface QuizResult {
+  type: QuizType;
+  result: 'correct' | 'close' | 'wrong';
+  correct: boolean;
+  expected: string;
+  rating: number;
 }
 
 export interface StudyStats {

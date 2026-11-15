@@ -7,7 +7,8 @@ import {
   undoReview,
   cardAction,
 } from '../api/study';
-import type { ReviewExtra, StudyCard, StudyStats } from '../api/study';
+import type { QuizAnswer, ReviewExtra, StudyCard, StudyStats } from '../api/study';
+import QuizPanel from '../components/QuizPanel';
 import { playFlipSound, playRatingSound, playCompleteSound } from '../sounds';
 import CardFace from '../components/CardFace';
 import type { CardFaceRef } from '../components/CardFace';
@@ -143,6 +144,7 @@ const StudyPageContent = () => {
     if (!card || loading || loadError) return;
     const settings = card.settings || {};
     if (settings.dont_play_audio_automatically) return;
+    if (card.quiz && !showAnswer) return;
 
     const timer = setTimeout(() => {
       const skipFront = Boolean(showAnswer && settings.skip_question_when_replaying_answer);
@@ -182,7 +184,7 @@ const StudyPageContent = () => {
   }, [card, loading]);
 
   const handleReview = useCallback(
-    async (rating: number) => {
+    async (rating: number, quiz?: QuizAnswer) => {
       if (isSubmittingRef.current || !card) return;
       isSubmittingRef.current = true;
       clearTimers();
@@ -213,6 +215,7 @@ const StudyPageContent = () => {
         duration_ms,
         request_id: requestId,
         ...(card.version !== undefined ? { expected_version: card.version } : {}),
+        ...(quiz ? { quiz } : {}),
       };
 
       try {
@@ -287,9 +290,14 @@ const StudyPageContent = () => {
     }
   }, [clearTimers, fetchCard]);
 
-  // Auto advance handling
+  const handleQuizReveal = useCallback(() => {
+    if (card?.settings?.stop_on_screen_timer_on_answer) answerElapsedRef.current = Date.now() - cardStartTimeRef.current;
+    setShowAnswer(true);
+  }, [card]);
+
+  // Auto advance handling (disabled in quiz mode: the student must answer)
   useEffect(() => {
-    if (!card || loading || loadError || reviewError || animating) return;
+    if (!card || card.quiz || loading || loadError || reviewError || animating) return;
     const settings = card.settings || {};
     clearTimers();
 
@@ -371,6 +379,14 @@ const StudyPageContent = () => {
       }
 
       if (e.ctrlKey || e.metaKey || e.altKey) return;
+      // Quiz mode: the panel owns its keys, and replaying the card could reveal the answer.
+      if (card?.quiz) {
+        if (showAnswer && (e.key === 'r' || e.key === 'R')) {
+          e.preventDefault();
+          handleReplayAudio();
+        }
+        return;
+      }
       if (e.key === 'r' || e.key === 'R') {
         e.preventDefault();
         handleReplayAudio();
@@ -414,7 +430,7 @@ const StudyPageContent = () => {
       inner?.removeEventListener('keydown', handleKeyDown);
       iframe?.removeEventListener('load', attach);
     };
-  }, [showAnswer, loading, loadError, cardHtml, handleUndo, handleReplayAudio, handleRevealAnswer, handleReview]);
+  }, [card, showAnswer, loading, loadError, cardHtml, handleUndo, handleReplayAudio, handleRevealAnswer, handleReview]);
 
   if (loading) {
     return (
@@ -590,6 +606,19 @@ const StudyPageContent = () => {
         </div>
       </div>
 
+      {card.quiz && (
+        <div style={{ width: '100%', marginTop: '1rem' }}>
+          <QuizPanel
+            key={String(card.card_id) + ':' + String(card.version)}
+            card={card}
+            exercise={card.quiz}
+            disabled={animating}
+            onReveal={handleQuizReveal}
+            onSubmit={(answer, rating) => handleReview(rating, answer)}
+          />
+        </div>
+      )}
+
       <div
         className={`study-card-wrapper ${animating ? 'slide-out' : 'slide-in'}`}
         style={{ width: '100%', marginTop: '1rem' }}
@@ -616,6 +645,11 @@ const StudyPageContent = () => {
             </div>
           </div>
 
+          {card.quiz && !showAnswer ? (
+            <p className="quiz-card-placeholder" style={{ textAlign: 'center', color: 'var(--text-muted)', margin: '1rem 0' }}>
+              {t('quiz.cardHidden')}
+            </p>
+          ) : (
           <CardFace
             key={String(card.card_id) + ":" + String(card.version)}
             ref={cardFaceRef}
@@ -627,6 +661,7 @@ const StudyPageContent = () => {
             cardCss={card.card_css}
             onAudioEnded={handleAudioEnded}
           />
+          )}
         </div>
       </div>
 
@@ -634,6 +669,7 @@ const StudyPageContent = () => {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
           <button
             onClick={handleReplayAudio}
+            disabled={Boolean(card.quiz && !showAnswer)}
             className="btn btn-ghost btn-sm"
             title={t('study.replayTitle')}
             aria-label={t('study.replayAria')}
@@ -663,7 +699,7 @@ const StudyPageContent = () => {
           </div>
         </div>
 
-        {!showAnswer ? (
+        {card.quiz ? null : !showAnswer ? (
           <button
             className="btn btn-primary btn-lg btn-show-answer"
             style={{ width: '100%' }}

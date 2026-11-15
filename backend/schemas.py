@@ -171,6 +171,29 @@ class DeckSettings(BaseModel):
     seconds_to_show_answer_for: float = Field(default=0, ge=0, le=3600, allow_inf_nan=False)
     question_action: str = "Show Answer"
     answer_action: str = "Bury Card"
+    quiz_mode: bool = False
+    quiz_types: list[str] = Field(default_factory=lambda: ["multiple_choice", "listening", "typing", "cloze", "scramble"], max_length=5)
+    quiz_copy_new_cards: bool = True
+    quiz_word_field: str = Field(default="", max_length=200)
+    quiz_meaning_field: str = Field(default="", max_length=200)
+    quiz_example_field: str = Field(default="", max_length=200)
+    quiz_tts_lang: str = Field(default="", max_length=20)
+
+    @field_validator("quiz_types")
+    @classmethod
+    def valid_quiz_types(cls, value):
+        allowed = {"multiple_choice", "listening", "typing", "cloze", "scramble"}
+        if not value or any(item not in allowed for item in value) or len(set(value)) != len(value):
+            raise ValueError("Quiz types must be a non-empty subset of multiple_choice, listening, typing, cloze, scramble")
+        return value
+
+    @field_validator("quiz_tts_lang")
+    @classmethod
+    def valid_tts_lang(cls, value):
+        import re
+        if value and not re.fullmatch(r"[A-Za-z]{2,8}(?:-[A-Za-z0-9]{2,8})*", value):
+            raise ValueError("Speech language must look like en-US or ja-JP")
+        return value
 
     @field_validator("timezone")
     @classmethod
@@ -418,6 +441,15 @@ class ReviewRequest(BaseModel):
     duration_ms: int = Field(default=0, ge=0, le=3600000)
     request_id: Optional[str] = Field(default=None, min_length=1, max_length=100)
     expected_version: Optional[int] = Field(default=None, ge=0)
+    quiz: Optional["QuizAnswer"] = None
+
+
+class QuizAnswer(BaseModel):
+    response: str = Field(default="", max_length=2000)
+    hint_used: bool = False
+
+
+ReviewRequest.model_rebuild()
 
 
 class StudyCardResponse(BaseModel):
@@ -434,6 +466,7 @@ class StudyCardResponse(BaseModel):
     card_css: str = ""
     rendered: bool = False
     settings: dict = Field(default_factory=dict)
+    quiz: Optional[dict] = None
 
     class Config:
         from_attributes = True
