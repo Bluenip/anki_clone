@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { checkQuiz } from '../api/study';
 import type { QuizAnswer } from '../api/study';
 import type { QuizExercise, QuizResult, StudyCard } from '../api/types';
@@ -102,13 +102,18 @@ export default function QuizPanel({ card, exercise, disabled, onReveal, onSubmit
   }, [result, retypeOk, disabled, onSubmit, response, hintUsed]);
 
   // Number keys pick a multiple-choice option; Enter continues after feedback.
-  useEffect(() => {
+  // Bound before paint (like StudyPage) so a key pressed as soon as the card appears is not lost.
+  useLayoutEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.ctrlKey || e.metaKey || e.altKey || e.repeat) return;
       const tag = (e.target as HTMLElement | null)?.tagName?.toUpperCase();
       if (result && e.key === 'Enter' && tag !== 'BUTTON' && (tag !== 'INPUT' || retypeOk)) {
         e.preventDefault();
         finish();
+      } else if (!result && canSpeak && (e.key === 'r' || e.key === 'R') && tag !== 'INPUT' && tag !== 'TEXTAREA') {
+        // Before answering, R replays the exercise audio (the card itself is still hidden).
+        e.preventDefault();
+        speak();
       } else if (!result && isChoice && /^[1-9]$/.test(e.key) && exercise.options) {
         const option = exercise.options[Number(e.key) - 1];
         if (option !== undefined) { e.preventDefault(); void submit(option); }
@@ -116,7 +121,7 @@ export default function QuizPanel({ card, exercise, disabled, onReveal, onSubmit
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [result, retypeOk, finish, isChoice, exercise.options, submit]);
+  }, [result, retypeOk, finish, isChoice, exercise.options, submit, canSpeak, speak]);
 
   const prompt = () => {
     switch (exercise.type) {
@@ -124,7 +129,10 @@ export default function QuizPanel({ card, exercise, disabled, onReveal, onSubmit
         return (
           <>
             <p className="quiz-instruction">{t('quiz.copy')}</p>
-            <div className="quiz-word">{exercise.word}</div>
+            <div className="quiz-word">
+              {exercise.word}
+              {canSpeak && <button type="button" className="quiz-speaker quiz-speaker-sm" onClick={speak} aria-label={t('quiz.playAgain')} title={`${t('quiz.playAgain')} (R)`}>🔊</button>}
+            </div>
             {exercise.meaning && <div className="quiz-meaning">{exercise.meaning}</div>}
             {exercise.example && <div className="quiz-example">{exercise.example}</div>}
           </>

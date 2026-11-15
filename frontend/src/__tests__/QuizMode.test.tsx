@@ -107,3 +107,25 @@ describe('Quiz audio', () => {
     expect(sources.every(src => src === '/api/media/1/apple.mp3')).toBe(true);
   });
 });
+
+describe('Quiz replay controls', () => {
+  afterEach(() => vi.restoreAllMocks());
+  it('copy exercises get a speaker in the panel, and the card replay stays hidden until answered', async () => {
+    vi.spyOn(studyApi, 'getStudyStats').mockResolvedValue({ data: { new_cards: 1, learn_cards: 0, due_cards: 0 } } as any);
+    vi.spyOn(studyApi, 'getNextCard').mockResolvedValue({
+      data: { ...baseCard, quiz: { type: 'copy', direction: 'meaning_to_word', word: '殳', meaning: 'thù = giáo', answer_length: 1,
+        audio: '/api/media/1/shu1.mp3', tts: null } },
+    } as any);
+    const sources: string[] = [];
+    vi.spyOn(window.HTMLMediaElement.prototype, 'play').mockImplementation(function (this: HTMLMediaElement) {
+      sources.push(this.getAttribute('src') || '');
+      return Promise.resolve();
+    });
+    renderStudy();
+    const speaker = await screen.findByRole('button', { name: /play again|nghe lại/i });
+    expect(screen.queryByRole('button', { name: /replay|phát lại/i })).toBeNull();
+    sources.length = 0;
+    fireEvent.click(speaker);
+    await waitFor(() => expect(sources).toEqual(['/api/media/1/shu1.mp3']));
+  });
+});

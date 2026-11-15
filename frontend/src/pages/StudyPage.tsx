@@ -667,15 +667,17 @@ const StudyPageContent = () => {
 
       <div className="study-actions" style={{ width: '100%', marginTop: '1.5rem' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-          <button
-            onClick={handleReplayAudio}
-            disabled={Boolean(card.quiz && !showAnswer)}
-            className="btn btn-ghost btn-sm"
-            title={t('study.replayTitle')}
-            aria-label={t('study.replayAria')}
-          >
-            🔊 {t('study.replay')}
-          </button>
+          {/* In quiz mode the exercise has its own speaker until the answer is in; card audio could give it away. */}
+          {card.quiz && !showAnswer ? <span /> : (
+            <button
+              onClick={handleReplayAudio}
+              className="btn btn-ghost btn-sm"
+              title={t('study.replayTitle')}
+              aria-label={t('study.replayAria')}
+            >
+              🔊 {t('study.replay')}
+            </button>
+          )}
 
           <div style={{ display: 'flex', gap: '0.5rem' }}>
             <button
