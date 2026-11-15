@@ -212,7 +212,7 @@ def next_card(sid:int,db:Session=Depends(get_db),user:User=Depends(get_current_u
         if item.available_at and utc(item.available_at)>now:
             waiting.append(utc(item.available_at));continue
         return {'session':response(db,session),'card':card_payload(db,item.card,user.id,now,session.reschedule),'next_available_at':None}
-    return {'session':response(db,session),'card':None,'next_available_at':min(waiting).isoformat() if waiting else None}
+    return {'session':response(db,session),'card':None,'next_available_at':utc(min(waiting)).isoformat() if waiting else None}
 
 
 @router.post('/{sid}/answer')
@@ -228,7 +228,7 @@ def answer(sid:int,data:Answer,db:Session=Depends(get_db),user:User=Depends(get_
             from review_service import review
             from schemas import ReviewRequest
             before={'session_id':sid,'session_version':session.version,'position':item.position,
-                    'available_at':item.available_at.isoformat() if item.available_at else None}
+                    'available_at':utc(item.available_at).isoformat() if item.available_at else None}
             result=review(db,item.card,user.id,ReviewRequest(rating=data.rating,expected_version=data.expected_version,
                           duration_ms=data.duration_ms),now,commit=False,filtered_session_id=sid)
             db.flush()
@@ -246,7 +246,7 @@ def answer(sid:int,data:Answer,db:Session=Depends(get_db),user:User=Depends(get_
             tags=json.loads(item.card.note_link.note.tags_json) if item.card.note_link else None
             before={'progress':serialize_progress(progress),'state':serialize_state(state),'siblings':{},'note_tags':tags,
                     'filtered':{'session_id':sid,'session_version':session.version,'position':item.position,
-                                'available_at':item.available_at.isoformat() if item.available_at else None}}
+                                'available_at':utc(item.available_at).isoformat() if item.available_at else None}}
             claim_version(db,state,data.expected_version)
             db.add(StudyOperation(id=str(uuid.uuid4()),user_id=user.id,card_id=item.card_id,
                                   before_json=json.dumps(before),response_json=json.dumps({

@@ -1,6 +1,16 @@
 from pydantic import BaseModel, EmailStr, Field, ConfigDict, field_validator
 from typing import Optional, Literal
-from datetime import datetime
+from datetime import datetime, timezone
+from typing import Annotated
+from pydantic import AfterValidator
+
+
+def _as_utc(value):
+    """The database stores naive UTC; say so, or browsers read the time as local."""
+    return value.replace(tzinfo=timezone.utc) if value is not None and value.tzinfo is None else value
+
+
+UTCDateTime = Annotated[datetime, AfterValidator(_as_utc)]
 
 
 # ─── Auth ───────────────────────────────────────────────
@@ -48,7 +58,7 @@ class UserResponse(BaseModel):
     id: int
     email: str
     username: str
-    created_at: datetime
+    created_at: UTCDateTime
 
     class Config:
         from_attributes = True
@@ -340,8 +350,8 @@ class DeckResponse(BaseModel):
     description: str
     settings: str
     is_shared: bool
-    created_at: datetime
-    updated_at: datetime
+    created_at: UTCDateTime
+    updated_at: UTCDateTime
     total_cards: int = 0
     new_cards: int = 0
     learn_cards: int = 0
@@ -411,8 +421,8 @@ class CardResponse(BaseModel):
     deck_id: int
     front: str
     back: str
-    created_at: datetime
-    updated_at: datetime
+    created_at: UTCDateTime
+    updated_at: UTCDateTime
 
     class Config:
         from_attributes = True
@@ -425,7 +435,7 @@ class BrowseCardResponse(CardResponse):
     is_buried: bool = False
     note_id: Optional[int] = None
     deck_name: str
-    next_review: Optional[datetime] = None
+    next_review: Optional[UTCDateTime] = None
     interval_days: Optional[int] = None
 
 
@@ -480,7 +490,7 @@ class StudyStatsResponse(BaseModel):
     learned_cards: int
     avg_ease: float
     streak_days: int = 0
-    next_learning_at: Optional[datetime] = None
+    next_learning_at: Optional[UTCDateTime] = None
 
 
 class ReviewResponse(BaseModel):
@@ -488,7 +498,7 @@ class ReviewResponse(BaseModel):
     operation_id: Optional[str] = None
     scheduler: str = "sm2"
     initialization: Optional[str] = None
-    next_review: datetime
+    next_review: UTCDateTime
     interval_days: int
     ease_factor: float
     message: str
@@ -537,7 +547,7 @@ class SharedDeckResponse(BaseModel):
     notes_count: int
     has_audio: bool
     has_images: bool
-    shared_at: datetime
+    shared_at: UTCDateTime
     username: str = ""
 
     class Config:
