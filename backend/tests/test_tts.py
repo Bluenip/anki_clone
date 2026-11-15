@@ -371,3 +371,20 @@ def test_endpoints_report_configuration_and_ownership(client, auth_headers_a, au
     assert client.get(f'/api/decks/{deck_id}/tts', headers=auth_headers_a).json() == {'state': 'idle'}
     assert client.get(f'/api/decks/{deck_id}/tts', headers=auth_headers_b).status_code == 404
     assert client.post(f'/api/decks/{deck_id}/tts', headers=auth_headers_b).status_code == 404
+
+
+def test_stop_works_while_waiting_for_the_quota_reset(client, auth_headers_a, db_session, configured):
+    deck_id = make_deck(client, auth_headers_a, [('Sunrise', 'Bình minh')])
+    user_id = db_session.query(Deck).get(deck_id).user_id
+    job = tts_service.Job(deck_id=deck_id, user_id=user_id, state='waiting')
+    with tts_service._jobs_lock:
+        tts_service._jobs[(user_id, deck_id)] = job
+    try:
+        response = client.post(f'/api/decks/{deck_id}/tts/cancel', headers=auth_headers_a)
+        assert response.status_code == 200 and response.json()['state'] == 'stopped'
+        assert job.cancel.is_set()
+        # The waiting loop notices the cancel on its next check.
+        assert tts_service._wait(job, 3600, lambda s: None) is False
+    finally:
+        with tts_service._jobs_lock:
+            tts_service._jobs.pop((user_id, deck_id), None)

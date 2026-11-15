@@ -405,6 +405,8 @@ class Job:
                 'resume_at': int(self.resume_at) if self.state == 'waiting' else None}
 
 
+ACTIVE_STATES = ('queued', 'running', 'waiting')  # a job in any of these can be stopped
+
 _jobs = {}
 _jobs_lock = threading.Lock()
 
@@ -552,7 +554,7 @@ def run_job(job, session_factory, *, synth_batch=synthesize_batch, sleep=time.sl
 def start_job(user_id, deck_id, session_factory):
     with _jobs_lock:
         current = _jobs.get((user_id, deck_id))
-        if current and current.state in ('queued', 'running', 'waiting'):
+        if current and current.state in ACTIVE_STATES:
             return current
         job = Job(deck_id=deck_id, user_id=user_id)
         _jobs[(user_id, deck_id)] = job

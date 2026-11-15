@@ -45,6 +45,8 @@ def start_deck_tts(deck_id: int, db: Session = Depends(get_db), user: User = Dep
 def cancel_deck_tts(deck_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     _owned_deck(db, user, deck_id)
     job = tts_service.job_for(user.id, deck_id)
-    if job and job.state in ('queued', 'running'):
+    if job and job.state in tts_service.ACTIVE_STATES:
         job.cancel.set()
+        if job.state == 'waiting':
+            job.state = 'stopped'  # nothing is mid-write while waiting, so report it at once
     return job.public() if job else {'state': 'idle'}
