@@ -386,7 +386,8 @@ def build(db, card, raw_settings, progress, version, user_id):
             speak_text = word
     if kind == 'listening':
         exercise['meaning'] = ''
-    if kind in ('typing', 'listening', 'cloze', 'scramble'):
+    if kind in ('typing', 'listening', 'cloze', 'scramble') and len(word) >= 3:
+        # A hint on a one- or two-character word (e.g. a single Hanzi) would give the whole answer away.
         # Revealed only when the student asks for it, which downgrades the rating to Hard.
         exercise['hint'] = ' '.join(ch if i == 0 or ch == ' ' else '_' for i, ch in enumerate(word))
     if speak_text and not exercise['audio'] and kind in ('listening', 'copy', 'multiple_choice'):

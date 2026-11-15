@@ -150,3 +150,16 @@ def test_number_fields_are_skipped_and_named_fields_win():
               'Keyword_Sound': '[sound:cruel.mp3]', 'Explanation': 'The {{c1::cruel}} man yelled.'}
     assert pick_fields(fields, settings_for({})) == ('Keyword', 'Short Vietnamese', 'Explanation')
     assert pick_fields({'Số thứ tự': '1', 'Hanzi': '人', 'Meaning': 'người'}, settings_for({}))[:2] == ('Hanzi', 'Meaning')
+
+
+def test_hint_never_reveals_a_short_answer(client, auth_headers_a):
+    deck_id = make_deck(client, auth_headers_a, {'quiz_mode': True, 'quiz_copy_new_cards': False, 'quiz_types': ['typing']},
+                        [('丿', 'phết'), ('人', 'người'), ('口', 'miệng'), ('apple', 'quả táo')])
+    for _ in range(4):
+        card = next_card(client, auth_headers_a, deck_id)
+        quiz = card['quiz']
+        if quiz['answer_length'] < 3:
+            assert 'hint' not in quiz
+        else:
+            assert quiz['hint'] == 'a _ _ _ _'
+        client.post(f"/api/study/{card['card_id']}/review", headers=auth_headers_a, json={'rating': 3, 'quiz': {'response': 'x'}})

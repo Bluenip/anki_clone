@@ -6,7 +6,6 @@ import { usePrefs } from '../context/usePrefs';
 import type { MessageKey } from '../i18n/en';
 import './QuizPanel.css';
 
-const API_BASE = import.meta.env.VITE_API_URL || '';
 const RATING_KEYS: Record<number, MessageKey> = { 1: 'rate.again', 2: 'rate.hard', 3: 'rate.good', 4: 'rate.easy' };
 const INTERVAL_KEYS = { 1: 'again', 2: 'hard', 3: 'good', 4: 'easy' } as const;
 
@@ -43,7 +42,8 @@ export default function QuizPanel({ card, exercise, disabled, onReveal, onSubmit
   const speak = useCallback(() => {
     if (exercise.audio) {
       audioRef.current?.pause();
-      const audio = new Audio(API_BASE + exercise.audio);
+      // Same-origin path (proxied to the backend), like card audio; the page CSP only allows media-src 'self'.
+      const audio = new Audio(exercise.audio);
       audioRef.current = audio;
       void audio.play().catch(() => undefined);
       return;

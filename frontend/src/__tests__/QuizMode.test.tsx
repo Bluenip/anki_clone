@@ -87,3 +87,23 @@ describe('Student quiz mode', () => {
     expect(review.mock.calls[0][1]).toBe(3);
   });
 });
+
+describe('Quiz audio', () => {
+  afterEach(() => vi.restoreAllMocks());
+  it('plays exercise audio from a same-origin path so the page CSP allows it', async () => {
+    vi.spyOn(studyApi, 'getStudyStats').mockResolvedValue({ data: { new_cards: 0, learn_cards: 0, due_cards: 1 } } as any);
+    vi.spyOn(studyApi, 'getNextCard').mockResolvedValue({
+      data: { ...baseCard, quiz: { type: 'listening', direction: 'meaning_to_word', meaning: '', answer_length: 5,
+        audio: '/api/media/1/apple.mp3', tts: null } },
+    } as any);
+    const sources: string[] = [];
+    vi.spyOn(window.HTMLMediaElement.prototype, 'play').mockImplementation(function (this: HTMLMediaElement) {
+      sources.push(this.getAttribute('src') || '');
+      return Promise.resolve();
+    });
+    renderStudy();
+    fireEvent.click(await screen.findByRole('button', { name: /play again|nghe lại/i }));
+    await waitFor(() => expect(sources.length).toBeGreaterThan(0));
+    expect(sources.every(src => src === '/api/media/1/apple.mp3')).toBe(true);
+  });
+});
