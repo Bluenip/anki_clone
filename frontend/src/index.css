@@ -43,10 +43,11 @@
   --input-bg: #111624;
   --inset: rgba(0,0,0,0.2);
   --line: #43516a;
-  --opt-bg: #2c2c2c;
-  --opt-panel: #353535;
-  --opt-input: #2b2b2b;
-  --opt-hover: #464654;
+  --opt-bg: var(--bg-primary);
+  --opt-panel: var(--panel);
+  --opt-input: var(--input-bg);
+  --opt-hover: rgba(var(--fg-rgb),0.08);
+  --border-color: var(--glass-border);
   --accent-text: #70d8ed;
   --link-hover: #33dfff;
   --danger-text: #fca5a5;
@@ -70,9 +71,9 @@
   --input-bg: #ffffff;
   --inset: rgba(15,23,42,0.03);
   --line: #cbd5e1;
-  --opt-bg: #f3f4f6;
-  --opt-panel: #ffffff;
-  --opt-input: #ffffff;
+  --opt-bg: var(--bg-primary);
+  --opt-panel: var(--panel);
+  --opt-input: var(--input-bg);
   --opt-hover: #e5e7eb;
   --accent-text: #0e7490;
   --link-hover: #0e7490;
@@ -288,6 +289,14 @@ a:hover { color: var(--link-hover); }
 }
 .breadcrumb a { color: var(--accent-cyan); }
 
+/* Back button + breadcrumb row on sub-pages */
+.page-nav {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 0.75rem;
+  margin-bottom: 1.5rem;
+}
+.page-nav .breadcrumb { margin-bottom: 0; }
+.back-button { flex: none; }
+
 /* ─── Modal ─────────────────────────────────────── */
 .modal-overlay {
   position: fixed; inset: 0; z-index: 200;
@@ -370,7 +379,9 @@ a:hover { color: var(--link-hover); }
 .deck-detail { padding: 2rem; }
 .deck-detail-header { display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 1rem; }
 .deck-detail-header h1 { font-size: 1.75rem; }
-.deck-desc { color: var(--text-secondary); margin-top: 0.5rem; }
+.deck-desc { color: var(--text-secondary); margin-top: 0.5rem; overflow-wrap: anywhere; }
+.deck-desc a { color: var(--accent-cyan); }
+.deck-desc img { max-width: 100%; height: auto; }
 .deck-detail-actions { display: flex; gap: 0.75rem; flex-wrap: wrap; }
 
 /* ─── Study Page ────────────────────────────────── */
@@ -792,8 +803,8 @@ a:hover { color: var(--link-hover); }
 }
 
 .browse-table tr.selected {
-  background: rgba(56, 189, 248, 0.2);
-  border-left: 3px solid var(--accent-blue);
+  background: color-mix(in srgb, var(--accent-cyan) 20%, transparent);
+  border-left: 3px solid var(--accent-cyan);
 }
 
 .browse-table td {
@@ -852,12 +863,12 @@ a:hover { color: var(--link-hover); }
 
 /* P2.1: Focus visible for keyboard navigation */
 :focus-visible {
-  outline: 2px solid var(--accent-blue, #3b82f6);
+  outline: 2px solid var(--accent-cyan);
   outline-offset: 2px;
 }
 
 button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible {
-  outline: 2px solid var(--accent-blue, #3b82f6);
+  outline: 2px solid var(--accent-cyan);
   outline-offset: 2px;
 }
 

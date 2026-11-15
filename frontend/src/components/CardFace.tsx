@@ -97,10 +97,14 @@ const CardFace = forwardRef<CardFaceRef, CardFaceProps>(
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="color-scheme" content="${theme === 'light' ? 'light' : 'dark'}" />
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'none'; style-src 'unsafe-inline'; img-src 'self' ${assetOrigin} data: blob: https:; media-src 'self' ${assetOrigin} blob: https:; font-src 'self' ${assetOrigin} data:; base-uri 'none'; form-action 'none';" />
   <style>${mathCss}</style>
   <style>
     *, *::before, *::after { box-sizing: border-box; }
+    /* Must match the host page: a mismatched color-scheme makes the browser paint an opaque
+       white backdrop behind the transparent frame, hiding light text in dark mode. */
+    :root { color-scheme: ${theme === 'light' ? 'light' : 'dark'}; }
     body {
       margin: 0;
       padding: 0;

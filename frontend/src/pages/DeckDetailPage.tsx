@@ -6,6 +6,8 @@ import { getStudyStats } from '../api/study';
 import type { StudyStats } from '../api/study';
 import { shareDeck } from '../api/shared';
 import { usePrefs } from '../context/usePrefs';
+import BackButton from '../components/BackButton';
+import { sanitizeHtml } from '../utils/sanitize';
 
 const DeckDetailPage = () => {
   const { id } = useParams<{ id: string }>();
@@ -45,14 +47,17 @@ const DeckDetailPage = () => {
 
   return (
     <div className="page-container">
-      <div className="breadcrumb">
-        <Link to="/decks">{t('nav.decks')}</Link> <span>/</span> <span>{deck.name}</span>
+      <div className="page-nav">
+        <BackButton fallback="/decks" />
+        <div className="breadcrumb">
+          <Link to="/decks">{t('nav.decks')}</Link> <span>/</span> <span>{deck.name}</span>
+        </div>
       </div>
       <div className="deck-detail glass-card">
         <div className="deck-detail-header">
           <div>
             <h1>{deck.name}</h1>
-            {deck.description && <p className="deck-desc">{deck.description}</p>}
+            {deck.description && <div className="deck-desc" dangerouslySetInnerHTML={{ __html: sanitizeHtml(deck.description) }} />}
           </div>
           <div className="deck-detail-actions">
             <Link to={`/study/${id}`} className="btn btn-primary btn-lg">▶ {t('deck.studyNow')}</Link>

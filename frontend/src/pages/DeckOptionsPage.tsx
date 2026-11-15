@@ -10,6 +10,7 @@ import type { Deck } from '../api/types';
 import '../DeckOptions.css';
 import { usePrefs } from '../context/usePrefs';
 import { tNow } from '../context/prefs-context-base';
+import BackButton from '../components/BackButton';
 
 const QUIZ_TYPES = ['multiple_choice', 'listening', 'typing', 'cloze', 'scramble'] as const;
 const TTS_LANGS = ['en-US', 'en-GB', 'ja-JP', 'zh-CN', 'ko-KR', 'fr-FR', 'de-DE', 'vi-VN'];
@@ -637,6 +638,7 @@ const DeckOptionsPageContent = () => {
       {/* Compact Toolbar */}
       <div className="options-toolbar">
         <div className="options-breadcrumb">
+          <BackButton fallback={`/decks/${deckId}`} />
           <Link to="/decks" className="options-back-link">
             {t('nav.decks')}
           </Link>

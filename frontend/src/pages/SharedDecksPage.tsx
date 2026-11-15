@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { browseSharedDecks, getCategories } from '../api/shared';
 import type { SharedDeck } from '../api/shared';
 import { usePrefs } from '../context/usePrefs';
+import BackButton from '../components/BackButton';
 
 const SharedDecksPage = () => {
   const [decks, setDecks] = useState<SharedDeck[]>([]);
@@ -61,6 +62,7 @@ const SharedDecksPage = () => {
 
   return (
     <div className="page-container">
+      <div className="page-nav"><BackButton fallback="/decks" /></div>
       <div className="shared-header">
         <h1>{t('shared.title')}</h1>
         <p>{t('shared.subtitle')}</p>
