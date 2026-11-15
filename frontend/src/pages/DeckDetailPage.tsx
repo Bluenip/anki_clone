@@ -8,6 +8,7 @@ import { shareDeck } from '../api/shared';
 import { usePrefs } from '../context/usePrefs';
 import BackButton from '../components/BackButton';
 import { sanitizeHtml } from '../utils/sanitize';
+import DeckAudioPanel from '../components/DeckAudioPanel';
 
 const DeckDetailPage = () => {
   const { id } = useParams<{ id: string }>();
@@ -76,6 +77,8 @@ const DeckDetailPage = () => {
             <div className="stat-card glass-card"><span className="stat-value">{stats.total_cards}</span><span className="stat-label">{t('stat.total')}</span></div>
           </div>
         )}
+
+        <DeckAudioPanel deckId={Number(id)} />
       </div>
 
       {showShare && (

@@ -1025,6 +1025,16 @@ export const en = {
   "do.quizTtsLang": "Speech language when there is no audio",
   "do.quizTtsAuto": "Auto-detect",
   "do.quizTypesRequired": "Choose at least one exercise type.",
+  "tts.title": "Pronunciation audio",
+  "tts.description": "Generate a spoken pronunciation for every word that has no audio yet. Words that already have audio are left as they are. The free Gemini tier covers about 800 words a day.",
+  "tts.start": "Generate audio",
+  "tts.restart": "Run again",
+  "tts.stop": "Stop",
+  "tts.progress": "{done} / {total} words done · {added} cards got audio",
+  "tts.summary": "Done: {added} cards got audio, {skipped} already had audio or need none, {failed} words could not be generated.",
+  "tts.stoppedError": "Stopped: {error}. Progress so far is kept; run again to continue.",
+  "tts.failed": "Could not start audio generation.",
+  "tts.waiting": "Today's free quota is used up. It continues by itself at {time} (keep the server running).",
 } as const;
 
 export type MessageKey = keyof typeof en;

@@ -263,6 +263,9 @@ def card_material(card, settings):
         if match and '/' not in match[1] and '\\' not in match[1]:
             sound = match[1]
             break
+    if sound is None:
+        # Generated pronunciation (tts_service) is stored with the meaning so the word field stays untouched.
+        sound = next((m[1] for value in fields.values() for m in [re.search(r'\[sound:(tts-[0-9a-f]+\.wav)\]', value or '')] if m), None)
     return {'kind': 'vocab', 'word': word, 'meaning': mask(meaning, word),
             'example': _example_from(fields, example_name, meaning_name, word), 'sound': sound}
 

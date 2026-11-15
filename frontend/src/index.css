@@ -899,3 +899,14 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .pref-toggle:hover { background: var(--surface-hover); color: var(--text-primary); }
 .pref-toggle:focus-visible { outline: 2px solid var(--accent-cyan); outline-offset: 2px; }
 .pref-toggle .pref-active { color: var(--accent-cyan); font-weight: 700; }
+
+/* Deck pronunciation audio */
+.deck-audio-panel { margin-top: 1.5rem; padding: 1rem 1.25rem; display: flex; flex-direction: column; gap: 0.75rem; }
+.deck-audio-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; flex-wrap: wrap; }
+.deck-audio-head p { margin-top: 0.25rem; color: var(--text-secondary); font-size: 0.875rem; }
+.deck-audio-progress { display: flex; flex-direction: column; gap: 0.4rem; font-size: 0.85rem; color: var(--text-secondary); }
+.deck-audio-bar { height: 6px; border-radius: 999px; background: var(--surface-hover); overflow: hidden; }
+.deck-audio-bar span { display: block; height: 100%; background: var(--accent-gradient-h); transition: width 0.4s ease; }
+.deck-audio-summary { color: var(--success-text); font-size: 0.875rem; }
+.deck-audio-error { color: var(--danger-text); font-size: 0.875rem; }
+.deck-audio-waiting { color: var(--warning-text); }
