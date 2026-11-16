@@ -1047,6 +1047,7 @@ export const en = {
   "tts.upgradeSummary": "Done: {added} words now use Gemini's voice, {failed} could not be upgraded.",
   "tts.piperCount": "({count} with the Piper voice)",
   "tts.stoppedByUser": "Stopped after {done} / {total} words. What was done is kept; run again to continue.",
+  "tts.stopping": "Stopping…",
 } as const;
 
 export type MessageKey = keyof typeof en;

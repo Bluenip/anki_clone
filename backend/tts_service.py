@@ -142,7 +142,7 @@ def batch_size():
 
 
 class TTSError(Exception):
-    """kind: rate_limit | daily_limit | auth | location | bad_response | network | other."""
+    """kind: rate_limit | daily_limit | busy | auth | location | bad_response | network | other."""
 
     def __init__(self, kind, message, retry_after=None):
         super().__init__(message)
@@ -178,6 +178,8 @@ def _post(url, body, *, timeout, opener):
             raise TTSError('daily_limit' if daily else 'rate_limit', 'Gemini quota reached', retry) from None
         if exc.code in (401, 403) or 'api key not valid' in detail.lower() or 'API_KEY_INVALID' in detail:
             raise TTSError('auth', f'Gemini rejected the API key ({exc.code})') from None
+        if exc.code in (500, 502, 503, 504):
+            raise TTSError('busy', f'Gemini is overloaded right now ({exc.code})', retry) from None
         if exc.code == 400 and 'location' in detail.lower():
             raise TTSError('location', 'Gemini API is not available from this server location') from None
         raise TTSError('other', f'Gemini error {exc.code}: {detail[:200]}') from None
@@ -471,7 +473,7 @@ class Job:
                 'resume_at': int(self.resume_at) if self.state == 'waiting' else None}
 
 
-ACTIVE_STATES = ('queued', 'running', 'waiting')  # a job in any of these can be stopped
+ACTIVE_STATES = ('queued', 'running', 'waiting', 'stopping')  # a job in any of these can be stopped
 
 _jobs = {}
 _jobs_lock = threading.Lock()
@@ -597,6 +599,7 @@ def run_job(job, session_factory, *, synth_batch=synthesize_batch, sleep=time.sl
         attempts = {}     # word -> failed verifications
         errors = 0        # consecutive request errors
         plain_429 = 0     # consecutive 429s without Retry-After
+        busy = {}         # model -> consecutive overload / timeout errors
         exhausted = set() if api_key() else set(models())
         last_call = 0.0
         while pending:
@@ -641,6 +644,13 @@ def run_job(job, session_factory, *, synth_batch=synthesize_batch, sleep=time.sl
                         continue
                     job.state, job.error = 'failed', str(exc)  # nothing else would work
                     return job
+                if exc.kind in ('busy', 'network'):
+                    # Google overloaded or the request timed out: after two in a row, stop using this model
+                    # for this run (the next model, then Piper, takes over) instead of retrying for minutes.
+                    busy[available[0]] = busy.get(available[0], 0) + 1
+                    if busy[available[0]] >= 2:
+                        exhausted.add(available[0])
+                        continue
                 errors += 1
                 if errors > 6:
                     if piper is not None:
@@ -660,6 +670,7 @@ def run_job(job, session_factory, *, synth_batch=synthesize_batch, sleep=time.sl
                     return job
                 continue
             errors = plain_429 = 0
+            busy.pop(available[0], None)
             log.info('TTS batch: %d/%d verified with %s in %.0fs', len(clips), len(batch), available[0],
                      time.time() - started)
             given_up = []
@@ -711,7 +722,7 @@ def synthesize_any_model(text):
                 if exc.kind in ('auth', 'location'):
                     last = exc
                     break
-                if exc.kind not in ('daily_limit', 'rate_limit', 'network'):
+                if exc.kind not in ('daily_limit', 'rate_limit', 'network', 'busy'):
                     raise
                 last = exc
     if piper_available():

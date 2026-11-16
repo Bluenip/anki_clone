@@ -144,7 +144,7 @@ def test_synthesize_wraps_raw_pcm_and_classifies_errors(configured):
 
     for code, body, kind in ((429, b'{}', 'rate_limit'), (403, b'{}', 'auth'),
                              (400, b'{"error":{"message":"API key not valid. Please pass a valid API key."}}', 'auth'),
-                             (400, b'User location is not supported', 'location'), (500, b'boom', 'other')):
+                             (400, b'User location is not supported', 'location'), (500, b'boom', 'busy'), (404, b'no such model', 'other')):
         with pytest.raises(tts_service.TTSError) as caught:
             tts_service.synthesize('x', opener=failing(code, body))
         assert caught.value.kind == kind
@@ -509,3 +509,45 @@ def test_piper_alone_enables_audio_but_not_upgrades(client, auth_headers_a, monk
     assert status['enabled'] is True and status['gemini'] is False and status['piper'] is True
     assert client.post(f'/api/decks/{deck_id}/tts', headers=auth_headers_a).status_code == 202
     assert client.post(f'/api/decks/{deck_id}/tts', headers=auth_headers_a, params={'mode': 'upgrade'}).status_code == 503
+
+
+
+def test_overloaded_gemini_moves_on_to_piper_quickly(client, auth_headers_a, db_session, configured, monkeypatch):
+    monkeypatch.setenv('GEMINI_TTS_MODELS', 'lite,flash')
+
+    def overloaded(words, model):
+        raise tts_service.TTSError('busy', 'Gemini is overloaded right now (503)')
+
+    deck_id = make_deck(client, auth_headers_a, [('Skill', 'Kỹ năng'), ('Cast', 'Đúc')])
+    user_id = db_session.query(Deck).get(deck_id).user_id
+    clock, piper = Clock(), FakePiper()
+    start = clock.t
+    job = tts_service.Job(deck_id=deck_id, user_id=user_id)
+    tts_service.run_job(job, shared(db_session), synth_batch=overloaded, sleep=clock.sleep, now=clock.now, rpm=6000, piper=piper)
+    assert job.state == 'done' and job.piper_words == 2
+    assert clock.t - start < 5 * 60  # two tries per model, not six half-minute retries each
+
+
+def test_503_is_classified_as_busy(configured):
+    def opener(request, timeout):
+        raise urllib.error.HTTPError(request.full_url, 503, 'busy', {}, io.BytesIO(b'{"error":{"message":"high demand"}}'))
+
+    with pytest.raises(tts_service.TTSError) as caught:
+        tts_service.synthesize('x', opener=opener)
+    assert caught.value.kind == 'busy'
+
+
+def test_stop_marks_a_running_job_as_stopping(client, auth_headers_a, db_session, configured):
+    deck_id = make_deck(client, auth_headers_a, [('Oath', 'Lời thề')])
+    user_id = db_session.query(Deck).get(deck_id).user_id
+    job = tts_service.Job(deck_id=deck_id, user_id=user_id, state='running')
+    with tts_service._jobs_lock:
+        tts_service._jobs[(user_id, deck_id)] = job
+    try:
+        assert client.post(f'/api/decks/{deck_id}/tts/cancel', headers=auth_headers_a).json()['state'] == 'stopping'
+        assert job.cancel.is_set()
+        # Pressing Stop again does not restart anything or change the state.
+        assert client.post(f'/api/decks/{deck_id}/tts/cancel', headers=auth_headers_a).json()['state'] == 'stopping'
+    finally:
+        with tts_service._jobs_lock:
+            tts_service._jobs.pop((user_id, deck_id), None)

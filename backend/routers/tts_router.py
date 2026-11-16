@@ -62,4 +62,6 @@ def cancel_deck_tts(deck_id: int, db: Session = Depends(get_db), user: User = De
         job.cancel.set()
         if job.state == 'waiting':
             job.state = 'stopped'  # nothing is mid-write while waiting, so report it at once
+        elif job.state != 'stopped':
+            job.state = 'stopping'  # a Gemini request may still be in flight; the job stops right after it
     return job.public() if job else {'state': 'idle'}
