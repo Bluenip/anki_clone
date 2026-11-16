@@ -638,7 +638,7 @@ const DeckOptionsPageContent = () => {
       {/* Compact Toolbar */}
       <div className="options-toolbar">
         <div className="options-breadcrumb">
-          <BackButton fallback={`/decks/${deckId}`} />
+          <BackButton to={`/decks/${deckId}`} />
           <Link to="/decks" className="options-back-link">
             {t('nav.decks')}
           </Link>

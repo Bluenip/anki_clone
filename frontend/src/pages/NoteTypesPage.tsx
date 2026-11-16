@@ -75,7 +75,7 @@ export default function NoteTypesPage() {
     finally { pending.current = false; setBusy(false); }
   };
   return <div className="page-container note-types-page" style={{ maxWidth: 1000 }}>
-    <div className="page-nav"><BackButton fallback="/add" /></div>
+    <div className="page-nav"><BackButton to="/add" /></div>
     <h1>{t('nt.title')}</h1><p><Link to="/media">{t('nt.checkMedia')}</Link></p>
     <p>{t('nt.description')}</p>
     {error && <p role="alert" className="alert alert-error">{error}</p>}

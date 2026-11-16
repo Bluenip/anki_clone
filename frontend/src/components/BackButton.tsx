@@ -1,25 +1,21 @@
-import { useLocation, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { usePrefs } from '../context/usePrefs';
 
 interface BackButtonProps {
-  /** Where to go when there is no in-app page to return to (opened from a link or a reload). */
-  fallback: string;
+  /** The page one level up, e.g. a deck page goes back to the deck list. */
+  to: string;
 }
 
-/** "← Back": returns to the previous in-app page, else to the page's logical parent. */
-export default function BackButton({ fallback }: BackButtonProps) {
+/**
+ * "← Back" always goes UP to the parent page, never back in browser history.
+ * History-based back loops between two pages that link to each other
+ * (deck page ⇄ study page), so the deck list could never be reached.
+ */
+export default function BackButton({ to }: BackButtonProps) {
   const { t } = usePrefs();
-  const navigate = useNavigate();
-  const location = useLocation();
-  // React Router gives the first entry of a session the key "default"; anything else came from in-app navigation.
-  const canGoBack = location.key !== 'default';
   return (
-    <button
-      type="button"
-      className="btn btn-ghost btn-sm back-button"
-      onClick={() => (canGoBack ? navigate(-1) : navigate(fallback))}
-    >
+    <Link to={to} className="btn btn-ghost btn-sm back-button">
       ← {t('study.back')}
-    </button>
+    </Link>
   );
 }

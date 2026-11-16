@@ -49,7 +49,7 @@ const DeckDetailPage = () => {
   return (
     <div className="page-container">
       <div className="page-nav">
-        <BackButton fallback="/decks" />
+        <BackButton to="/decks" />
         <div className="breadcrumb">
           <Link to="/decks">{t('nav.decks')}</Link> <span>/</span> <span>{deck.name}</span>
         </div>
