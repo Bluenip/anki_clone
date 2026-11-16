@@ -236,7 +236,7 @@ const CardEditorPageContent = () => {
   return (
     <div className="page-container">
       <div className="page-nav">
-        <BackButton fallback={`/decks/${deckId}`} />
+        <BackButton to={`/decks/${deckId}`} />
         <div className="breadcrumb">
           <Link to="/decks">{t('nav.decks')}</Link> <span>/</span>
           <Link to={`/decks/${deckId}`}>{t('add.deck')}</Link> <span>/</span> <span>{t('stats.cardsCol')}</span>

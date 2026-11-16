@@ -15,7 +15,7 @@ export default function BackupsPage() {
   const reload = async () => { const { data } = await client.get<Status>('/api/backups'); setStatus(data); };
   useEffect(() => { let active = true; client.get<Status>('/api/backups').then(r => { if (active) setStatus(r.data); }).catch(e => { if (active) setError(errorText(e, tNow('backups.failed'))); }); return () => { active = false; }; }, []);
   const perform = async (work: () => Promise<unknown>) => { if (busy) return; setBusy(true); setError(''); setMessage(''); try { await work(); await reload(); } catch(e) { setError(errorText(e, t('backups.failed'))); } finally { setBusy(false); } };
-  return <div className="page-container" style={{ maxWidth: 900 }}><div className="page-nav"><BackButton fallback="/decks" /></div><h1>{t('backups.title')}</h1>
+  return <div className="page-container" style={{ maxWidth: 900 }}><div className="page-nav"><BackButton to="/decks" /></div><h1>{t('backups.title')}</h1>
     <p>{t('backups.description')}</p>
     {error && <p role="alert">{error}</p>}{message && <p role="status">{message}</p>}
     <p>{t('backups.counts', { notes: status?.notes ?? '…', cards: status?.cards ?? '…' })}</p>

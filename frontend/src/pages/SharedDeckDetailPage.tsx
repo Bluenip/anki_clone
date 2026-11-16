@@ -37,7 +37,7 @@ const SharedDeckDetailPage = () => {
   return (
     <div className="page-container">
       <div className="page-nav">
-        <BackButton fallback="/shared" />
+        <BackButton to="/shared" />
         <div className="breadcrumb">
           <Link to="/shared">{t('shared.title')}</Link> <span>/</span> <span>{deck.title}</span>
         </div>

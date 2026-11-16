@@ -62,7 +62,7 @@ const SharedDecksPage = () => {
 
   return (
     <div className="page-container">
-      <div className="page-nav"><BackButton fallback="/decks" /></div>
+      <div className="page-nav"><BackButton to="/decks" /></div>
       <div className="shared-header">
         <h1>{t('shared.title')}</h1>
         <p>{t('shared.subtitle')}</p>

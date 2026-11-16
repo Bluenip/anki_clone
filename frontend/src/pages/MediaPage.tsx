@@ -14,7 +14,7 @@ export default function MediaPage() {
     catch { setError(t('media.checkFailed')); }
     finally { setBusy(false); }
   };
-  return <div className="page-container"><div className="page-nav"><BackButton fallback="/note-types" /></div><h1>{t('media.title')}</h1>
+  return <div className="page-container"><div className="page-nav"><BackButton to="/note-types" /></div><h1>{t('media.title')}</h1>
     <p>{t('media.description')}</p>
     <button className="btn btn-primary" disabled={busy} onClick={() => void check()}>{busy ? t('media.checking') : t('media.title')}</button>
     {error && <p role="alert">{error}</p>}
