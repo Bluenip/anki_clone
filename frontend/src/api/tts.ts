@@ -9,7 +9,7 @@ export interface TtsStatus {
 }
 
 export interface TtsJob {
-  state: 'idle' | 'queued' | 'running' | 'waiting' | 'done' | 'stopped' | 'failed';
+  state: 'idle' | 'queued' | 'running' | 'waiting' | 'stopping' | 'done' | 'stopped' | 'failed';
   mode?: 'fill' | 'upgrade';
   piper?: number;
   total?: number;

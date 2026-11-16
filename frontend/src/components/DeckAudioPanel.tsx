@@ -3,7 +3,7 @@ import { cancelDeckTts, getDeckTtsJob, getDeckTtsSummary, getTtsStatus, startDec
 import type { TtsJob } from '../api/tts';
 import { usePrefs } from '../context/usePrefs';
 
-const ACTIVE = new Set(['queued', 'running', 'waiting']);
+const ACTIVE = new Set(['queued', 'running', 'waiting', 'stopping']);
 
 /** "Generate pronunciation audio" for every word in a deck; hidden when the server has no TTS key. */
 export default function DeckAudioPanel({ deckId }: { deckId: number }) {
@@ -69,8 +69,9 @@ export default function DeckAudioPanel({ deckId }: { deckId: number }) {
           <p>{t('tts.description')}</p>
         </div>
         {running ? (
-          <button type="button" className="btn btn-ghost btn-sm" onClick={() => void cancelDeckTts(deckId).then(r => setJob(r.data))}>
-            {t('tts.stop')}
+          <button type="button" className="btn btn-ghost btn-sm" disabled={job.state === 'stopping'}
+            onClick={() => { setJob(j => ({ ...j, state: 'stopping' })); void cancelDeckTts(deckId).then(r => setJob(r.data)); }}>
+            {job.state === 'stopping' ? t('tts.stopping') : t('tts.stop')}
           </button>
         ) : (
           <div className="deck-audio-buttons">

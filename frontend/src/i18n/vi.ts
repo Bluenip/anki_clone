@@ -1049,4 +1049,5 @@ export const vi: Record<MessageKey, string> = {
   "tts.upgradeSummary": "Xong: {added} từ đã chuyển sang giọng Gemini, {failed} từ không nâng cấp được.",
   "tts.piperCount": "({count} từ dùng giọng Piper)",
   "tts.stoppedByUser": "Đã dừng sau {done} / {total} từ. Phần đã làm được giữ lại, bấm chạy lại để tiếp tục.",
+  "tts.stopping": "Đang dừng…",
 };

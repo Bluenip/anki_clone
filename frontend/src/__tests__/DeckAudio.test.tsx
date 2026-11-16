@@ -60,4 +60,16 @@ describe('DeckAudioPanel', () => {
     render(<DeckAudioPanel deckId={9} />);
     expect(await screen.findByText(/Stopped after 4 \/ 30|Đã dừng sau 4 \/ 30/)).toBeTruthy();
   });
+
+  it('shows Stopping and blocks repeated clicks while a request finishes', async () => {
+    vi.spyOn(ttsApi, 'getTtsStatus').mockResolvedValue({ data: { enabled: true, gemini: true, piper: true, model: 'm', voice: 'v' } } as any);
+    vi.spyOn(ttsApi, 'getDeckTtsJob').mockResolvedValue({ data: { state: 'running', mode: 'fill', total: 100, done: 10, added: 10, failed: 0 } } as any);
+    const cancel = vi.spyOn(ttsApi, 'cancelDeckTts').mockResolvedValue({ data: { state: 'stopping', mode: 'fill', total: 100, done: 10 } } as any);
+    render(<DeckAudioPanel deckId={9} />);
+    fireEvent.click(await screen.findByRole('button', { name: /^stop$|^dừng$/i }));
+    const stopping = await screen.findByRole('button', { name: /stopping|đang dừng/i });
+    expect((stopping as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(stopping);
+    expect(cancel).toHaveBeenCalledTimes(1);
+  });
 });
