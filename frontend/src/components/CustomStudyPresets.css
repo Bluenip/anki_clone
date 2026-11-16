@@ -1,0 +1,46 @@
+.csp-panel { padding: 1rem 1.25rem; margin-block: 1rem; }
+.csp-panel > summary { cursor: pointer; font-weight: 600; color: var(--text-primary); }
+.csp-panel[open] > summary { margin-bottom: 1rem; }
+
+.csp-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+.csp-field select,
+.csp-field input {
+  font: inherit;
+  font-size: 0.95rem;
+  color: var(--text-primary);
+  background: var(--input-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  padding: 0.5rem 0.65rem;
+  min-width: 0;
+  width: 100%;
+}
+.csp-field select:focus,
+.csp-field input:focus { outline: none; border-color: var(--accent-cyan); }
+.csp-field select option { background: var(--input-bg); color: var(--text-primary); }
+
+.csp-deck { max-width: 28rem; margin-bottom: 1rem; }
+
+.csp-groups {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+  gap: 1rem;
+}
+.csp-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+.csp-group h4 { margin: 0; font-size: 0.95rem; color: var(--text-primary); }
+.csp-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.csp-message { margin: 0; font-size: 0.85rem; color: var(--success-text); }
