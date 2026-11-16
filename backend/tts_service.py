@@ -40,6 +40,12 @@ import wave
 from dataclasses import dataclass, field
 
 log = logging.getLogger(__name__)
+if not log.handlers:  # make batch results visible in `docker compose logs backend`
+    _handler = logging.StreamHandler()
+    _handler.setFormatter(logging.Formatter('%(levelname)s:     tts: %(message)s'))
+    log.addHandler(_handler)
+    log.setLevel(logging.INFO)
+    log.propagate = False
 
 API_BASE = 'https://generativelanguage.googleapis.com/v1beta'
 API_URL = API_BASE + '/interactions'
@@ -54,7 +60,64 @@ def api_key():
 
 
 def enabled():
-    return bool(api_key())
+    """Audio can be generated with Gemini, or offline with Piper."""
+    return bool(api_key()) or piper_available()
+
+
+# --------------------------------------------------------------------------- Piper fallback
+
+GEMINI_RATE = 24000  # Gemini TTS always returns 24 kHz; Piper voices use other rates (lessac: 22.05 kHz)
+_piper_voice = None
+_piper_lock = threading.Lock()
+
+
+def piper_voice_path():
+    return os.getenv('PIPER_VOICE', '/opt/voices/en_US-lessac-medium.onnx')
+
+
+def piper_available():
+    if os.getenv('TTS_PIPER_FALLBACK', '1').strip().lower() in ('0', 'false', 'no', 'off'):
+        return False
+    if not os.path.exists(piper_voice_path()):
+        return False
+    try:
+        import piper  # noqa: F401
+    except ImportError:
+        return False
+    return True
+
+
+def piper_wav(word):
+    """Offline pronunciation; parts like 'go – went' are read separately with a clear pause between."""
+    global _piper_voice
+    from piper import PiperVoice
+    with _piper_lock:
+        if _piper_voice is None:
+            _piper_voice = PiperVoice.load(piper_voice_path())
+        voice = _piper_voice
+        parts = [part.strip() for part in _SEPARATORS.split(word or '') if part.strip()]
+        rate, frames = None, array.array('h')
+        for index, part in enumerate(parts):
+            buffer = io.BytesIO()
+            with wave.open(buffer, 'wb') as out:
+                voice.synthesize_wav(part, out)
+            with wave.open(io.BytesIO(buffer.getvalue())) as source:
+                rate = source.getframerate()
+                frames.extend(array.array('h', source.readframes(source.getnframes())))
+            if index < len(parts) - 1:
+                frames.extend([0] * int(rate * 0.35))
+    if rate is None:
+        raise TTSError('bad_response', 'Nothing to say')
+    return _wav_bytes(rate, frames.tobytes())
+
+
+def is_gemini_audio(path):
+    """True for audio made by Gemini (24 kHz); False for Piper or anything else."""
+    try:
+        with wave.open(path) as source:
+            return source.getframerate() == GEMINI_RATE
+    except (OSError, wave.Error, EOFError):
+        return False
 
 
 def models():
@@ -113,7 +176,7 @@ def _post(url, body, *, timeout, opener):
         if exc.code == 429:
             daily = re.search(r'per ?day|PerDay|RequestsPerDay', detail, re.I)
             raise TTSError('daily_limit' if daily else 'rate_limit', 'Gemini quota reached', retry) from None
-        if exc.code in (401, 403):
+        if exc.code in (401, 403) or 'api key not valid' in detail.lower() or 'API_KEY_INVALID' in detail:
             raise TTSError('auth', f'Gemini rejected the API key ({exc.code})') from None
         if exc.code == 400 and 'location' in detail.lower():
             raise TTSError('location', 'Gemini API is not available from this server location') from None
@@ -393,13 +456,16 @@ class Job:
     done_words: int = 0
     failed: int = 0
     skipped: int = 0               # cards that already had audio or nothing to say
+    piper_words: int = 0           # words voiced by the offline fallback
+    mode: str = 'fill'             # fill: give words audio; upgrade: replace Piper audio with Gemini
     error: str = ''
     resume_at: float = 0.0
     started_at: float = field(default_factory=time.time)
     cancel: threading.Event = field(default_factory=threading.Event, repr=False)
 
     def public(self):
-        return {'state': self.state, 'total': self.total, 'done': self.done_words, 'added': self.added,
+        return {'state': self.state, 'mode': self.mode, 'piper': self.piper_words,
+                'total': self.total, 'done': self.done_words, 'added': self.added,
                 'skipped': self.skipped, 'failed': self.failed, 'error': self.error,
                 'remaining': max(0, self.total - self.done_words - self.failed),
                 'resume_at': int(self.resume_at) if self.state == 'waiting' else None}
@@ -436,27 +502,56 @@ def _wait(job, seconds, sleep, now=time.time):
         sleep(min(left, 5.0))
 
 
-def run_job(job, session_factory, *, synth_batch=synthesize_batch, sleep=time.sleep, rpm=None, now=time.time):
-    """Give every word in the deck (and subdecks) audio; safe to re-run since done notes are skipped."""
+def _upgrade_targets(db, deck):
+    """{word: audio path} for notes whose generated audio is not Gemini's (i.e. Piper)."""
+    from models import Card
+    from quiz import card_material, settings_for
+    from deck_options import effective_settings
+    from media_utils import get_media_dir
+    found, seen = {}, set()
+    for card_id in _deck_card_ids(db, deck):
+        card = db.get(Card, card_id)
+        if card is None or card.note_link is None or card.note_link.note_id in seen:
+            continue
+        seen.add(card.note_link.note_id)
+        material = card_material(card, settings_for(effective_settings(card.deck)))
+        sound = (material or {}).get('sound') or ''
+        if not sound.startswith('tts-'):
+            continue
+        path = os.path.join(get_media_dir(deck.user_id), sound)
+        if os.path.exists(path) and not is_gemini_audio(path):
+            found.setdefault(material['word'], path)
+    return found
+
+
+def run_job(job, session_factory, *, synth_batch=synthesize_batch, sleep=time.sleep, rpm=None, now=time.time,
+            piper=None):
+    """Fill: give every word in the deck audio (Gemini first, Piper when Gemini cannot).
+    Upgrade: replace Piper audio with Gemini audio in place. Both are safe to re-run."""
     from models import Card, Deck
     rpm = rpm or max(1, int(os.getenv('GEMINI_TTS_RPM', '3') or 3))
     gap = 60.0 / rpm + 1.0
+    if piper is None and job.mode == 'fill' and piper_available():
+        piper = piper_wav
     db = session_factory()
     job.state = 'running'
     try:
         deck = db.get(Deck, job.deck_id)
-        words = {}  # word -> [card ids]; one entry per note
-        seen_notes = set()
-        for card_id in _deck_card_ids(db, deck):
-            card = db.get(Card, card_id)
-            if card is None or card.note_link is None or card.note_link.note_id in seen_notes:
-                continue
-            seen_notes.add(card.note_link.note_id)
-            target = note_target(card)
-            if target is None or not speech_text(target[1]):
-                job.skipped += 1
-                continue
-            words.setdefault(target[1], []).append(card_id)
+        words = {}  # fill: word -> [card ids]; upgrade: word -> audio path
+        if job.mode == 'upgrade':
+            words = _upgrade_targets(db, deck)
+        else:
+            seen_notes = set()
+            for card_id in _deck_card_ids(db, deck):
+                card = db.get(Card, card_id)
+                if card is None or card.note_link is None or card.note_link.note_id in seen_notes:
+                    continue
+                seen_notes.add(card.note_link.note_id)
+                target = note_target(card)
+                if target is None or not speech_text(target[1]):
+                    job.skipped += 1
+                    continue
+                words.setdefault(target[1], []).append(card_id)
         job.total = len(words)
 
         def attach_word(word):
@@ -471,9 +566,30 @@ def run_job(job, session_factory, *, synth_batch=synthesize_batch, sleep=time.sl
                     job.error = str(exc)
             job.done_words += 1
 
+        def store(word, data):
+            if job.mode == 'upgrade':
+                _save(words[word], data)  # same file name, so notes need no change
+                job.added += 1
+                job.done_words += 1
+            else:
+                _save(_media_path(job.user_id, word), data)
+                attach_word(word)
+
+        def piper_rest(remaining):
+            for word in remaining:
+                if job.cancel.is_set():
+                    return False
+                try:
+                    store(word, piper(word))
+                    job.piper_words += 1
+                except Exception as exc:  # one odd word must not stop the deck
+                    log.warning('Piper failed for %r: %s', word, exc)
+                    job.failed += 1
+            return True
+
         pending = []
         for word in words:
-            if os.path.exists(_media_path(job.user_id, word)):
+            if job.mode == 'fill' and os.path.exists(_media_path(job.user_id, word)):
                 attach_word(word)  # another deck already has this word's audio
             else:
                 pending.append(word)
@@ -481,7 +597,7 @@ def run_job(job, session_factory, *, synth_batch=synthesize_batch, sleep=time.sl
         attempts = {}     # word -> failed verifications
         errors = 0        # consecutive request errors
         plain_429 = 0     # consecutive 429s without Retry-After
-        exhausted = set()
+        exhausted = set() if api_key() else set(models())
         last_call = 0.0
         while pending:
             if job.cancel.is_set():
@@ -489,6 +605,13 @@ def run_job(job, session_factory, *, synth_batch=synthesize_batch, sleep=time.sl
                 return job
             available = [m for m in models() if m not in exhausted]
             if not available:
+                if piper is not None:
+                    # Gemini is out of free quota (or not configured): voice the rest offline right now.
+                    if not piper_rest(pending):
+                        job.state = 'stopped'
+                        return job
+                    pending = []
+                    break
                 job.state, job.resume_at = 'waiting', next_quota_reset(now())
                 job.error = 'Free daily quota used up; continuing automatically after the reset'
                 if not _wait(job, max(0.0, job.resume_at - now()), sleep, now):
@@ -503,18 +626,26 @@ def run_job(job, session_factory, *, synth_batch=synthesize_batch, sleep=time.sl
                 job.state = 'stopped'
                 return job
             last_call = now()
+            started = time.time()
             try:
                 clips = synth_batch(batch, available[0])
             except TTSError as exc:
+                log.warning('TTS batch of %d with %s failed: %s (%s)', len(batch), available[0], exc.kind, exc)
                 pending = batch + pending
                 if exc.kind == 'daily_limit':
                     exhausted.add(available[0])
                     continue
                 if exc.kind in ('auth', 'location'):
+                    if piper is not None:
+                        exhausted.update(models())  # Gemini unusable: fall back for everything
+                        continue
                     job.state, job.error = 'failed', str(exc)  # nothing else would work
                     return job
                 errors += 1
                 if errors > 6:
+                    if piper is not None:
+                        exhausted.update(models())
+                        continue
                     job.state, job.error = 'failed', str(exc)
                     return job
                 if exc.kind == 'rate_limit' and exc.retry_after is None:
@@ -529,17 +660,24 @@ def run_job(job, session_factory, *, synth_batch=synthesize_batch, sleep=time.sl
                     return job
                 continue
             errors = plain_429 = 0
+            log.info('TTS batch: %d/%d verified with %s in %.0fs', len(clips), len(batch), available[0],
+                     time.time() - started)
+            given_up = []
             for word in batch:
                 if word in clips:
-                    _save(_media_path(job.user_id, word), clips[word])
-                    attach_word(word)
+                    store(word, clips[word])
                     continue
                 # Unverified words ride along in a later batch (never alone: each request is precious).
                 attempts[word] = attempts.get(word, 0) + 1
                 if attempts[word] >= 3:
-                    job.failed += 1
+                    given_up.append(word)
                 else:
                     pending.append(word)
+            if given_up:
+                if piper is not None:
+                    piper_rest(given_up)
+                else:
+                    job.failed += len(given_up)
         job.state = 'done'
         return job
     except Exception as exc:  # never let a background thread die silently
@@ -551,27 +689,33 @@ def run_job(job, session_factory, *, synth_batch=synthesize_batch, sleep=time.sl
         db.close()
 
 
-def start_job(user_id, deck_id, session_factory):
+def start_job(user_id, deck_id, session_factory, mode='fill'):
     with _jobs_lock:
         current = _jobs.get((user_id, deck_id))
         if current and current.state in ACTIVE_STATES:
             return current
-        job = Job(deck_id=deck_id, user_id=user_id)
+        job = Job(deck_id=deck_id, user_id=user_id, mode=mode)
         _jobs[(user_id, deck_id)] = job
     threading.Thread(target=run_job, args=(job, session_factory), daemon=True, name=f'tts-{deck_id}').start()
     return job
 
 
 def synthesize_any_model(text):
-    """One word, trying each configured model until one has quota left."""
+    """One word for a freshly added note: each Gemini model in turn, then Piper."""
     last = None
-    for model in models():
-        try:
-            return synthesize(text, model=model)
-        except TTSError as exc:
-            if exc.kind not in ('daily_limit', 'rate_limit'):
-                raise
-            last = exc
+    if api_key():
+        for model in models():
+            try:
+                return synthesize(text, model=model)
+            except TTSError as exc:
+                if exc.kind in ('auth', 'location'):
+                    last = exc
+                    break
+                if exc.kind not in ('daily_limit', 'rate_limit', 'network'):
+                    raise
+                last = exc
+    if piper_available():
+        return piper_wav(text)
     raise last or TTSError('daily_limit', 'No TTS model has quota left')
 
 

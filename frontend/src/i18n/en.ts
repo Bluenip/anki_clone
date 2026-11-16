@@ -1022,7 +1022,7 @@ export const en = {
   "do.quizTtsAuto": "Auto-detect",
   "do.quizTypesRequired": "Choose at least one exercise type.",
   "tts.title": "Pronunciation audio",
-  "tts.description": "Generate a spoken pronunciation for every word that has no audio yet. Words that already have audio are left as they are. The free Gemini tier covers about 800 words a day.",
+  "tts.description": "Generate a spoken pronunciation for every word that has no audio yet, with Gemini's natural voice. When the free Gemini quota runs out, the rest use the offline Piper voice right away.",
   "tts.start": "Generate audio",
   "tts.restart": "Run again",
   "tts.stop": "Stop",
@@ -1041,6 +1041,12 @@ export const en = {
   "intro.step.listen.text": "Click the speaker to hear the word, type what you heard, then Check.",
   "intro.step.wrong": "Wrong answer",
   "intro.step.wrong.text": "The right answer is shown and counted as Again; retype it to continue. Undo fixes a mistake.",
+  "tts.upgrade": "Upgrade to Gemini ({count} words)",
+  "tts.upgradeHint": "Replace the Piper voice with Gemini's, as the free quota allows each day.",
+  "tts.upgradeProgress": "Upgraded {done} / {total} words to Gemini",
+  "tts.upgradeSummary": "Done: {added} words now use Gemini's voice, {failed} could not be upgraded.",
+  "tts.piperCount": "({count} with the Piper voice)",
+  "tts.stoppedByUser": "Stopped after {done} / {total} words. What was done is kept; run again to continue.",
 } as const;
 
 export type MessageKey = keyof typeof en;

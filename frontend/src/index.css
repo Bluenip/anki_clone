@@ -910,3 +910,4 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .deck-audio-summary { color: var(--success-text); font-size: 0.875rem; }
 .deck-audio-error { color: var(--danger-text); font-size: 0.875rem; }
 .deck-audio-waiting { color: var(--warning-text); }
+.deck-audio-buttons { display: flex; gap: 0.5rem; flex-wrap: wrap; justify-content: flex-end; }
