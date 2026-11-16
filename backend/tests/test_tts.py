@@ -40,6 +40,9 @@ def configured(monkeypatch):
     monkeypatch.setenv('GEMINI_API_KEY', 'test-key-not-real')
     monkeypatch.setenv('GEMINI_TTS_MODEL', 'gemini-3.8-test-tts')
     monkeypatch.setenv('GEMINI_TTS_VOICE', 'TestVoice')
+    monkeypatch.setenv('TTS_PIPER_FALLBACK', '0')  # tests that need Piper pass a fake explicitly
+    # Notes created in tests must not start real Gemini requests in the background.
+    monkeypatch.setattr(tts_service, 'attach_in_background', lambda *a, **k: None)
 
 
 class SharedSession:
@@ -140,6 +143,7 @@ def test_synthesize_wraps_raw_pcm_and_classifies_errors(configured):
         return opener
 
     for code, body, kind in ((429, b'{}', 'rate_limit'), (403, b'{}', 'auth'),
+                             (400, b'{"error":{"message":"API key not valid. Please pass a valid API key."}}', 'auth'),
                              (400, b'User location is not supported', 'location'), (500, b'boom', 'other')):
         with pytest.raises(tts_service.TTSError) as caught:
             tts_service.synthesize('x', opener=failing(code, body))
@@ -365,6 +369,7 @@ def test_quota_reset_is_after_pacific_midnight():
 
 def test_endpoints_report_configuration_and_ownership(client, auth_headers_a, auth_headers_b, monkeypatch):
     monkeypatch.delenv('GEMINI_API_KEY', raising=False)
+    monkeypatch.setenv('TTS_PIPER_FALLBACK', '0')  # neither Gemini nor Piper: the feature is off
     deck_id = make_deck(client, auth_headers_a, [('Sunburn', 'Cháy nắng')])
     assert client.get('/api/tts/status', headers=auth_headers_a).json()['enabled'] is False
     assert client.post(f'/api/decks/{deck_id}/tts', headers=auth_headers_a).status_code == 503
@@ -388,3 +393,119 @@ def test_stop_works_while_waiting_for_the_quota_reset(client, auth_headers_a, db
     finally:
         with tts_service._jobs_lock:
             tts_service._jobs.pop((user_id, deck_id), None)
+
+
+
+def piper_fake_wav(seconds=0.4):
+    buffer = io.BytesIO()
+    with wave.open(buffer, 'wb') as out:
+        out.setnchannels(1); out.setsampwidth(2); out.setframerate(22050)
+        out.writeframes(b'\1\0' * int(22050 * seconds))
+    return buffer.getvalue()
+
+
+class FakePiper:
+    def __init__(self):
+        self.words = []
+
+    def __call__(self, word):
+        self.words.append(word)
+        return piper_fake_wav()
+
+
+def test_out_of_gemini_quota_falls_back_to_piper_at_once(client, auth_headers_a, db_session, configured, monkeypatch):
+    monkeypatch.setenv('GEMINI_TTS_BATCH', '2')
+    monkeypatch.setenv('GEMINI_TTS_MODELS', 'lite')
+    deck_id = make_deck(client, auth_headers_a, [('Bleach', 'Tẩy trắng'), ('Shaver', 'Máy cạo râu'),
+                                                 ('Forehand', 'Cú thuận tay'), ('Ventilate', 'Thông gió')])
+    user_id = db_session.query(Deck).get(deck_id).user_id
+    synth, piper, clock = FakeBatch(quota={'lite': 1}), FakePiper(), Clock()
+    start = clock.t
+    job = tts_service.Job(deck_id=deck_id, user_id=user_id)
+    tts_service.run_job(job, shared(db_session), synth_batch=synth, sleep=clock.sleep, now=clock.now, rpm=6000, piper=piper)
+    assert job.state == 'done', job.error
+    assert job.done_words == 4 and job.piper_words == 2 and job.added == 4
+    assert sorted(piper.words) == ['Forehand', 'Ventilate']  # the batch Gemini could not take
+    assert clock.t - start < 60                               # no waiting for tomorrow's reset
+
+
+def test_without_a_gemini_key_everything_uses_piper(client, auth_headers_a, db_session, configured, monkeypatch):
+    monkeypatch.delenv('GEMINI_API_KEY')
+    deck_id = make_deck(client, auth_headers_a, [('Neutral', 'Trung lập'), ('Downward', 'Đi xuống')])
+    user_id = db_session.query(Deck).get(deck_id).user_id
+    synth, piper = FakeBatch(), FakePiper()
+    job = tts_service.Job(deck_id=deck_id, user_id=user_id)
+    run(job, db_session, synth, piper=piper)
+    assert job.state == 'done' and job.piper_words == 2 and synth.calls == []
+
+
+def test_words_gemini_cannot_verify_get_piper_audio(client, auth_headers_a, db_session, configured, monkeypatch):
+    monkeypatch.setenv('GEMINI_TTS_BATCH', '5')
+
+    class NeverVerifies(FakeBatch):
+        def __call__(self, words, model):
+            self.calls.append((model, list(words)))
+            return {w: fake_wav() for w in words if w != 'Forte'}
+
+    deck_id = make_deck(client, auth_headers_a, [('Forte', 'Sở trường'), ('Batch', 'Mẻ, lô')])
+    user_id = db_session.query(Deck).get(deck_id).user_id
+    piper = FakePiper()
+    job = tts_service.Job(deck_id=deck_id, user_id=user_id)
+    run(job, db_session, NeverVerifies(), piper=piper)
+    assert job.state == 'done' and job.failed == 0 and piper.words == ['Forte']
+
+
+def test_upgrade_replaces_piper_audio_with_gemini_in_place(client, auth_headers_a, db_session, configured, monkeypatch):
+    monkeypatch.setenv('GEMINI_TTS_BATCH', '5')
+    deck_id = make_deck(client, auth_headers_a, [('Amphibious', 'Lưỡng cư'), ('Prehistoric', 'Tiền sử')])
+    user_id = db_session.query(Deck).get(deck_id).user_id
+    # First pass: no Gemini key, so both words are voiced by Piper.
+    monkeypatch.delenv('GEMINI_API_KEY')
+    run(tts_service.Job(deck_id=deck_id, user_id=user_id), db_session, FakeBatch(), piper=FakePiper())
+    monkeypatch.setenv('GEMINI_API_KEY', 'test-key-not-real')
+    assert client.get(f'/api/decks/{deck_id}/tts/summary', headers=auth_headers_a).json() == {'piper_words': 2}
+    before = {c.id: (c.front, c.back) for c in db_session.query(Card).filter_by(deck_id=deck_id)}
+
+    synth = FakeBatch()
+    job = tts_service.Job(deck_id=deck_id, user_id=user_id, mode='upgrade')
+    run(job, db_session, synth)
+    assert job.state == 'done' and job.added == 2 and job.piper_words == 0
+    assert client.get(f'/api/decks/{deck_id}/tts/summary', headers=auth_headers_a).json() == {'piper_words': 0}
+    # Same file names, so the cards themselves did not change.
+    assert {c.id: (c.front, c.back) for c in db_session.query(Card).filter_by(deck_id=deck_id)} == before
+
+
+def test_new_note_audio_falls_back_to_piper(configured, monkeypatch):
+    def out_of_quota(text, model=None):
+        raise tts_service.TTSError('daily_limit', 'quota')
+
+    monkeypatch.setattr(tts_service, 'synthesize', out_of_quota)
+    monkeypatch.setattr(tts_service, 'piper_available', lambda: True)
+    monkeypatch.setattr(tts_service, 'piper_wav', lambda text: piper_fake_wav())
+    data = tts_service.synthesize_any_model('Bleach')
+    assert not tts_service.is_gemini_audio(io.BytesIO(data))
+
+
+@pytest.mark.skipif(not os.path.exists(os.getenv('PIPER_VOICE', '/opt/voices/en_US-lessac-medium.onnx')),
+                    reason='Piper voice not installed (it is in the Docker image)')
+def test_real_piper_voices_words_and_pairs(monkeypatch):
+    monkeypatch.setenv('TTS_PIPER_FALLBACK', '1')
+    assert tts_service.piper_available()
+    single = tts_service.piper_wav('Ventilate')
+    pair = tts_service.piper_wav('Go – went')
+    assert not tts_service.is_gemini_audio(io.BytesIO(single))
+    assert 0.3 < tts_service.wav_seconds(single) < 3
+    # Two parts plus a 0.35 s pause between them.
+    assert tts_service.wav_seconds(pair) > tts_service.wav_seconds(tts_service.piper_wav('Go')) + 0.35
+
+
+
+def test_piper_alone_enables_audio_but_not_upgrades(client, auth_headers_a, monkeypatch):
+    monkeypatch.delenv('GEMINI_API_KEY', raising=False)
+    monkeypatch.setattr(tts_service, 'piper_available', lambda: True)
+    monkeypatch.setattr(tts_service, 'start_job', lambda *a, **k: tts_service.Job(deck_id=0, user_id=0))
+    deck_id = make_deck(client, auth_headers_a, [('Skill', 'Kỹ năng')])
+    status = client.get('/api/tts/status', headers=auth_headers_a).json()
+    assert status['enabled'] is True and status['gemini'] is False and status['piper'] is True
+    assert client.post(f'/api/decks/{deck_id}/tts', headers=auth_headers_a).status_code == 202
+    assert client.post(f'/api/decks/{deck_id}/tts', headers=auth_headers_a, params={'mode': 'upgrade'}).status_code == 503

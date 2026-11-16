@@ -166,3 +166,10 @@ def auth_headers_a(user_a):
 def auth_headers_b(user_b):
     token = create_access_token({"sub": str(user_b.id)})
     return {"Authorization": f"Bearer {token}"}
+
+
+@pytest.fixture(autouse=True)
+def no_background_note_audio(monkeypatch):
+    """New notes normally get pronunciation audio in a background thread; tests stay offline and deterministic."""
+    import tts_service
+    monkeypatch.setattr(tts_service, 'attach_in_background', lambda *args, **kwargs: None)

@@ -9,6 +9,10 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Piper voice for the TTS fallback, pinned to a release and checked by SHA-256.
+COPY fetch_piper_voice.py .
+RUN python fetch_piper_voice.py /opt/voices
+
 COPY . .
 
 # Create directory for SQLite database persistence
