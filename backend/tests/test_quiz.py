@@ -163,3 +163,32 @@ def test_hint_never_reveals_a_short_answer(client, auth_headers_a):
         else:
             assert quiz['hint'] == 'a _ _ _ _'
         client.post(f"/api/study/{card['card_id']}/review", headers=auth_headers_a, json={'rating': 3, 'quiz': {'response': 'x'}})
+
+
+def test_custom_study_uses_the_quiz_and_server_rating(client, auth_headers_a, db_session):
+    deck_id = make_deck(client, auth_headers_a, {'quiz_mode': True, 'quiz_copy_new_cards': False, 'quiz_types': ['typing']})
+    session = client.post('/api/filtered', headers=auth_headers_a,
+                          json={'name': 'Before the test', 'search': '', 'reschedule': True}).json()
+    sid = session['id']
+    nxt = client.get(f'/api/filtered/{sid}/next', headers=auth_headers_a).json()
+    card = nxt['card']
+    assert card['quiz']['type'] == 'typing'  # same exercise as the normal study screen
+    body = {'expected_session_version': nxt['session']['version'], 'card_id': card['card_id'],
+            'expected_version': card['version'], 'rating': 4}
+    # Self-rating is refused while the home deck is in student test mode.
+    assert client.post(f'/api/filtered/{sid}/answer', headers=auth_headers_a, json=body).status_code == 400
+    ok = client.post(f'/api/filtered/{sid}/answer', headers=auth_headers_a, json={**body, 'quiz': {'response': 'wrong'}})
+    assert ok.status_code == 200, ok.text
+    assert db_session.query(ReviewLog).filter_by(card_id=card['card_id']).one().rating == 1
+
+
+def test_custom_study_without_quiz_mode_still_self_rates(client, auth_headers_a, db_session):
+    make_deck(client, auth_headers_a, {})
+    session = client.post('/api/filtered', headers=auth_headers_a, json={'name': 'Plain', 'search': '', 'reschedule': True}).json()
+    nxt = client.get(f"/api/filtered/{session['id']}/next", headers=auth_headers_a).json()
+    assert nxt['card']['quiz'] is None
+    res = client.post(f"/api/filtered/{session['id']}/answer", headers=auth_headers_a,
+                      json={'expected_session_version': nxt['session']['version'], 'card_id': nxt['card']['card_id'],
+                            'expected_version': nxt['card']['version'], 'rating': 4})
+    assert res.status_code == 200, res.text
+    assert db_session.query(ReviewLog).filter_by(card_id=nxt['card']['card_id']).one().rating == 4
