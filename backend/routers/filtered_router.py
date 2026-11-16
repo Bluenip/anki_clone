@@ -12,6 +12,9 @@ from database import get_db
 from auth import get_current_user
 from models import User, Deck, Card, StudyProgress, SchedulerState, FilteredSession, FilteredItem, StudyOperation
 from scheduling import utc
+from typing import Optional
+from schemas import QuizAnswer
+from routers.study_router import _quiz_exercise, _quiz_grade
 
 router = APIRouter(prefix='/api/filtered', tags=['Custom Study'])
 
@@ -47,6 +50,7 @@ class Answer(BaseModel):
     expected_version: int = Field(ge=0, strict=True)
     rating: int = Field(ge=1, le=4, strict=True)
     duration_ms: int = Field(default=0, ge=0, le=3600000)
+    quiz: Optional[QuizAnswer] = None
 
 
 def owned(db, sid, uid):
@@ -199,7 +203,9 @@ def card_payload(db,card,uid,now,reschedule):
     return {'card_id':card.id,'front':front,'back':back,'deck_name':card.deck.name,'version':card.scheduling.version if card.scheduling else 0,
             'card_state':progress.card_state if progress else 'new','is_new':not progress or progress.card_state=='new',
             'card_css':css_for_web(note.note_type.css,uid) if note else '', 'rendered':rendered,
-            'settings':effective_settings(card.deck,now),'intervals':intervals,'note_id':note.id if note else None}
+            'settings':effective_settings(card.deck,now),'intervals':intervals,'note_id':note.id if note else None,
+            # Same exercise as the normal study screen when the home deck is in student test mode.
+            'quiz':_quiz_exercise(db,card,progress,uid)}
 
 
 @router.get('/{sid}/next')
@@ -224,6 +230,11 @@ def answer(sid:int,data:Answer,db:Session=Depends(get_db),user:User=Depends(get_
         if not item or item.card.deck.user_id!=user.id:raise HTTPException(409,'Card is no longer in this session; reload')
         if not eligible(item,now) or item.available_at and utc(item.available_at)>now:
             raise HTTPException(409,'This card is not available yet; reload')
+        graded=_quiz_grade(db,item.card,user.id,data.quiz)
+        if graded is not None:
+            if data.quiz is None:
+                raise HTTPException(400,'This deck requires answering the exercise before rating')
+            data.rating=graded['rating']  # the server, not the student, decides the rating in quiz mode
         if session.reschedule:
             from review_service import review
             from schemas import ReviewRequest

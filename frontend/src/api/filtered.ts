@@ -44,6 +44,8 @@ export interface AnswerCardPayload {
   expected_version: number;
   rating: number; // 1..4
   duration_ms?: number;
+  /** Student test mode: the first answer; the server derives the rating from it. */
+  quiz?: { response: string; hint_used: boolean };
 }
 
 export interface AnswerCardResponse {

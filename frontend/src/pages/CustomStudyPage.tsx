@@ -1,5 +1,7 @@
 import CustomStudyPresets from '../components/CustomStudyPresets';
 import StudyAutomation from '../components/StudyAutomation';
+import QuizPanel from '../components/QuizPanel';
+import type { QuizAnswer } from '../api/study';
 import client from '../api/client';
 import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
@@ -272,7 +274,7 @@ export const CustomStudyPage = () => {
 
   // Answer card handler with activeSessionId/isMounted guards and duration cap
   const handleAnswer = useCallback(
-    async (rating: number) => {
+    async (rating: number, quiz?: QuizAnswer) => {
       if (
         !isMountedRef.current ||
         isSubmittingRef.current ||
@@ -299,6 +301,7 @@ export const CustomStudyPage = () => {
           expected_version: card.version ?? 0,
           rating,
           duration_ms,
+          ...(quiz ? { quiz } : {}),
         });
 
         if (!isMountedRef.current || activeSessionIdRef.current !== sid || selectionEpochRef.current !== epoch) {
@@ -383,6 +386,14 @@ export const CustomStudyPage = () => {
       }
 
       if (e.ctrlKey || e.metaKey || e.altKey) return;
+      // Student test mode: the quiz panel owns its keys; card audio only once the answer is in.
+      if (card?.quiz) {
+        if (showAnswer && e.key.toLowerCase() === 'r') {
+          e.preventDefault();
+          void cardFaceRef.current?.playAudio({ skipFront: Boolean(card.settings?.skip_question_when_replaying_answer) });
+        }
+        return;
+      }
       if (e.key.toLowerCase() === 'r' && card) {
         e.preventDefault();
         void cardFaceRef.current?.playAudio({ skipFront: showAnswer && Boolean(card.settings?.skip_question_when_replaying_answer) });
@@ -804,6 +815,19 @@ export const CustomStudyPage = () => {
           )}
 
           {/* State 1: Card Available */}
+          {!loadingCard && card?.quiz && (
+            <div style={{ width: '100%', marginBottom: '1rem' }}>
+              <QuizPanel
+                key={String(card.card_id) + ':' + String(card.version)}
+                card={card}
+                exercise={card.quiz}
+                disabled={isPending || loadingCard || is409Conflict}
+                onReveal={() => { revealedAtRef.current = Date.now(); setShowAnswer(true); }}
+                onSubmit={(answer, rating) => void handleAnswer(rating, answer)}
+              />
+            </div>
+          )}
+
           {!loadingCard && card && (
             <div className="study-card-wrapper" style={{ width: '100%' }}>
               <div className={`study-card glass-card ${showAnswer ? 'flipped' : ''}`}>
@@ -823,14 +847,17 @@ export const CustomStudyPage = () => {
                   </span>
                 </div>
 
-                <StudyAutomation card={card} face={cardFaceRef} showAnswer={showAnswer} busy={isPending || loadingCard || is409Conflict} onReveal={handleRevealAnswer} onRate={rating => void handleAnswer(rating)} onBury={async () => {
+                {!card.quiz && <StudyAutomation card={card} face={cardFaceRef} showAnswer={showAnswer} busy={isPending || loadingCard || is409Conflict} onReveal={handleRevealAnswer} onRate={rating => void handleAnswer(rating)} onBury={async () => {
                   if (!selectedSession || isSubmittingRef.current) return;
                   const sid = selectedSession.id; const epoch = selectionEpochRef.current;
                   isSubmittingRef.current = true; setIsPending(true);
                   try { await client.post(`/api/study/${card.card_id}/action`, { action: 'bury', expected_version: card.version }); if (activeSessionIdRef.current === sid && epoch === selectionEpochRef.current) await fetchNextCard(sid); }
                   catch (e) { if (activeSessionIdRef.current === sid && epoch === selectionEpochRef.current) setReviewError(errorMessage(e, t('study.buryFailed'))); }
                   finally { isSubmittingRef.current = false; if (isMountedRef.current) setIsPending(false); }
-                }} />
+                }} />}
+                {card.quiz && !showAnswer ? (
+                  <p style={{ textAlign: 'center', color: 'var(--text-muted)', margin: '1rem 0' }}>{t('quiz.cardHidden')}</p>
+                ) : (
                 <CardFace
             key={String(card.card_id) + ":" + String(card.version)}
                   ref={cardFaceRef}
@@ -842,10 +869,11 @@ export const CustomStudyPage = () => {
                   showAnswer={showAnswer}
             onRevealAnswer={handleRevealAnswer}
                 />
+                )}
               </div>
 
               <div className="study-actions" style={{ width: '100%', marginTop: '1.5rem' }}>
-                {!showAnswer ? (
+                {card.quiz ? null : !showAnswer ? (
                   <button
                     className="btn btn-primary btn-lg btn-show-answer"
                     style={{ width: '100%' }}
