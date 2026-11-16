@@ -5,25 +5,28 @@ import type { MessageKey } from '../i18n/en';
 import './IntroPage.css';
 import { usePrefs } from '../context/usePrefs';
 
-// Start time (seconds) of each step in public/intro/huong-dan.mp4.
-export const INTRO_STEPS: { at: number; title: MessageKey; text: MessageKey }[] = [
-  { at: 8, title: 'intro.step.login', text: 'intro.step.login.text' },
-  { at: 22, title: 'intro.step.decks', text: 'intro.step.decks.text' },
-  { at: 41, title: 'intro.step.open', text: 'intro.step.open.text' },
-  { at: 54, title: 'intro.step.front', text: 'intro.step.front.text' },
-  { at: 71, title: 'intro.step.rate', text: 'intro.step.rate.text' },
-  { at: 92, title: 'intro.step.add', text: 'intro.step.add.text' },
-  { at: 110, title: 'intro.step.browse', text: 'intro.step.browse.text' },
-  { at: 128, title: 'intro.step.stats', text: 'intro.step.stats.text' },
-  { at: 142, title: 'intro.step.custom', text: 'intro.step.custom.text' },
-  { at: 156, title: 'intro.step.account', text: 'intro.step.account.text' },
+// Each step's start (seconds) in public/guide-media/guide-{vi,en}.mp4; the two narrations run at different paces.
+export const INTRO_STEPS: { at: { vi: number; en: number }; title: MessageKey; text: MessageKey }[] = [
+  { at: { vi: 8, en: 8 }, title: 'intro.step.login', text: 'intro.step.login.text' },
+  { at: { vi: 21, en: 24 }, title: 'intro.step.decks', text: 'intro.step.decks.text' },
+  { at: { vi: 34, en: 40 }, title: 'intro.step.open', text: 'intro.step.open.text' },
+  { at: { vi: 47, en: 54 }, title: 'intro.step.type', text: 'intro.step.type.text' },
+  { at: { vi: 56, en: 65 }, title: 'intro.step.correct', text: 'intro.step.correct.text' },
+  { at: { vi: 65, en: 75 }, title: 'intro.step.listen', text: 'intro.step.listen.text' },
+  { at: { vi: 72, en: 83 }, title: 'intro.step.wrong', text: 'intro.step.wrong.text' },
+  { at: { vi: 83, en: 96 }, title: 'intro.step.add', text: 'intro.step.add.text' },
+  { at: { vi: 93, en: 109 }, title: 'intro.step.browse', text: 'intro.step.browse.text' },
+  { at: { vi: 102, en: 119 }, title: 'intro.step.stats', text: 'intro.step.stats.text' },
+  { at: { vi: 112, en: 130 }, title: 'intro.step.custom', text: 'intro.step.custom.text' },
+  { at: { vi: 121, en: 140 }, title: 'intro.step.account', text: 'intro.step.account.text' },
 ];
 
 const fmt = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 
 const IntroPage = () => {
   const { user } = useAuth();
-  const { t } = usePrefs();
+  const { t, lang } = usePrefs();
+  const src = `/guide-media/guide-${lang}.mp4`;
   const video = useRef<HTMLVideoElement>(null);
 
   const jump = (at: number) => {
@@ -54,19 +57,20 @@ const IntroPage = () => {
 
       <div className="intro-layout">
         <div className="intro-video glass-card">
-          <video ref={video} controls preload="metadata" playsInline poster="/guide-media/poster.jpg">
-            <source src="/guide-media/huong-dan.mp4" type="video/mp4" />
-            {t('intro.noVideo')} <a href="/guide-media/huong-dan.mp4">{t('intro.download')}</a>.
+          {/* key: switching language loads the other narration from the start */}
+          <video key={lang} ref={video} controls preload="metadata" playsInline poster={`/guide-media/poster-${lang}.jpg`}>
+            <source src={src} type="video/mp4" />
+            {t('intro.noVideo')} <a href={src}>{t('intro.download')}</a>.
           </video>
         </div>
 
         <ol className="intro-steps" aria-label={t('intro.steps')}>
           {INTRO_STEPS.map((s, i) => (
-            <li key={s.at}>
-              <button type="button" onClick={() => jump(s.at)}>
+            <li key={s.title}>
+              <button type="button" onClick={() => jump(s.at[lang])}>
                 <span className="intro-step-num">{i + 1}</span>
                 <span className="intro-step-body">
-                  <span className="intro-step-title">{t(s.title)}<time>{fmt(s.at)}</time></span>
+                  <span className="intro-step-title">{t(s.title)}<time>{fmt(s.at[lang])}</time></span>
                   <span className="intro-step-text">{t(s.text)}</span>
                 </span>
               </button>
