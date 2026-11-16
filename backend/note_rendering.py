@@ -86,7 +86,8 @@ def render_template(template, fields, ordinal=0, answer=False, front='', context
                 if 'cloze' in filters:
                     from cloze import typed
                     expected = typed(value, ordinal)
-                expected = text_only(expected)
+                # Like Anki, a typed answer never includes the field's [sound:...] tags.
+                expected = re.sub(r'\[sound:[^\]]*\]', '', text_only(expected)).strip()
                 output.append('<span data-type-field="' + escape(name, quote=True) + '"' +
                               (' data-type-answer="' + escape(expected, quote=True) + '" data-type-options="' + ','.join(filters) + '"') + '></span>')
                 continue
@@ -132,7 +133,10 @@ def media_for_web(value, user_id):
         if '/' in filename or '\\' in filename or filename in ('.', '..'):
             raise ValueError('Invalid media filename')
         return f'<audio src="/api/media/{user_id}/{quote(filename, safe="")}" controls></audio>'
-    value = re.sub(r'\[sound:([^\]]+)\]', sound, value)
+    # Only in text, never inside a tag: a [sound:] copied into an attribute (e.g. a stored
+    # data-type-answer) must not become <audio> markup that breaks the surrounding HTML.
+    value = ''.join(part if part.startswith('<') else re.sub(r'\[sound:([^\]]+)\]', sound, part)
+                    for part in re.split(r'(<[^>]*>)', value))
     def source(match):
         prefix, filename, quote_char = match[1], match[2], match[3]
         filename = unescape(filename)
