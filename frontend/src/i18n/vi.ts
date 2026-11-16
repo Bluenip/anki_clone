@@ -1037,4 +1037,6 @@ export const vi: Record<MessageKey, string> = {
   "tts.stoppedError": "Đã dừng: {error}. Phần đã làm được giữ lại, bấm Chạy lại để tiếp tục.",
   "tts.failed": "Không bắt đầu tạo âm thanh được.",
   "tts.waiting": "Đã hết lượt miễn phí hôm nay. Sẽ tự chạy tiếp lúc {time} (server cần đang chạy).",
+  "csp.limitsHeading": "Học thêm hôm nay",
+  "csp.sessionHeading": "Tạo nhanh phiên lọc",
 };

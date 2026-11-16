@@ -1035,6 +1035,8 @@ export const en = {
   "tts.stoppedError": "Stopped: {error}. Progress so far is kept; run again to continue.",
   "tts.failed": "Could not start audio generation.",
   "tts.waiting": "Today's free quota is used up. It continues by itself at {time} (keep the server running).",
+  "csp.limitsHeading": "Study more today",
+  "csp.sessionHeading": "Quick filtered session",
 } as const;
 
 export type MessageKey = keyof typeof en;
