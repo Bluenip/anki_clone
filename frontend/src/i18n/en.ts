@@ -181,6 +181,7 @@ export const en = {
   "card.noSpeech": "Speech synthesis is unavailable in this browser.",
   "card.noVoices": "No speech voices loaded. Reload after your device installs a voice.",
   "card.notInBack": "(not included in back template)",
+  "card.playSound": "Play sound",
   "card.readAloud": "Read aloud",
   "card.typeAnswer": "Type answer ({field})",
   "card.yourAnswer": "Your answer:",

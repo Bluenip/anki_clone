@@ -183,6 +183,7 @@ export const vi: Record<MessageKey, string> = {
   "card.noSpeech": "Trình duyệt này không hỗ trợ đọc giọng nói.",
   "card.noVoices": "Chưa có giọng đọc. Hãy tải lại trang sau khi thiết bị cài giọng đọc.",
   "card.notInBack": "(không có trong mẫu mặt sau)",
+  "card.playSound": "Phát âm thanh",
   "card.readAloud": "Đọc to",
   "card.typeAnswer": "Nhập đáp án ({field})",
   "card.yourAnswer": "Đáp án của bạn:",
