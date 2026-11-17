@@ -3,6 +3,9 @@ import { render, screen, waitFor, fireEvent, act } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom';
 import BrowsePage from '../pages/BrowsePage';
 import * as cardsApi from '../api/cards';
+// Rarely used bulk actions sit behind the "⋯" button of the selection bar.
+const openMore = () => { if (!screen.queryByRole('group', { name: /more actions/i })) fireEvent.click(screen.getByRole('button', { name: /more actions/i })); };
+
 
 vi.mock('../api/cards');
 
@@ -135,7 +138,7 @@ describe('BrowsePage', () => {
     const card1Checkbox = await screen.findByLabelText('Select card 101');
     fireEvent.click(card1Checkbox);
 
-    const buryBtn = screen.getByRole('button', { name: /^bury$/i });
+    const buryBtn = (openMore(), screen.getByRole('button', { name: /^bury$/i }));
     fireEvent.click(buryBtn);
 
     const alert = await screen.findByRole('alert');
@@ -289,4 +292,16 @@ describe('BrowsePage', () => {
     fireEvent.click(selectAllCheckbox);
     expect(screen.getByTestId('selection-count').textContent).toBe('0 selected');
   });
+
+  it('shows only the answer side, a dash for new cards and the total count', async () => {
+    const card = { id: 7, deck_id: 1, deck_name: 'eng', front: 'back up', back: 'back up<hr id=answer>Sao lưu dữ liệu',
+      created_at: '', updated_at: '', next_review: null, interval_days: 0, card_state: 'new', is_suspended: false, is_buried: false, version: 0, note_id: null };
+    vi.mocked(cardsApi.browseCards).mockResolvedValue({ data: [card, { ...card, id: 8 }], headers: { 'x-total-count': '2892' } } as any);
+    render(<MemoryRouter><BrowsePage /></MemoryRouter>);
+    expect(await screen.findByText(/1–2 \/ 2,892|1–2 of 2,892/)).toBeDefined();
+    expect(screen.getAllByRole('cell', { name: 'Sao lưu dữ liệu' }).length).toBe(2);
+    expect(screen.queryByRole('cell', { name: 'back up Sao lưu dữ liệu' })).toBeNull();
+    expect(screen.getAllByRole('cell', { name: '—' }).length).toBe(2);
+  });
 });
+

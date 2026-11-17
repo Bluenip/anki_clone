@@ -76,15 +76,16 @@ describe('StatsPage UI and safeguards', () => {
     expect(screen.getByText('87.5%')).toBeDefined(); // review recall
     expect(screen.getByText('22')).toBeDefined(); // total cards
 
-    // Clarification on suspended / buried overlapping counts
-    expect(screen.getAllByText(/Suspended/i).length).toBeGreaterThan(0);
-    expect(screen.getByText(/overlapping flags/i)).toBeDefined();
+    // Suspended / buried counts are explained in one plain sentence when there are any
+    expect(screen.getByText(/are suspended and \d+ are buried until tomorrow/i)).toBeDefined();
 
-    // Forecast notice
-    expect(screen.getByText(/not a fixed promise/i)).toBeDefined();
+    // Forecast summary and the per-day columns
+    expect(screen.getByText(/^Today: \d+ cards · next 7 days/)).toBeDefined();
+    expect(screen.getByRole('img', { name: /forecast/i })).toBeDefined();
 
-    // Provenance details
-    expect(screen.getByText(/Each home deck uses its configured timezone/i)).toBeDefined();
+    // How the numbers are counted, in the app's language rather than the server's
+    expect(screen.getByText(/How these numbers are counted/i)).toBeDefined();
+    expect(screen.getByText(/timezone and next-day start hour/i)).toBeDefined();
   });
 
   it('handles missing data with N/A instead of false 0%', async () => {

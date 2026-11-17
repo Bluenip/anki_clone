@@ -217,3 +217,15 @@ def test_property_search_matches_native_and_handles_missing_progress(client,auth
             assert response.status_code==200 and response.json()==[]
         else:
             assert response.status_code==422,response.text
+
+
+def test_browse_reports_the_total_match_count(client, auth_headers_a):
+    deck = client.post('/api/decks', headers=auth_headers_a, json={'name': 'Count'}).json()
+    for i in range(5):
+        assert client.post('/api/notes', headers=auth_headers_a, json={'deck_id': deck['id'], 'kind': 'basic',
+                           'fields': {'Front': f'w{i}', 'Back': f'm{i}'}}).status_code == 201
+    page = client.get('/api/cards/browse', headers=auth_headers_a, params={'limit': 2, 'offset': 2})
+    assert page.status_code == 200 and len(page.json()) == 2
+    assert page.headers['x-total-count'] == '5'
+    filtered = client.get('/api/cards/browse', headers=auth_headers_a, params={'search': 'w1'})
+    assert filtered.headers['x-total-count'] == '1'

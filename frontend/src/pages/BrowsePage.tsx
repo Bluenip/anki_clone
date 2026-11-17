@@ -10,12 +10,16 @@ import { browseCards, bulkActionCards, updateCard } from '../api/cards';
 import type { BrowseCard, BulkActionType, BulkActionRequest } from '../api/cards';
 import { usePrefs } from '../context/usePrefs';
 import { tNow } from '../context/prefs-context-base';
+import NoteFieldEditor from '../components/NoteFieldEditor';
 
 const plainPreview = (html: string) => {
   const text = document.createElement('textarea');
   text.innerHTML = html.replace(/<(script|style)\b[^>]*>[\s\S]*?<\/\1>/gi, '').replace(/<[^>]*>/g, ' ');
   return text.value.replace(/\s+/g, ' ').trim();
 };
+
+/** The answer side only: Anki back templates usually repeat the question before <hr id=answer>. */
+const answerPreview = (html: string) => plainPreview((html || '').split(/<hr[^>]*\bid=["']?answer["']?[^>]*>/i).pop() || '');
 
 const MAX_BULK = 500;
 const PAGE_SIZE = 1000;
@@ -55,11 +59,15 @@ const getErrMsg = (err: unknown, fallback: string) => {
 };
 
 const BrowsePage = () => {
-  const { t } = usePrefs();
+  const { t, lang } = usePrefs();
+  const locale = lang === 'vi' ? 'vi-VN' : 'en-US';
   const [cards, setCards] = useState<BrowseCard[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [pageOffset, setPageOffset] = useState(0);
+  const [total, setTotal] = useState<number | null>(null);
+  const [helpOpen, setHelpOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
   const [selectedCard, setSelectedCard] = useState<BrowseCard | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
 
@@ -142,6 +150,8 @@ const BrowsePage = () => {
         return;
       }
       setCards(res.data);
+      const counted = Number(res.headers?.['x-total-count']);
+      setTotal(Number.isFinite(counted) && res.headers?.['x-total-count'] != null ? counted : null);
 
       handleSelectCard(res.data.find((card) => card.id === previousId) || res.data[0] || null);
     } catch (err) {
@@ -320,7 +330,7 @@ const BrowsePage = () => {
 
   return (
     <div className="browser-page">
-      <header className="browser-page-heading"><div><p className="browser-eyebrow">{t('decks.eyebrow')}</p><h1>{t('browse.title')}</h1><p>{t('browse.subtitle')}</p></div><Link className="btn btn-secondary" to="/add">{t('browse.addCard')}</Link></header>
+      <header className="browser-page-heading"><h1>{t('browse.title')}</h1><Link className="btn btn-secondary" to="/add">{t('browse.addCard')}</Link></header>
     <div className="browse-container">
       {/* Left Pane: List and Search */}
       <div className="browse-sidebar glass-card">
@@ -335,30 +345,12 @@ const BrowsePage = () => {
           <button type="submit" className="btn btn-primary" disabled={saving || actionPending || moveLoading}>
             {loading ? t('browse.searching') : t('common.search')}
           </button>
+          <button type="button" className="btn btn-ghost browse-help-toggle" aria-expanded={helpOpen} aria-controls="browse-search-help"
+            title={t('browse.helpTitle')} onClick={() => setHelpOpen(open => !open)}>?<span className="sr-only">{t('browse.helpTitle')}</span></button>
         </form>
 
-        {/* Search Help Disclosure */}
-        <details
-          className="search-help-disclosure"
-          style={{
-            marginBottom: '15px',
-            fontSize: '0.85rem',
-            background: 'rgba(var(--fg-rgb),0.03)',
-            borderRadius: '6px',
-            padding: '8px 12px',
-            border: '1px solid rgba(var(--fg-rgb),0.08)',
-          }}
-        >
-          <summary
-            style={{
-              cursor: 'pointer',
-              fontWeight: 600,
-              color: 'var(--accent-blue, #38bdf8)',
-              userSelect: 'none',
-            }}
-          >
-            {t('browse.helpTitle')}
-          </summary>
+        {helpOpen && (
+        <div id="browse-search-help" className="search-help-disclosure">
           <div style={{ marginTop: '8px', lineHeight: '1.4' }}>
             <p style={{ margin: '0 0 6px 0' }}>
               <strong>{t('browse.pageSize')}</strong> {t('browse.pageSizeText')}
@@ -428,132 +420,40 @@ const BrowsePage = () => {
               {t('browse.noOther')}
             </p>
           </div>
-        </details>
+        </div>
+        )}
 
-        {/* Bulk Action Controls & Selection Stats */}
-        <div
-          className="bulk-toolbar bulk-selection-toolbar"
-          style={{
-            display: 'flex',
-            flexWrap: 'wrap',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: '8px',
-            marginBottom: '12px',
-            padding: '8px 12px',
-            borderRadius: '6px',
-            background: 'rgba(var(--fg-rgb),0.05)',
-            border: '1px solid rgba(var(--fg-rgb),0.1)',
-          }}
-        >
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '10px',
-              fontSize: '0.9rem',
-            }}
-          >
-            <label
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                cursor: 'pointer',
-              }}
-            >
-              <input
-                type="checkbox"
-                aria-label={t('browse.selectAll')}
-                checked={isAllDisplayedSelected}
-                onChange={handleToggleSelectAll}
-                disabled={cards.length === 0 || loading || saving || actionPending}
-              />
-              <span>{t('browse.selectAllMax')}</span>
-            </label>
-            <span
-              data-testid="selection-count"
-              style={{
-                fontWeight: 600,
-                color: 'var(--accent-blue, #38bdf8)',
-              }}
-            >
-              {t('browse.selectedShort', { count: selectionCount })}
-            </span>
-          </div>
-
-          <div className="bulk-organize-actions">
-            <button type="button" className="btn btn-secondary" onClick={openMove}
-              disabled={selectionCount === 0 || actionPending || loading || saving || moveLoading}>
+        {/* Bulk actions appear only once cards are selected; rarely used ones sit behind "⋯". */}
+        <div className={`bulk-bar${selectionCount > 0 ? ' is-active' : ''}`} role="region" aria-label={t('browse.bulkAria')}>
+          <span data-testid="selection-count" className="bulk-count">{t('browse.selectedShort', { count: selectionCount })}</span>
+          {selectionCount === 0 ? <span className="bulk-hint">{t('browse.bulkHint')}</span> : (<>
+            <button type="button" className="btn btn-secondary btn-sm" onClick={openMove} disabled={actionPending || loading || saving || moveLoading}>
               {moveLoading ? t('browse.loadingDecks') : t('browse.changeDeck')}
             </button>
-            <button
-              type="button"
-              className="btn btn-secondary"
-              onClick={() => openTagPanel('add_tags')}
-              disabled={selectionCount === 0 || actionPending || loading || saving || moveLoading}
-            >
-              {t('browse.addTags')}
-            </button>
-            <button
-              type="button"
-              className="btn btn-secondary"
-              onClick={() => openTagPanel('remove_tags')}
-              disabled={selectionCount === 0 || actionPending || loading || saving || moveLoading}
-            >
-              {t('browse.removeTags')}
-            </button>
-            <button
-              type="button"
-              className="btn btn-secondary"
-              onClick={() => handleBulkAction('suspend')}
-              disabled={selectionCount === 0 || actionPending || loading || saving || moveLoading}
-            >
-              {t('study.suspend')}
-            </button>
-            <button
-              type="button"
-              className="btn btn-secondary"
-              onClick={() => handleBulkAction('unsuspend')}
-              disabled={selectionCount === 0 || actionPending || loading || saving || moveLoading}
-            >
-              {t('browse.unsuspend')}
-            </button>
-            <button
-              type="button"
-              className="btn btn-secondary"
-              onClick={() => handleBulkAction('bury')}
-              disabled={selectionCount === 0 || actionPending || loading || saving || moveLoading}
-            >
-              {t('study.bury')}
-            </button>
-            <button
-              type="button"
-              className="btn btn-secondary"
-              onClick={() => handleBulkAction('unbury')}
-              disabled={selectionCount === 0 || actionPending || loading || saving || moveLoading}
-            >
-              {t('browse.unbury')}
-            </button>
+            <button type="button" className="btn btn-secondary btn-sm" onClick={() => openTagPanel('add_tags')} disabled={actionPending || loading || saving || moveLoading}>{t('browse.addTags')}</button>
+            <button type="button" className="btn btn-secondary btn-sm" onClick={() => handleBulkAction('suspend')} disabled={actionPending || loading || saving || moveLoading}>{t('study.suspend')}</button>
+            <button type="button" className="btn btn-secondary btn-sm" aria-expanded={moreOpen} aria-controls="bulk-more" onClick={() => setMoreOpen(open => !open)}>⋯ <span className="sr-only">{t('browse.moreActions')}</span></button>
+            <button type="button" className="btn btn-ghost btn-sm bulk-clear" onClick={() => setSelectedIds(new Set())} disabled={actionPending}>{t('browse.clearSelection')}</button>
+          </>)}
+        </div>
+        {selectionCount > 0 && moreOpen && (
+          <div id="bulk-more" className="bulk-more" role="group" aria-label={t('browse.moreActions')}>
+            <button type="button" className="btn btn-secondary btn-sm" onClick={() => openTagPanel('remove_tags')} disabled={actionPending || loading || saving || moveLoading}>{t('browse.removeTags')}</button>
+            <button type="button" className="btn btn-secondary btn-sm" onClick={() => handleBulkAction('unsuspend')} disabled={actionPending || loading || saving || moveLoading}>{t('browse.unsuspend')}</button>
+            <button type="button" className="btn btn-secondary btn-sm" onClick={() => handleBulkAction('bury')} disabled={actionPending || loading || saving || moveLoading}>{t('study.bury')}</button>
+            <button type="button" className="btn btn-secondary btn-sm" onClick={() => handleBulkAction('unbury')} disabled={actionPending || loading || saving || moveLoading}>{t('browse.unbury')}</button>
+            <button type="button" className="btn btn-secondary btn-sm" disabled={actionPending || loading || saving || moveLoading} onClick={() => void handleBulkAction('reset')}>{t('browse.resetSelected')}</button>
+            <span className="bulk-due">
+              <label className="browse-due-input">{t('browse.dueInDays')}<input type="number" min="0" max="36500" value={dueDays} onChange={e => setDueDays(Number(e.target.value))} /></label>
+              <button type="button" className="btn btn-secondary btn-sm" disabled={actionPending || loading || saving || moveLoading || !Number.isInteger(dueDays) || dueDays < 0 || dueDays > 36500} onClick={() => void handleBulkAction('reschedule')}>{t('browse.setDue')}</button>
+            </span>
+            <label className="flag-selector">{t('browse.flagSelected')} <select value="" disabled={actionPending || loading || saving || moveLoading} onChange={e => { if (e.target.value !== '') void handleBulkAction('flag', undefined, Number(e.target.value)); }}>
+              <option value="">{t('browse.chooseFlag')}</option>
+              {(['flag.remove', 'flag.red', 'flag.orange', 'flag.green', 'flag.blue', 'flag.pink', 'flag.turquoise', 'flag.purple'] as const).map((name, value) => <option key={value} value={value}>{t(name)}</option>)}
+            </select></label>
+            <button type="button" className="btn btn-secondary btn-sm browse-delete" disabled={actionPending || loading || saving || moveLoading} onClick={() => void handleBulkAction('delete')}>{t('browse.deleteSelected')}</button>
           </div>
-        </div>
-
-        <div className="bulk-toolbar bulk-schedule-toolbar" aria-label={t('browse.schedulingAria')}>
-          <button type="button" className="btn btn-secondary browse-delete" disabled={loading || saving || actionPending || !selectionCount} onClick={() => void handleBulkAction('delete')}>{t('browse.deleteSelected')}</button>
-          <button type="button" className="btn btn-secondary" disabled={loading || saving || actionPending || !selectionCount} onClick={() => void handleBulkAction('reset')}>{t('browse.resetSelected')}</button>
-          <label className="browse-due-input">{t('browse.dueInDays')}<input type="number" min="0" max="36500" value={dueDays} onChange={e => setDueDays(Number(e.target.value))} /></label>
-          <button type="button" className="btn btn-secondary" disabled={loading || saving || actionPending || !selectionCount || !Number.isInteger(dueDays) || dueDays < 0 || dueDays > 36500} onClick={() => void handleBulkAction('reschedule')}>{t('browse.setDue')}</button>
-          <button type="button" className="btn btn-secondary" disabled={loading || saving || actionPending} onClick={async () => {
-            setActionPending(true); setErrorMessage('');
-            try { await client.post('/api/cards/bulk-undo'); await fetchCards(activeQueryRef.current, activeOffsetRef.current); setActionSuccessMessage(t('browse.undone')); }
-            catch (e) { setErrorMessage(getErrMsg(e, t('browse.undoFailed'))); }
-            finally { setActionPending(false); }
-          }}>{t('browse.undoBulk')}</button>
-        </div>
-        <label className="flag-selector">{t('browse.flagSelected')} <select value="" disabled={selectionCount === 0 || actionPending || loading || saving} onChange={e => { if (e.target.value !== '') void handleBulkAction('flag', undefined, Number(e.target.value)); }}>
-          <option value="">{t('browse.chooseFlag')}</option>
-          {(['flag.remove', 'flag.red', 'flag.orange', 'flag.green', 'flag.blue', 'flag.pink', 'flag.turquoise', 'flag.purple'] as const).map((name, value) => <option key={value} value={value}>{t(name)}</option>)}
-        </select></label>
+        )}
         {moveOpen && (
           <div role="group" aria-label={t('browse.changeDeckAria')} className="form-group">
             <label htmlFor="move-target-deck">{t('browse.destination')}</label>
@@ -582,7 +482,7 @@ const BrowsePage = () => {
             <input
               id="bulk-tag-input"
               type="text"
-              placeholder="e.g. tag1 tag2"
+              placeholder={t('browse.tagsPlaceholder')}
               value={tagInput}
               disabled={actionPending}
               onChange={(e) => setTagInput(e.target.value)}
@@ -656,14 +556,22 @@ const BrowsePage = () => {
             }}
           >
             {actionSuccessMessage}
+            {actionSuccessMessage !== t('browse.undone') && (
+              <button type="button" className="btn btn-ghost btn-sm" style={{ marginLeft: '8px' }} disabled={loading || saving || actionPending} onClick={async () => {
+                setActionPending(true); setErrorMessage('');
+                try { await client.post('/api/cards/bulk-undo'); await fetchCards(activeQueryRef.current, activeOffsetRef.current); setActionSuccessMessage(t('browse.undone')); }
+                catch (e) { setErrorMessage(getErrMsg(e, t('browse.undoFailed'))); }
+                finally { setActionPending(false); }
+              }}>{t('browse.undoBulk')}</button>
+            )}
           </div>
         )}
 
-        <nav aria-label={t('browse.pagesAria')} style={{display:'flex', gap:'12px', alignItems:'center', marginBottom:'8px'}}>
+        <nav aria-label={t('browse.pagesAria')} className="browse-pager">
           <button type="button" className="btn btn-secondary"
             disabled={pageOffset === 0 || loading || saving || actionPending || moveLoading}
             onClick={() => fetchCards(activeQueryRef.current, Math.max(0, pageOffset - PAGE_SIZE))}>{t('browse.prevPage')}</button>
-          <span>{t('browse.pageInfo', { page: Math.floor(pageOffset / PAGE_SIZE) + 1, count: cards.length })}</span>
+          <span>{cards.length === 0 ? t('browse.rangeEmpty') : t('browse.range', { from: (pageOffset + 1).toLocaleString(locale), to: (pageOffset + cards.length).toLocaleString(locale), total: (total ?? pageOffset + cards.length).toLocaleString(locale) })}</span>
           <button type="button" className="btn btn-secondary"
             disabled={cards.length < PAGE_SIZE || loading || saving || actionPending || moveLoading}
             onClick={() => fetchCards(activeQueryRef.current, pageOffset + PAGE_SIZE)}>{t('browse.nextPage')}</button>
@@ -673,7 +581,14 @@ const BrowsePage = () => {
             <thead>
               <tr>
                 <th style={{ width: '40px', textAlign: 'center' }}>
-                  <span className="sr-only">{t('browse.select')}</span>
+                  <input
+                    type="checkbox"
+                    aria-label={t('browse.selectAll')}
+                    title={t('browse.selectAllMax')}
+                    checked={isAllDisplayedSelected}
+                    onChange={handleToggleSelectAll}
+                    disabled={cards.length === 0 || loading || saving || actionPending}
+                  />
                 </th>
                 <th>{t('editor.front')}</th>
                 <th>{t('editor.back')}</th>
@@ -724,11 +639,11 @@ const BrowsePage = () => {
                         />
                       </td>
                       <td title={plainPreview(card.front)}>{plainPreview(card.front)}</td>
-                      <td title={plainPreview(card.back)}>{plainPreview(card.back)}</td>
+                      <td title={answerPreview(card.back)}>{answerPreview(card.back)}</td>
                       <td>{card.deck_name}</td>
                       <td>
-                        {card.card_state === 'new' ? t('stat.new') : card.next_review
-                          ? new Date(card.next_review).toLocaleDateString()
+                        {card.card_state === 'new' ? '—' : card.next_review
+                          ? new Date(card.next_review).toLocaleDateString(locale)
                           : '—'}
                       </td>
                       <td>
@@ -816,11 +731,8 @@ const BrowsePage = () => {
             </div>
 
             {!sourceReady ? <p role="status">{t('browse.loadingNote')}</p> : sourceNote?.id != null ? Object.entries(noteFields).map(([name, value]) => (
-              <div className="form-group" key={name}>
-                <label htmlFor={`note-edit-${name}`}>{name}</label>
-                <textarea id={`note-edit-${name}`} className="editor-textarea" rows={5} value={value}
-                  disabled={saving || actionPending} onChange={e => setNoteFields(prev => ({ ...prev, [name]: e.target.value }))} />
-              </div>
+              <NoteFieldEditor key={name} id={`note-edit-${name}`} label={name} value={value} disabled={saving || actionPending}
+                onChange={next => setNoteFields(prev => ({ ...prev, [name]: next }))} />
             )) : <>
             <div className="form-group">
               <label htmlFor="card-edit-front">{t('editor.front')}</label>
@@ -862,7 +774,7 @@ const BrowsePage = () => {
                     fontSize: '0.9rem',
                   }}
                 >
-                  Saved!
+                  {t('browse.saved')}
                 </span>
               )}
               <button
