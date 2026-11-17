@@ -83,6 +83,18 @@ const CardFace = forwardRef<CardFaceRef, CardFaceProps>(
       const doc = new DOMParser().parseFromString(sanitizeHtml(html), 'text/html');
       doc.querySelectorAll('[data-type-field]').forEach(n => n.remove());
       doc.querySelectorAll('audio, video').forEach(media => { media.removeAttribute('autoplay'); media.removeAttribute('loop'); });
+      // The browser's own audio bar is large and grey; show Anki-style round replay buttons instead.
+      doc.querySelectorAll('audio').forEach(audio => {
+        audio.removeAttribute('controls');
+        audio.setAttribute('preload', 'none');
+        const button = doc.createElement('button');
+        button.type = 'button';
+        button.className = 'replay-button';
+        button.setAttribute('aria-label', t('card.playSound'));
+        button.title = t('card.playSound');
+        button.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path class="replay-play" d="M8 5.5v13l11-6.5z"/><path class="replay-pause" d="M7 5h3.5v14H7zM13.5 5H17v14h-3.5z"/></svg>';
+        audio.before(button);
+      });
       doc.querySelectorAll('[data-tts-voices-list]').forEach(node => {
         const voices = window.speechSynthesis?.getVoices() || [];
         node.textContent = voices.length ? voices.map(v => `${v.name} (${v.lang})`).join(' · ') : t('card.noVoices');
@@ -119,7 +131,22 @@ const CardFace = forwardRef<CardFaceRef, CardFaceProps>(
       overflow-wrap: break-word;
     }
     img, video { max-width: 100%; height: auto; }
-    audio { display: block; margin: 0.5rem 0; }
+    html, body { overflow: hidden; }
+    audio { display: none; }
+    .replay-button {
+      display: inline-flex; align-items: center; justify-content: center; vertical-align: middle;
+      width: 40px; height: 40px; margin: 0.35rem; padding: 0; border-radius: 50%; cursor: pointer;
+      border: 1px solid ${theme === 'light' ? 'rgba(14, 116, 144, 0.35)' : 'rgba(56, 189, 248, 0.4)'};
+      background: ${theme === 'light' ? 'rgba(14, 116, 144, 0.08)' : 'rgba(56, 189, 248, 0.12)'};
+      color: ${theme === 'light' ? '#0e7490' : '#7dd3fc'};
+      transition: transform .12s ease, background .12s ease;
+    }
+    .replay-button:hover { transform: scale(1.06); background: ${theme === 'light' ? 'rgba(14, 116, 144, 0.16)' : 'rgba(56, 189, 248, 0.22)'}; }
+    .replay-button:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+    .replay-button svg { width: 18px; height: 18px; fill: currentColor; }
+    .replay-button .replay-pause, .replay-button.is-playing .replay-play { display: none; }
+    .replay-button.is-playing .replay-pause { display: inline; }
+    .replay-button.is-playing { box-shadow: 0 0 0 4px ${theme === 'light' ? 'rgba(14, 116, 144, 0.12)' : 'rgba(56, 189, 248, 0.15)'}; }
     hr#answer {
       border: 0;
       border-top: 1px dashed ${theme === 'light' ? 'rgba(15, 23, 42, 0.2)' : 'rgba(255, 255, 255, 0.2)'};
@@ -327,6 +354,24 @@ const CardFace = forwardRef<CardFaceRef, CardFaceProps>(
               if (text !== null && text < 0.2) doc.body.style.setProperty('color', '#e5e7eb', 'important');
             }
           }
+        } catch {
+          // ignore
+        }
+        try {
+          const doc = iframe.contentDocument;
+          doc?.querySelectorAll<HTMLButtonElement>('.replay-button').forEach(button => {
+            const audio = button.nextElementSibling;
+            if (audio?.tagName !== 'AUDIO') return;
+            const sound = audio as HTMLAudioElement;
+            const sync = () => button.classList.toggle('is-playing', !sound.paused && !sound.ended);
+            sound.onplay = sync; sound.onpause = sync; sound.onended = sync;
+            button.onclick = () => {
+              if (!sound.paused) { sound.pause(); return; }
+              doc.querySelectorAll('audio').forEach(other => { if (other !== sound) other.pause(); });
+              sound.currentTime = 0;
+              void sound.play().catch(() => undefined);
+            };
+          });
         } catch {
           // ignore
         }

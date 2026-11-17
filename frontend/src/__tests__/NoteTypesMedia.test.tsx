@@ -114,3 +114,12 @@ it('keeps rare formatting behind the more button', async () => {
   expect(screen.getByRole('button', { name: 'Subscript' })).toBeDefined();
   expect(screen.getByRole('button', { name: 'Math' })).toBeDefined();
 });
+
+it('shows a round play button instead of the browser audio bar', () => {
+  const html = 'Tiền đề <audio src="/api/media/1/tts-a.wav" controls></audio>';
+  const { container } = render(<CardFace html={html} />);
+  const doc = container.querySelector('iframe')!.getAttribute('srcdoc') || '';
+  expect(doc).toContain('class="replay-button"');
+  expect(doc).toContain('aria-label="Play sound"');
+  expect(doc).not.toMatch(/<audio[^>]*controls/);
+});
