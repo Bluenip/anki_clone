@@ -10,6 +10,7 @@ import {
   useState,
 } from 'react';
 import { sanitizeHtml } from '../utils/sanitize';
+import { luminance } from '../utils/color';
 import { usePrefs } from '../context/usePrefs';
 
 export interface CardFaceRef {
@@ -29,6 +30,8 @@ export interface CardFaceProps {
   showAnswer?: boolean;
   onAudioEnded?: () => void;
   onRevealAnswer?: () => void;
+  /** The study screen already graded a typed exercise: drop the template's own type-in box and its comparison. */
+  hideTypeAnswer?: boolean;
 }
 
 const CardFace = forwardRef<CardFaceRef, CardFaceProps>(
@@ -43,6 +46,7 @@ const CardFace = forwardRef<CardFaceRef, CardFaceProps>(
       showAnswer = false,
       onAudioEnded,
       onRevealAnswer,
+      hideTypeAnswer = false,
     },
     ref
   ) => {
@@ -93,7 +97,7 @@ const CardFace = forwardRef<CardFaceRef, CardFaceProps>(
       // Name this application's origin explicitly; never derive it from notes.
       const assetOrigin = window.location.origin;
       return `<!DOCTYPE html>
-<html>
+<html class="${theme === 'light' ? '' : 'nightMode night_mode'}">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -124,7 +128,7 @@ const CardFace = forwardRef<CardFaceRef, CardFaceProps>(
     ${safeCss}
   </style>
 </head>
-<body class="card">
+<body class="card${theme === 'light' ? '' : ' nightMode night_mode'}">
   ${cleanHtml}
 </body>
 </html>`;
@@ -309,6 +313,23 @@ const CardFace = forwardRef<CardFaceRef, CardFaceProps>(
       let observer: ResizeObserver | null = null;
 
       const handleLoad = () => {
+        try {
+          // Anki's default note type CSS paints the card white with black text. Anki adapts such cards in
+          // night mode; do the same here, but keep cards that chose a dark or colored background themselves.
+          const doc = iframe.contentDocument;
+          const win = iframe.contentWindow;
+          if (doc?.body && win && theme !== 'light') {
+            const style = win.getComputedStyle(doc.body);
+            const light = luminance(style.backgroundColor);
+            if (light !== null && light > 0.6) {
+              doc.body.style.setProperty('background-color', 'transparent', 'important');
+              const text = luminance(style.color);
+              if (text !== null && text < 0.2) doc.body.style.setProperty('color', '#e5e7eb', 'important');
+            }
+          }
+        } catch {
+          // ignore
+        }
         updateHeight();
         try {
           const doc = iframe.contentDocument || iframe.contentWindow?.document;
@@ -331,7 +352,7 @@ const CardFace = forwardRef<CardFaceRef, CardFaceProps>(
           observer.disconnect();
         }
       };
-    }, [srcDoc, updateHeight]);
+    }, [srcDoc, updateHeight, theme]);
 
     const sanitizedFront = useMemo(() => new DOMParser().parseFromString(sanitizeHtml(frontHtml || html), 'text/html').body.textContent || '', [frontHtml, html]);
     const sanitizedBack = useMemo(() => new DOMParser().parseFromString(sanitizeHtml(backHtml || ''), 'text/html').body.textContent || '', [backHtml]);
@@ -352,7 +373,10 @@ const CardFace = forwardRef<CardFaceRef, CardFaceProps>(
           }}
         />
         {cleanHtml.includes('data-tts=') && <div><button type="button" onClick={() => void playAudio()}>{t('card.readAloud')}</button>{(!window.speechSynthesis || typeof SpeechSynthesisUtterance === 'undefined') && <p role="status">{t('card.noSpeech')}</p>}</div>}
-        {typedFields.map(field => <div key={field} style={{ marginBlock: 12 }}>
+        {hideTypeAnswer ? (showAnswer && typedFields.map(field => answers[field] !== undefined && (
+          // The exercise above already took and graded the typed answer: only show the expected one, like Anki.
+          <div key={field} className="card-type-answer" style={{ marginBlock: 12, textAlign: 'center' }}>{answers[field]}</div>
+        ))) : typedFields.map(field => <div key={field} style={{ marginBlock: 12 }}>
           {!showAnswer ? <label>{t('card.typeAnswer', { field })}<input autoComplete="off" spellCheck={false} onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) { e.preventDefault(); onRevealAnswer?.(); } }} value={typed[field] || ''} onChange={e => setTyped(old => ({ ...old, [field]: e.target.value }))} /></label>
             : <div role="status"><div>{t('card.yourAnswer')} {typed[field] || t('card.empty')}</div><div>{t('card.correctAnswer')} {answers[field] ?? t('card.notInBack')}</div>
               {answers[field] !== undefined && !matches(field) && <div aria-label={t('card.charComparison')} style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{answerDiff(typed[field] || '', answers[field]).map((part, i) => part.kind === 'delete' ? <del key={i} style={{ background: '#7f1d1d', color: '#fff' }}>{part.text}</del> : part.kind === 'insert' ? <ins key={i} style={{ background: '#14532d', color: '#fff' }}>{part.text}</ins> : <span key={i}>{part.text}</span>)}</div>}

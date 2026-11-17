@@ -870,6 +870,7 @@ export const CustomStudyPage = () => {
                   backHtml={card.back}
                   showAnswer={showAnswer}
             onRevealAnswer={handleRevealAnswer}
+                  hideTypeAnswer={Boolean(card.quiz)}
                 />
                 )}
               </div>

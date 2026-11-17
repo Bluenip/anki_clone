@@ -52,6 +52,15 @@ describe('note types and media', () => {
     expect(screen.getByText('Correct answer: Élite')).toBeDefined();
     expect(screen.getByText('Match')).toBeDefined();
   });
+  it('drops the template type-in box when a quiz exercise already graded the card', () => {
+    const front = '<span data-type-field="Back" data-type-answer="Lớn hơn" data-type-options="type"></span>';
+    const view = render(<CardFace html={front} frontHtml={front} backHtml={front} hideTypeAnswer />);
+    expect(screen.queryByLabelText('Type answer (Back)')).toBeNull();
+    view.rerender(<CardFace html={front} frontHtml={front} backHtml={front} showAnswer hideTypeAnswer />);
+    expect(screen.queryByText(/Your answer/)).toBeNull();
+    expect(screen.queryByText('Different — compare your answer before rating')).toBeNull();
+    expect(screen.getByText('Lớn hơn')).toBeDefined();  // the expected answer is still shown
+  });
 });
 
 it('optimizer only updates draft weights after explicit Use', async () => {
