@@ -22,20 +22,31 @@ services:
       - SMTP_PORT=${SMTP_PORT:-587}
       - SMTP_USER=${SMTP_USER:-}
       - SMTP_PASSWORD=${SMTP_PASSWORD:-}
-      # Pronunciation audio for vocabulary (optional; leave unset to disable)
-      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
-      # Each model has its own free daily quota (10 requests); the job moves to the next when one runs out.
-      - GEMINI_TTS_MODELS=${GEMINI_TTS_MODELS:-gemini-3.8-flash-lite-tts,gemini-3.8-flash-tts}
-      - GEMINI_TTS_VOICE=${GEMINI_TTS_VOICE:-Kore}
-      - GEMINI_TTS_BATCH=${GEMINI_TTS_BATCH:-40}
-      # Free tier allows 3 requests per minute per model.
-      - GEMINI_TTS_RPM=${GEMINI_TTS_RPM:-3}
-      - GEMINI_VERIFY_MODEL=${GEMINI_VERIFY_MODEL:-gemini-3.5-flash-lite}
-      # When Gemini's free quota runs out, voice the remaining words offline with Piper (set 0 to wait instead).
-      - TTS_PIPER_FALLBACK=${TTS_PIPER_FALLBACK:-1}
+      # Pronunciation audio for vocabulary comes from the Kokoro service below (unset TTS_URL to disable).
+      - TTS_URL=${TTS_URL:-http://tts:8880}
+      - KOKORO_VOICE=${KOKORO_VOICE:-af_heart}
     volumes:
       - anki-data:/data
       - anki-media:/app/media
+    depends_on:
+      - tts
+    networks:
+      - anki-network
+
+  # Kokoro text-to-speech (hexgrad/kokoro) on the NVIDIA GPU. Needs nvidia-container-toolkit on the host.
+  tts:
+    build: ./tts
+    container_name: anki-tts
+    restart: unless-stopped
+    environment:
+      - KOKORO_VOICE=${KOKORO_VOICE:-af_heart}
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
     networks:
       - anki-network
 

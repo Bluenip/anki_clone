@@ -3,13 +3,12 @@ import { cancelDeckTts, getDeckTtsJob, getDeckTtsSummary, getTtsStatus, startDec
 import type { TtsJob } from '../api/tts';
 import { usePrefs } from '../context/usePrefs';
 
-const ACTIVE = new Set(['queued', 'running', 'waiting', 'stopping']);
+const ACTIVE = new Set(['queued', 'running', 'stopping']);
 
-/** "Generate pronunciation audio" for every word in a deck; hidden when the server has no TTS key. */
+/** "Generate pronunciation audio" (Kokoro) for every word in a deck; hidden when the server has no TTS service. */
 export default function DeckAudioPanel({ deckId }: { deckId: number }) {
   const { t } = usePrefs();
   const [enabled, setEnabled] = useState(false);
-  const [gemini, setGemini] = useState(false);
   const [piperWords, setPiperWords] = useState(0);
   const [job, setJob] = useState<TtsJob>({ state: 'idle' });
   const [error, setError] = useState<string | null>(null);
@@ -39,7 +38,6 @@ export default function DeckAudioPanel({ deckId }: { deckId: number }) {
       .then(res => {
         if (cancelled || !res.data.enabled) return;
         setEnabled(true);
-        setGemini(res.data.gemini ?? true);
         void poll();
       })
       .catch(() => undefined);
@@ -65,7 +63,6 @@ export default function DeckAudioPanel({ deckId }: { deckId: number }) {
 
   const running = ACTIVE.has(job.state);
   const done = (job.done || 0) + (job.failed || 0);
-  const resumeAt = job.resume_at ? new Date(job.resume_at * 1000).toLocaleString([], { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' }) : '';
   const percent = job.total ? Math.round((done / job.total) * 100) : 0;
 
   return (
@@ -92,7 +89,7 @@ export default function DeckAudioPanel({ deckId }: { deckId: number }) {
           </button>
         ) : (
           <div className="deck-audio-buttons">
-            {gemini && piperWords > 0 && (
+            {piperWords > 0 && (
               <button type="button" className="btn btn-ghost btn-sm" title={t('tts.upgradeHint')} onClick={() => void start('upgrade')}>
                 ✨ {t('tts.upgrade', { count: piperWords })}
               </button>
@@ -108,9 +105,7 @@ export default function DeckAudioPanel({ deckId }: { deckId: number }) {
           <div className="deck-audio-bar"><span style={{ width: `${percent}%` }} /></div>
           <span>{job.mode === 'upgrade'
             ? t('tts.upgradeProgress', { done, total: job.total || 0 })
-            : t('tts.progress', { done, total: job.total || 0, added: job.added || 0 })}
-            {(job.piper || 0) > 0 && <> · {t('tts.piperCount', { count: job.piper || 0 })}</>}</span>
-          {job.state === 'waiting' && <span className="deck-audio-waiting">⏳ {t('tts.waiting', { time: resumeAt })}</span>}
+            : t('tts.progress', { done, total: job.total || 0, added: job.added || 0 })}</span>
         </div>
       )}
       {!running && job.state !== 'idle' && (
@@ -121,8 +116,7 @@ export default function DeckAudioPanel({ deckId }: { deckId: number }) {
               ? t('tts.stoppedByUser', { done: job.done || 0, total: job.total || 0 })
             : job.mode === 'upgrade'
               ? t('tts.upgradeSummary', { added: job.added || 0, failed: job.failed || 0 })
-              : <>{t('tts.summary', { added: job.added || 0, skipped: job.skipped || 0, failed: job.failed || 0 })}
-                  {(job.piper || 0) > 0 && <> {t('tts.piperCount', { count: job.piper || 0 })}</>}</>}
+              : t('tts.summary', { added: job.added || 0, skipped: job.skipped || 0, failed: job.failed || 0 })}
         </p>
       )}
       {error && <p className="deck-audio-error" role="alert">{error}</p>}
