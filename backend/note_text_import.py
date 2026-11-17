@@ -6,7 +6,7 @@ import json
 import re
 
 from models import Card, Deck, Note, NoteCard, NoteType
-from note_service import BUILTINS, builtin_model, create_note_from_model, update_note, values_for
+from note_service import BUILTINS, builtin_model, create_note_from_model, matches_builtin, update_note, values_for
 from note_rendering import render_cards
 from text_transfer import SEPARATORS
 
@@ -77,7 +77,7 @@ def import_notes_text(db, deck, data, *, commit=True):
     if set(selected) != set(range(len(selected))):
         raise ValueError('Every source column must be mapped; unmapped fields cannot be discarded')
     model = custom or db.query(NoteType).filter_by(user_id=deck.user_id, name=definition['name']).first()
-    if model and (json.loads(model.fields_json) != definition['fields'] or json.loads(model.templates_json) != definition['templates']):
+    if model and custom is None and not matches_builtin(model, definition):
         raise ValueError('A different note type already uses this built-in name')
     # A transient model keeps previews read-only, including the very first import.
     model = model or NoteType(name=definition['name'], fields_json=json.dumps(definition['fields']),

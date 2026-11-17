@@ -1,5 +1,6 @@
 import json
 import hashlib
+import re
 from sqlalchemy.dialects.sqlite import insert
 from models import Card, Note, NoteCard, NoteType, StudyProgress, PackageNote
 from notes import new_guid
@@ -24,13 +25,34 @@ BUILTINS = {
 }
 
 
+def _same_templates(saved, wanted):
+    """Templates render the same cards: same names and faces, ignoring whitespace and Anki's extra keys.
+
+    A "Basic" note type imported from Anki has ``{{FrontSide}}\n\n<hr id=answer>\n\n{{Back}}`` plus
+    ``ord``/``id``/``bqfmt``... keys; it is the same note type as the built-in one.
+    """
+    def face(text):
+        text = re.sub(r'\s*(<[^<>]*>)\s*', r'\1', text or '')  # whitespace around HTML tags is not rendered
+        return ' '.join(text.split())
+
+    def key(templates):
+        return [(t.get('name'), face(t.get('qfmt')), face(t.get('afmt'))) for t in templates]
+    return isinstance(saved, list) and all(isinstance(t, dict) for t in saved) and key(saved) == key(wanted)
+
+
+def matches_builtin(model, definition):
+    """True when a saved note type is the built-in one (same fields, equivalent templates)."""
+    return (json.loads(model.fields_json) == definition['fields']
+            and _same_templates(json.loads(model.templates_json), definition['templates']))
+
+
 def builtin_model(db, user_id, kind):
     definition = BUILTINS[kind]
     db.execute(insert(NoteType).values(user_id=user_id, name=definition['name'],
         fields_json=json.dumps(definition['fields']), templates_json=json.dumps(definition['templates']),
         css=image_occlusion.CSS if kind == 'image_occlusion' else '.cloze {color:#77b7ff;font-weight:bold}').on_conflict_do_nothing(index_elements=['user_id', 'name']))
     model = db.query(NoteType).filter_by(user_id=user_id, name=definition['name']).one()
-    if json.loads(model.fields_json) != definition['fields'] or json.loads(model.templates_json) != definition['templates']:
+    if not matches_builtin(model, definition):
         raise ValueError('A different note type already uses this built-in name')
     return model
 

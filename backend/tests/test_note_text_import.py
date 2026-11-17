@@ -185,3 +185,41 @@ def test_advanced_import_updates_legacy_card_without_preview_backfill(client, db
     assert card.front == 'New'
     assert card.note_link.note.guid == guid
     assert db_session.query(Card).count() == 1
+
+
+ANKI_BASIC_TEMPLATES = [{'name': 'Card 1', 'ord': 0, 'qfmt': '{{Front}}', 'afmt': '{{FrontSide}}\n\n<hr id=answer>\n\n{{Back}}',
+                         'bqfmt': '', 'bafmt': '', 'did': None, 'bfont': '', 'bsize': 0, 'id': -7303406038109454404}]
+
+
+def test_basic_note_type_from_an_anki_package_is_reused(client, db_session, auth_headers_a, user_a):
+    # Anki's own "Basic" differs from ours only in whitespace and extra keys; it must not block imports.
+    anki_basic = NoteType(user_id=user_a.id, name='Basic', fields_json=json.dumps(['Front', 'Back']),
+                          templates_json=json.dumps(ANKI_BASIC_TEMPLATES), css='')
+    db_session.add(anki_basic)
+    db_session.commit()
+    did = deck(client, auth_headers_a)
+    text = '#separator:tab\n#html:true\n#tags column:3\nsunburn\tcháy nắng\t\nFeel\tCảm thấy\t\n'
+    data = {'kind': 'basic', 'text': text, 'separator': '\t', 'preview': True}
+    preview = client.post(f'/api/decks/{did}/import', headers=auth_headers_a, json=data)
+    assert preview.status_code == 200, preview.text
+    assert preview.json()['added'] == 2
+    data['preview'] = False
+    assert client.post(f'/api/decks/{did}/import', headers=auth_headers_a, json=data).status_code == 200
+    # Adding a single card also uses that note type instead of failing.
+    added = client.post('/api/notes', headers=auth_headers_a,
+                        json={'deck_id': did, 'kind': 'basic', 'fields': {'Front': 'Larger', 'Back': 'Lớn hơn'}})
+    assert added.status_code == 201, added.text
+    assert db_session.query(NoteType).filter_by(user_id=user_a.id).count() == 1
+    assert {n.note_type_id for n in db_session.query(Note).filter_by(user_id=user_a.id)} == {anki_basic.id}
+
+
+def test_a_really_different_basic_note_type_is_still_refused(client, db_session, auth_headers_a, user_a):
+    other = [{'name': 'Card 1', 'qfmt': '{{Back}}', 'afmt': '{{Front}}'}]
+    db_session.add(NoteType(user_id=user_a.id, name='Basic', fields_json=json.dumps(['Front', 'Back']),
+                            templates_json=json.dumps(other), css=''))
+    db_session.commit()
+    did = deck(client, auth_headers_a)
+    response = client.post(f'/api/decks/{did}/import', headers=auth_headers_a,
+                           json={'kind': 'basic', 'text': 'Q\tA', 'separator': '\t', 'preview': True})
+    assert response.status_code == 400
+    assert 'built-in name' in response.text
