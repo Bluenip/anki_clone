@@ -112,6 +112,8 @@ export interface QuizResult {
   correct: boolean;
   expected: string;
   rating: number;
+  /** The first recorded answer, when this card was already answered (e.g. before a reload). */
+  response?: string;
 }
 
 export interface StudyStats {

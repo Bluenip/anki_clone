@@ -32,3 +32,6 @@ export const cardAction = (cardId: number, action: 'bury' | 'suspend', expected_
 
 export const checkQuiz = (cardId: number, answer: QuizAnswer) =>
   client.post<QuizResult>(`/api/study/${cardId}/quiz/check`, answer);
+
+/** Server detail when the latest answer came from an exercise (students may not retry those). */
+export const QUIZ_UNDO_BLOCKED = 'Answers to exercises cannot be undone';

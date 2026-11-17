@@ -72,4 +72,26 @@ describe('DeckAudioPanel', () => {
     fireEvent.click(stopping);
     expect(cancel).toHaveBeenCalledTimes(1);
   });
+
+  it('stops polling once the panel is closed, even mid-request', async () => {
+    vi.spyOn(ttsApi, 'getTtsStatus').mockResolvedValue({ data: { enabled: true, gemini: true, piper: true, model: 'm', voice: 'v' } } as any);
+    let release: (value: any) => void = () => undefined;
+    const jobs = vi.spyOn(ttsApi, 'getDeckTtsJob').mockImplementation(() => new Promise(resolve => { release = resolve; }));
+    const { unmount } = render(<DeckAudioPanel deckId={9} />);
+    await waitFor(() => expect(jobs).toHaveBeenCalledTimes(1));
+    unmount();
+    release({ data: { state: 'running', mode: 'fill', total: 100, done: 10 } });
+    await new Promise(resolve => setTimeout(resolve, 2300));
+    expect(jobs).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows the real job state when stopping fails', async () => {
+    vi.spyOn(ttsApi, 'getTtsStatus').mockResolvedValue({ data: { enabled: true, gemini: true, piper: true, model: 'm', voice: 'v' } } as any);
+    vi.spyOn(ttsApi, 'getDeckTtsJob').mockResolvedValue({ data: { state: 'running', mode: 'fill', total: 100, done: 10, added: 10, failed: 0 } } as any);
+    vi.spyOn(ttsApi, 'cancelDeckTts').mockRejectedValue({ response: { data: { detail: 'Server busy' } } });
+    render(<DeckAudioPanel deckId={9} />);
+    fireEvent.click(await screen.findByRole('button', { name: /^stop$|^dừng$/i }));
+    expect(await screen.findByText('Server busy')).toBeTruthy();
+    expect(await screen.findByRole('button', { name: /^stop$|^dừng$/i })).toBeTruthy();
+  });
 });

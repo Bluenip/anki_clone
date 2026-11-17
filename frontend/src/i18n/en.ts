@@ -974,6 +974,7 @@ export const en = {
   "study.undo": "Undo",
   "study.undoAria": "Undo review",
   "study.undoFailed": "Failed to undo review.",
+  "study.quizUndoBlocked": "Answers to exercises can't be undone, so the result counts as answered.",
   "study.undoLast": "Undo last review",
   "study.undoTitle": "Undo last review (Ctrl+Z)",
   "study.waiting": "Waiting for Next Card",

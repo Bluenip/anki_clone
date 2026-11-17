@@ -5,6 +5,7 @@ import {
   reviewCard,
   getStudyStats,
   undoReview,
+  QUIZ_UNDO_BLOCKED,
   cardAction,
 } from '../api/study';
 import type { QuizAnswer, ReviewExtra, StudyCard, StudyStats } from '../api/study';
@@ -283,7 +284,8 @@ const StudyPageContent = () => {
       await fetchCard();
     } catch (err: any) {
       if (!mountedRef.current) return;
-      setReviewError(err?.response?.data?.detail || tNow('study.undoFailed'));
+      const detail = err?.response?.data?.detail;
+      setReviewError(detail === QUIZ_UNDO_BLOCKED ? tNow('study.quizUndoBlocked') : detail || tNow('study.undoFailed'));
     } finally {
       isSubmittingRef.current = false;
       setAnimating(false);

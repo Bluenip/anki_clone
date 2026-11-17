@@ -86,7 +86,8 @@ export default function QuizPanel({ card, exercise, disabled, onReveal, onSubmit
     setError(null);
     try {
       const res = await checkQuiz(card.card_id, { response: value, hint_used: hintUsed });
-      setResponse(value);
+      // After a reload the server keeps the first answer; show that one, not the retry.
+      setResponse(res.data.response ?? value);
       setResult(res.data);
       onReveal();
     } catch (err: any) {

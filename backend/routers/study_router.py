@@ -138,16 +138,56 @@ def _quiz_exercise(db, card, progress, user_id):
         return None
 
 
-def _quiz_grade(db, card, user_id, answer):
+def _quiz_grade(db, card, user_id, answer, record=False):
+    """Grade the exercise; the first recorded answer wins over any later one.
+
+    With ``record`` the answer is saved as the first attempt (the check call),
+    so a reload or a second request cannot replace a wrong answer.
+    """
     from quiz import grade
     from deck_options import effective_settings
+    from models import QuizAttempt
+    from sqlalchemy.exc import IntegrityError
     progress = db.query(StudyProgress).filter_by(card_id=card.id, user_id=user_id).first()
-    try:
-        return grade(db, card, effective_settings(card.deck), progress,
-                     card.scheduling.version if card.scheduling else 0,
-                     answer.response if answer else '', answer.hint_used if answer else False)
-    except (ValueError, KeyError, TypeError):
-        return None
+    version = card.scheduling.version if card.scheduling else 0
+    settings = effective_settings(card.deck)
+
+    def graded(response, hint_used):
+        try:
+            return grade(db, card, settings, progress, version, response, hint_used)
+        except (ValueError, KeyError, TypeError):
+            return None
+
+    attempt = db.query(QuizAttempt).filter_by(user_id=user_id, card_id=card.id, version=version).first()
+    if attempt is not None:
+        first = graded(attempt.response, attempt.hint_used)
+        if first is not None and first['expected'] == attempt.expected:
+            return {**first, 'response': attempt.response}  # shown instead of whatever was typed this time
+        db.delete(attempt)  # left behind by a deleted card whose id was reused
+        db.flush()
+    result = graded(answer.response if answer else '', answer.hint_used if answer else False)
+    if record and result is not None and answer is not None:
+        try:
+            with db.begin_nested():
+                db.add(QuizAttempt(user_id=user_id, card_id=card.id, version=version, expected=result['expected'],
+                                   response=answer.response, hint_used=answer.hint_used))
+        except IntegrityError:
+            # Another tab answered first; its answer counts.
+            return _quiz_grade(db, card, user_id, answer)
+    return result
+
+
+def _forget_quiz_attempts(db, card_id, user_id):
+    from models import QuizAttempt
+    db.query(QuizAttempt).filter_by(user_id=user_id, card_id=card_id).delete(synchronize_session=False)
+
+
+def _already_reviewed(db, card_id, user_id, request_id):
+    """A retried review request must not be re-graded against the next exercise."""
+    from models import StudyOperation
+    if not request_id:
+        return False
+    return db.query(StudyOperation).filter_by(user_id=user_id, card_id=card_id, request_id=request_id).first() is not None
 
 
 class QuizCheckRequest(BaseModel):
@@ -163,9 +203,10 @@ def check_quiz(card_id: int, data: QuizCheckRequest,
         Card.id == card_id, Deck.user_id == current_user.id).first()
     if not card:
         raise HTTPException(status_code=404, detail="Card not found")
-    result = _quiz_grade(db, card, current_user.id, data)
+    result = _quiz_grade(db, card, current_user.id, data, record=True)
     if result is None:
         raise HTTPException(status_code=409, detail='This card has no exercise; reload the study queue')
+    db.commit()
     return result
 
 
@@ -190,7 +231,7 @@ def review_card(
     if not card:
         raise HTTPException(status_code=404, detail="Card not found")
 
-    graded = _quiz_grade(db, card, current_user.id, data.quiz)
+    graded = None if _already_reviewed(db, card.id, current_user.id, data.request_id) else _quiz_grade(db, card, current_user.id, data.quiz)
     if graded is not None:
         if data.quiz is None:
             raise HTTPException(status_code=400, detail='This deck requires answering the exercise before rating')
@@ -199,7 +240,9 @@ def review_card(
 
     from review_service import review
     try:
-        return review(db,card,current_user.id,data)
+        if graded is not None:
+            _forget_quiz_attempts(db, card.id, current_user.id)
+        return review(db,card,current_user.id,data,quiz_graded=graded is not None)
     except HTTPException:
         db.rollback()
         raise

@@ -14,7 +14,7 @@ from sqlalchemy import create_engine, event, func
 from sqlalchemy.orm import Session
 from auth import get_current_user
 from database import get_db, Base, BASE_DIR
-from models import User, CollectionOperation, StudyOperation
+from models import User, CollectionOperation, QuizAttempt, StudyOperation
 from media_utils import get_media_dir
 from collection_snapshot import capture, fingerprint, restore, clear, TABLES
 from bulk_history import begin
@@ -113,6 +113,7 @@ def restore_backup(backup_id: str, guard: Guard, db: Session = Depends(get_db), 
                     shutil.copy2(staged, target)
             db.query(CollectionOperation).filter_by(user_id=user.id).delete(synchronize_session=False)
             db.query(StudyOperation).filter_by(user_id=user.id).update({'undone': True}, synchronize_session=False)
+            db.query(QuizAttempt).filter_by(user_id=user.id).delete(synchronize_session=False)
             db.commit()
         except BaseException as exc:
             db.rollback()
