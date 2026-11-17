@@ -9,7 +9,7 @@ describe('DeckAudioPanel', () => {
   afterEach(() => vi.restoreAllMocks());
 
   it('stays hidden when the server has no TTS key', async () => {
-    const status = vi.spyOn(ttsApi, 'getTtsStatus').mockResolvedValue({ data: { enabled: false, model: '', voice: '' } } as any);
+    const status = vi.spyOn(ttsApi, 'getTtsStatus').mockResolvedValue({ data: { enabled: false } } as any);
     const { container } = render(<DeckAudioPanel deckId={3} />);
     await waitFor(() => expect(status).toHaveBeenCalled());
     expect(container.querySelector('[data-testid="deck-audio"]')).toBeNull();
@@ -17,7 +17,7 @@ describe('DeckAudioPanel', () => {
 
   it('starts a job and shows progress, then the summary', async () => {
     vi.spyOn(ttsApi, 'getDeckTtsSummary').mockResolvedValue({ data: { piper_words: 0 } } as any);
-    vi.spyOn(ttsApi, 'getTtsStatus').mockResolvedValue({ data: { enabled: true, model: 'm', voice: 'v' } } as any);
+    vi.spyOn(ttsApi, 'getTtsStatus').mockResolvedValue({ data: { enabled: true, engine: 'kokoro', voice: 'af_heart' } } as any);
     const jobs = vi.spyOn(ttsApi, 'getDeckTtsJob')
       .mockResolvedValueOnce({ data: { state: 'idle' } } as any)
       .mockResolvedValue({ data: { state: "done", total: 44, done: 44, added: 40, skipped: 4, failed: 0, remaining: 0 } } as any);
@@ -32,29 +32,29 @@ describe('DeckAudioPanel', () => {
     expect(await screen.findByText(/40/)).toBeTruthy();
   });
 
-  it('offers an upgrade to Gemini when some words use the Piper voice', async () => {
-    vi.spyOn(ttsApi, 'getTtsStatus').mockResolvedValue({ data: { enabled: true, gemini: true, piper: true, model: 'm', voice: 'v' } } as any);
-    vi.spyOn(ttsApi, 'getDeckTtsJob').mockResolvedValue({ data: { state: 'done', mode: 'fill', piper: 30, total: 50, done: 50, added: 50, skipped: 0, failed: 0 } } as any);
+  it('offers to switch Piper words to the Kokoro voice', async () => {
+    vi.spyOn(ttsApi, 'getTtsStatus').mockResolvedValue({ data: { enabled: true, engine: 'kokoro', voice: 'af_heart' } } as any);
+    vi.spyOn(ttsApi, 'getDeckTtsJob').mockResolvedValue({ data: { state: 'idle' } } as any);
     vi.spyOn(ttsApi, 'getDeckTtsSummary').mockResolvedValue({ data: { piper_words: 30 } } as any);
     const start = vi.spyOn(ttsApi, 'startDeckTts').mockResolvedValue({ data: { state: 'running', mode: 'upgrade', total: 30, done: 0 } } as any);
     render(<DeckAudioPanel deckId={9} />);
-    expect(await screen.findByText(/30 with the Piper voice|30 từ dùng giọng Piper/)).toBeTruthy();
-    fireEvent.click(await screen.findByRole('button', { name: /upgrade to gemini|nâng cấp lên gemini/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /switch to the kokoro voice \(30|đổi sang giọng kokoro \(30/i }));
     await waitFor(() => expect(start).toHaveBeenCalledWith(9, 'upgrade'));
     expect(await screen.findByText(/0 \/ 30/)).toBeTruthy();
   });
 
-  it('hides the upgrade when the server has no Gemini key', async () => {
-    vi.spyOn(ttsApi, 'getTtsStatus').mockResolvedValue({ data: { enabled: true, gemini: false, piper: true, model: 'm', voice: 'v' } } as any);
+  it('hides the switch when no word uses the Piper voice', async () => {
+    vi.spyOn(ttsApi, 'getTtsStatus').mockResolvedValue({ data: { enabled: true, engine: 'kokoro', voice: 'af_heart' } } as any);
     vi.spyOn(ttsApi, 'getDeckTtsJob').mockResolvedValue({ data: { state: 'idle' } } as any);
-    vi.spyOn(ttsApi, 'getDeckTtsSummary').mockResolvedValue({ data: { piper_words: 12 } } as any);
+    const summary = vi.spyOn(ttsApi, 'getDeckTtsSummary').mockResolvedValue({ data: { piper_words: 0 } } as any);
     render(<DeckAudioPanel deckId={9} />);
     await screen.findByRole('button', { name: /generate audio|tạo âm thanh/i });
-    expect(screen.queryByRole('button', { name: /upgrade to gemini|nâng cấp lên gemini/i })).toBeNull();
+    await waitFor(() => expect(summary).toHaveBeenCalled());
+    expect(screen.queryByRole('button', { name: /kokoro/i })).toBeNull();
   });
 
   it('reports a stopped job as stopped, not done', async () => {
-    vi.spyOn(ttsApi, 'getTtsStatus').mockResolvedValue({ data: { enabled: true, gemini: true, piper: true, model: 'm', voice: 'v' } } as any);
+    vi.spyOn(ttsApi, 'getTtsStatus').mockResolvedValue({ data: { enabled: true, engine: 'kokoro', voice: 'af_heart' } } as any);
     vi.spyOn(ttsApi, 'getDeckTtsJob').mockResolvedValue({ data: { state: 'stopped', mode: 'upgrade', total: 30, done: 4, added: 4, failed: 0 } } as any);
     vi.spyOn(ttsApi, 'getDeckTtsSummary').mockResolvedValue({ data: { piper_words: 26 } } as any);
     render(<DeckAudioPanel deckId={9} />);
@@ -62,7 +62,7 @@ describe('DeckAudioPanel', () => {
   });
 
   it('shows Stopping and blocks repeated clicks while a request finishes', async () => {
-    vi.spyOn(ttsApi, 'getTtsStatus').mockResolvedValue({ data: { enabled: true, gemini: true, piper: true, model: 'm', voice: 'v' } } as any);
+    vi.spyOn(ttsApi, 'getTtsStatus').mockResolvedValue({ data: { enabled: true, engine: 'kokoro', voice: 'af_heart' } } as any);
     vi.spyOn(ttsApi, 'getDeckTtsJob').mockResolvedValue({ data: { state: 'running', mode: 'fill', total: 100, done: 10, added: 10, failed: 0 } } as any);
     const cancel = vi.spyOn(ttsApi, 'cancelDeckTts').mockResolvedValue({ data: { state: 'stopping', mode: 'fill', total: 100, done: 10 } } as any);
     render(<DeckAudioPanel deckId={9} />);
@@ -74,7 +74,7 @@ describe('DeckAudioPanel', () => {
   });
 
   it('stops polling once the panel is closed, even mid-request', async () => {
-    vi.spyOn(ttsApi, 'getTtsStatus').mockResolvedValue({ data: { enabled: true, gemini: true, piper: true, model: 'm', voice: 'v' } } as any);
+    vi.spyOn(ttsApi, 'getTtsStatus').mockResolvedValue({ data: { enabled: true, engine: 'kokoro', voice: 'af_heart' } } as any);
     let release: (value: any) => void = () => undefined;
     const jobs = vi.spyOn(ttsApi, 'getDeckTtsJob').mockImplementation(() => new Promise(resolve => { release = resolve; }));
     const { unmount } = render(<DeckAudioPanel deckId={9} />);
@@ -86,7 +86,7 @@ describe('DeckAudioPanel', () => {
   });
 
   it('shows the real job state when stopping fails', async () => {
-    vi.spyOn(ttsApi, 'getTtsStatus').mockResolvedValue({ data: { enabled: true, gemini: true, piper: true, model: 'm', voice: 'v' } } as any);
+    vi.spyOn(ttsApi, 'getTtsStatus').mockResolvedValue({ data: { enabled: true, engine: 'kokoro', voice: 'af_heart' } } as any);
     vi.spyOn(ttsApi, 'getDeckTtsJob').mockResolvedValue({ data: { state: 'running', mode: 'fill', total: 100, done: 10, added: 10, failed: 0 } } as any);
     vi.spyOn(ttsApi, 'cancelDeckTts').mockRejectedValue({ response: { data: { detail: 'Server busy' } } });
     render(<DeckAudioPanel deckId={9} />);

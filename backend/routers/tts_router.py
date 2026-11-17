@@ -25,15 +25,14 @@ def session_factory_for(db: Session):
 
 @router.get('/tts/status')
 def tts_status(user: User = Depends(get_current_user)):
-    return {'enabled': tts_service.enabled(), 'gemini': bool(tts_service.api_key()), 'piper': tts_service.piper_available(),
-            'model': tts_service.model_name(), 'voice': tts_service.voice_name()}
+    return {'enabled': tts_service.enabled(), 'engine': 'kokoro', 'voice': tts_service.voice_name()}
 
 
 @router.get('/decks/{deck_id}/tts/summary')
 def deck_tts_summary(deck_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    """How many words in the deck still use the offline Piper voice (and can be upgraded)."""
+    """How many words in the deck still use the old offline Piper voice (and can be re-voiced)."""
     deck = _owned_deck(db, user, deck_id)
-    return {'piper_words': len(tts_service._upgrade_targets(db, deck))}
+    return {'piper_words': len(tts_service.upgrade_targets(db, deck))}
 
 
 @router.get('/decks/{deck_id}/tts')
@@ -48,9 +47,7 @@ def start_deck_tts(deck_id: int, mode: Literal['fill', 'upgrade'] = 'fill',
                    db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     _owned_deck(db, user, deck_id)
     if not tts_service.enabled():
-        raise HTTPException(status_code=503, detail='Audio generation is not configured on this server (GEMINI_API_KEY)')
-    if mode == 'upgrade' and not tts_service.api_key():
-        raise HTTPException(status_code=503, detail='Upgrading to Gemini needs GEMINI_API_KEY on this server')
+        raise HTTPException(status_code=503, detail='Audio generation is not configured on this server (TTS_URL)')
     return tts_service.start_job(user.id, deck_id, session_factory_for(db), mode).public()
 
 
@@ -60,8 +57,6 @@ def cancel_deck_tts(deck_id: int, db: Session = Depends(get_db), user: User = De
     job = tts_service.job_for(user.id, deck_id)
     if job and job.state in tts_service.ACTIVE_STATES:
         job.cancel.set()
-        if job.state == 'waiting':
-            job.state = 'stopped'  # nothing is mid-write while waiting, so report it at once
-        elif job.state != 'stopped':
-            job.state = 'stopping'  # a Gemini request may still be in flight; the job stops right after it
+        if job.state != 'stopped':
+            job.state = 'stopping'  # one word may still be in flight; the job stops right after it
     return job.public() if job else {'state': 'idle'}

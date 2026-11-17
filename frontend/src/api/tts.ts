@@ -2,19 +2,15 @@ import client from './client';
 
 export interface TtsStatus {
   enabled: boolean;
-  gemini?: boolean;
-  piper?: boolean;
-  model: string;
-  voice: string;
+  engine?: string;
+  voice?: string;
 }
 
 export interface TtsJob {
-  state: 'idle' | 'queued' | 'running' | 'waiting' | 'stopping' | 'done' | 'stopped' | 'failed';
+  state: 'idle' | 'queued' | 'running' | 'stopping' | 'done' | 'stopped' | 'failed';
   mode?: 'fill' | 'upgrade';
-  piper?: number;
   total?: number;
   done?: number;
-  resume_at?: number | null;
   added?: number;
   skipped?: number;
   failed?: number;

@@ -17,4 +17,3 @@ anki==26.9.3
 Pillow==13.0.0
 
 # Offline pronunciation fallback when the free Gemini TTS quota runs out.
-piper-tts==1.8.0
