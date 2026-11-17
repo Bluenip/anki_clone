@@ -911,3 +911,33 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .deck-audio-error { color: var(--danger-text); font-size: 0.875rem; }
 .deck-audio-waiting { color: var(--warning-text); }
 .deck-audio-buttons { display: flex; gap: 0.5rem; flex-wrap: wrap; justify-content: flex-end; }
+
+/* Hidden text that screen readers still announce (icon buttons keep their full names). */
+.sr-only {
+  position: absolute !important; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+}
+
+/* Compact field toolbar shared by the Add and Edit note pages. */
+.field-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 8px; }
+.formatting-tools, .media-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.formatting-tools { flex: 1 1 auto; }
+.formatting-tools > [data-visual-for] { flex-basis: 100%; }
+.tool-button, .form-group .field-tools .tool-button, .form-group .field-tools label.tool-button {
+  display: inline-flex; margin: 0; box-shadow: none; flex: 0 0 auto; align-items: center; justify-content: center; position: relative;
+  min-width: 32px; height: 32px; padding: 0 8px; border-radius: 8px;
+  border: 1px solid transparent; background: transparent; color: var(--text-secondary);
+  font: inherit; font-size: 14px; line-height: 1; cursor: pointer;
+}
+.tool-button:hover:not(:disabled):not(.is-disabled), .tool-button:focus-visible, .tool-button[aria-expanded="true"], .tool-button[aria-pressed="true"],
+.form-group .field-tools .tool-button:hover:not(:disabled):not(.is-disabled), .form-group .field-tools .tool-button[aria-expanded="true"], .form-group .field-tools .tool-button[aria-pressed="true"] {
+  background: var(--input-bg); border-color: var(--border-color); color: var(--text-primary);
+}
+.tool-button:focus-within { outline: 2px solid var(--accent-text); outline-offset: 1px; }
+.tool-button:disabled, .tool-button.is-disabled { opacity: .45; cursor: not-allowed; }
+.form-group .field-tools .tool-button.is-recording { color: var(--danger); border-color: var(--danger); }
+.form-group .field-tools .tool-button-end { margin-left: auto; }
+.media-tools { margin-left: auto; padding-left: 8px; border-left: 1px solid var(--border-color); }
+.media-tools-status, .media-tools-error { font-size: 12px; color: var(--text-secondary); }
+.media-tools-error { color: var(--danger); }
+@media (pointer: coarse) { .tool-button { min-width: 40px; height: 40px; } }

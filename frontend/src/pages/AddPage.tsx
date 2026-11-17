@@ -187,7 +187,7 @@ const AddPage = () => {
   return (
     <div className="page-container add-note-page">
       <div className="glass-card add-note-card">
-        <header className="add-note-heading"><div><p className="add-note-eyebrow">{t('add.eyebrow')}</p><h1>{t('add.title')}</h1><p>{t('add.subtitle')}</p></div><Link to="/note-types">{t('nt.title')} ↗</Link></header>
+        <header className="add-note-heading"><h1>{t('add.title')}</h1><Link to="/note-types">{t('nt.title')} ↗</Link></header>
 
         {successMsg && <div className="alert alert-success" role="status" style={{ marginBottom: '1rem' }}>{successMsg}</div>}
         {errorMsg && <div className="alert alert-error" role="alert" style={{ marginBottom: '1rem' }}>{errorMsg}</div>}
@@ -222,13 +222,9 @@ const AddPage = () => {
           </div>
 
           </div>
-          <div className="add-note-help" style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '1.25rem', lineHeight: 1.4 }}>
-            <span>{t('add.htmlHint')} </span>
-            {selectedKind === 'cloze' && (
-              <span>{t('add.clozeHint1')} <code>{'{{c1::answer}}'}</code>{t('add.clozeHint2')} </span>
-            )}
-            <span>{t('add.optionalHint')}</span>
-          </div>
+          {selectedKind === 'cloze' && (
+            <p className="add-note-help">{t('add.clozeHint1')} <code>{'{{c1::answer}}'}</code>{t('add.clozeHint2')}</p>
+          )}
 
           {isImageOcclusion && <ImageOcclusionEditor key={selectedKind} fields={fields} onChange={setFields} disabled={pending} onBusyChange={active => setMediaBusy(n => Math.max(0, n + (active ? 1 : -1)))} />}
           <div className="add-note-fields">
@@ -236,8 +232,8 @@ const AddPage = () => {
             const isOptional = isImageOcclusion || fieldName === 'Extra' || fieldName === 'Add Reverse';
             return (
               <div className="form-group add-note-field" key={fieldName}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.375rem' }}>
-                  <label htmlFor={`field-${fieldName}`} style={{ margin: 0 }}>
+                <div className="add-note-field-head">
+                  <label htmlFor={`field-${fieldName}`}>
                     {fieldName} {isOptional && <span style={{ opacity: 0.6 }}>{t('add.optional')}</span>}
                   </label>
                   {selectedKind === 'cloze' && fieldName === 'Text' && (
@@ -252,7 +248,6 @@ const AddPage = () => {
                     </button>
                   )}
                 </div>
-                <FormattingTools targetId={`field-${fieldName}`} disabled={pending || mediaBusy > 0} onChange={value => setFields(prev => ({ ...prev, [fieldName]: value }))} />
                 <textarea
                   id={`field-${fieldName}`}
                   ref={fieldName === 'Text' ? textRef : undefined}
@@ -263,7 +258,10 @@ const AddPage = () => {
                   disabled={pending || mediaBusy > 0}
                   placeholder={t('add.enterField', { field: fieldName })}
                 />
-                <MediaTools key={selectedKind + fieldName} disabled={pending} onBusyChange={active => setMediaBusy(n => Math.max(0, n + (active ? 1 : -1)))} onInsert={markup => setFields(prev => ({ ...prev, [fieldName]: (prev[fieldName] || '') + markup }))} />
+                <div className="field-tools">
+                  <FormattingTools targetId={`field-${fieldName}`} disabled={pending || mediaBusy > 0} onChange={value => setFields(prev => ({ ...prev, [fieldName]: value }))} />
+                  <MediaTools key={selectedKind + fieldName} disabled={pending} onBusyChange={active => setMediaBusy(n => Math.max(0, n + (active ? 1 : -1)))} onInsert={markup => setFields(prev => ({ ...prev, [fieldName]: (prev[fieldName] || '') + markup }))} />
+                </div>
               </div>
             );
           })}
@@ -281,7 +279,7 @@ const AddPage = () => {
             />
           </div>
 
-          <div className="add-note-submit"><span>{t('add.ready')}</span><button
+          <div className="add-note-submit"><span><kbd>Ctrl</kbd> + <kbd>Enter</kbd> {t('add.saveHint')}</span><button
             type="submit"
             className="btn btn-primary btn-full"
             disabled={pending || mediaBusy > 0 || decks.length === 0 || !selectedDeckId}
@@ -290,7 +288,7 @@ const AddPage = () => {
           </button></div>
           {decks.length === 0 && (
             <p style={{ textAlign: 'center', marginTop: '1rem', color: 'var(--danger)' }}>
-              Please create a deck first.
+              {t('add.createDeckFirst')}
             </p>
           )}
         </form>
