@@ -154,7 +154,7 @@ const DEFAULT_SETTINGS: DeckSettings = {
   bury_interday_learning_siblings: false,
 
   // Student test mode
-  quiz_mode: false,
+  quiz_mode: true,
   quiz_types: [...QUIZ_TYPES],
   quiz_copy_new_cards: true,
   quiz_word_field: '',

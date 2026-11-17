@@ -35,8 +35,16 @@ def test_answer_matching_is_forgiving_but_not_lenient():
     assert normalize('Ｈｅｌｌｏ') == 'hello'
 
 
-def test_quiz_disabled_keeps_normal_flow(client, auth_headers_a):
+def test_new_decks_quiz_by_default(client, auth_headers_a):
     deck_id = make_deck(client, auth_headers_a, {})
+    card = next_card(client, auth_headers_a, deck_id)
+    assert card['quiz']['type'] == 'copy'
+    refused = client.post(f"/api/study/{card['card_id']}/review", headers=auth_headers_a, json={'rating': 4})
+    assert refused.status_code == 400
+
+
+def test_quiz_disabled_keeps_normal_flow(client, auth_headers_a):
+    deck_id = make_deck(client, auth_headers_a, {'quiz_mode': False})
     card = next_card(client, auth_headers_a, deck_id)
     assert card['quiz'] is None
     ok = client.post(f"/api/study/{card['card_id']}/review", headers=auth_headers_a, json={'rating': 4})
@@ -183,7 +191,7 @@ def test_custom_study_uses_the_quiz_and_server_rating(client, auth_headers_a, db
 
 
 def test_custom_study_without_quiz_mode_still_self_rates(client, auth_headers_a, db_session):
-    make_deck(client, auth_headers_a, {})
+    make_deck(client, auth_headers_a, {'quiz_mode': False})
     session = client.post('/api/filtered', headers=auth_headers_a, json={'name': 'Plain', 'search': '', 'reschedule': True}).json()
     nxt = client.get(f"/api/filtered/{session['id']}/next", headers=auth_headers_a).json()
     assert nxt['card']['quiz'] is None

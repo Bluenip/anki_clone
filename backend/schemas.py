@@ -181,7 +181,7 @@ class DeckSettings(BaseModel):
     seconds_to_show_answer_for: float = Field(default=0, ge=0, le=3600, allow_inf_nan=False)
     question_action: str = "Show Answer"
     answer_action: str = "Bury Card"
-    quiz_mode: bool = False
+    quiz_mode: bool = True
     quiz_types: list[str] = Field(default_factory=lambda: ["multiple_choice", "listening", "typing", "cloze", "scramble"], max_length=5)
     quiz_copy_new_cards: bool = True
     quiz_word_field: str = Field(default="", max_length=200)
