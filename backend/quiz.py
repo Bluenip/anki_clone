@@ -1,6 +1,6 @@
 """Graded review exercises so students cannot self-rate their way past cards.
 
-When a deck enables ``quiz_mode`` the study screen no longer offers the
+Unless a deck turns ``quiz_mode`` off (it is on by default), the study screen no longer offers the
 Again/Hard/Good/Easy buttons. Each card instead becomes one exercise
 (multiple choice, listening, typing, cloze, scramble, or copy for new cards)
 and the server derives the rating from the student's first answer:
@@ -28,7 +28,7 @@ from note_rendering import text_only
 QUIZ_TYPES = ('multiple_choice', 'listening', 'typing', 'cloze', 'scramble')
 ALL_TYPES = QUIZ_TYPES + ('copy',)
 DEFAULT_SETTINGS = {
-    'quiz_mode': False,
+    'quiz_mode': True,
     'quiz_types': list(QUIZ_TYPES),
     'quiz_copy_new_cards': True,
     'quiz_word_field': '',

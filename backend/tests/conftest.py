@@ -173,3 +173,16 @@ def no_background_note_audio(monkeypatch):
     """New notes normally get pronunciation audio in a background thread; tests stay offline and deterministic."""
     import tts_service
     monkeypatch.setattr(tts_service, 'attach_in_background', lambda *args, **kwargs: None)
+
+
+@pytest.fixture(autouse=True)
+def self_rating_by_default(request, monkeypatch):
+    """Decks quiz by default, but most suites test scheduling through self-rated reviews.
+
+    Only test_quiz.py sees the real default; elsewhere a deck without a saved
+    ``quiz_mode`` behaves as if quizzing were off.
+    """
+    if request.node.path.name == 'test_quiz.py':
+        return
+    import quiz
+    monkeypatch.setitem(quiz.DEFAULT_SETTINGS, 'quiz_mode', False)
