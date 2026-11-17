@@ -4,7 +4,7 @@ import io
 import json
 
 from models import Deck, DeckOptionsBinding, NoteType
-from note_service import BUILTINS
+from note_service import BUILTINS, matches_builtin
 from note_text_import import import_notes_text
 from schemas import DeckCreate
 from text_transfer import SEPARATORS
@@ -23,9 +23,8 @@ def resolve_type(db, user_id, name, data):
     if model is None and name.isdecimal():
         model = db.query(NoteType).filter_by(user_id=user_id, id=int(name)).first()
     for kind, definition in BUILTINS.items():
-        if (model.name if model is not None else name) == definition['name'] and (model is None or (
-                json.loads(model.fields_json) == definition['fields'] and
-                json.loads(model.templates_json) == definition['templates'])):
+        if (model.name if model is not None else name) == definition['name'] and (
+                model is None or matches_builtin(model, definition)):
             return kind, None, definition['fields'], definition['name']
     if model is not None:
         return None, model.id, json.loads(model.fields_json), model.name
