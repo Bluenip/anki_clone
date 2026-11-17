@@ -28,7 +28,8 @@ export default function VisualField({ targetId, disabled, onChange }: { targetId
     onChange(sanitizeHtml(editor.current.innerHTML));
   };
   return <>
-    <button type="button" aria-pressed={visual} disabled={disabled} onClick={() => setVisual(v => !v)}>{visual ? t('visual.html') : t('visual.editor')}</button>
+    <button type="button" className="tool-button tool-button-end" aria-pressed={visual} disabled={disabled} title={visual ? t('visual.html') : t('visual.editor')}
+      onClick={() => setVisual(v => !v)}><span aria-hidden="true">{visual ? '</>' : '✎'}</span><span className="sr-only">{visual ? t('visual.html') : t('visual.editor')}</span></button>
     {visual && <div ref={editor} data-visual-for={targetId} role="textbox" aria-label={`Visual ${targetId}`} aria-multiline="true" aria-invalid={Boolean(invalidMessage)} contentEditable={!disabled} suppressContentEditableWarning
       style={{ width: '100%', minHeight: 120, border: '1px solid var(--glass-border)', borderRadius: 8, padding: 12, overflowWrap: 'anywhere' }}
       onInput={e => { setInvalidMessage(''); onChange(sanitizeHtml(e.currentTarget.innerHTML)); }}

@@ -70,13 +70,16 @@ export default function MediaTools({ disabled = false, onInsert, onBusyChange }:
     } catch (e) { recorder.current = null; acquired?.getTracks().forEach(t => t.stop()); if (mounted.current) { setBusy(false); setError((e as Error).message || t('mt.noMic')); } }
     finally { requestingMic.current = false; }
   };
-  return <div className="media-tools" style={{ marginBlock: 8 }}>
-    <label>{t('mt.attach')} <input type="file" accept="image/png,image/jpeg,image/gif,image/webp,audio/*,video/webm,video/mp4" disabled={disabled || busy} onChange={e => {
-      const file = e.target.files?.[0]; e.target.value = ''; if (file) void upload(file, file.name);
-    }} /></label>
-    {recording ? <button type="button" onClick={() => recorder.current?.stop()}>{t('mt.stop')}</button>
-      : <button type="button" disabled={disabled || busy || !navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined'} onClick={() => void record()}>{t('mt.record')}</button>}
-    {busy && <span role="status">{recording ? t('mt.recording') : t('mt.attaching')}</span>}
-    {error && <span role="alert">{error}</span>}
+  return <div className="media-tools">
+    <label className={`tool-button${disabled || busy ? ' is-disabled' : ''}`} title={t('mt.attach')}>
+      <span aria-hidden="true">📎</span>
+      <input type="file" className="sr-only" aria-label={t('mt.attach')} accept="image/png,image/jpeg,image/gif,image/webp,audio/*,video/webm,video/mp4" disabled={disabled || busy} onChange={e => {
+        const file = e.target.files?.[0]; e.target.value = ''; if (file) void upload(file, file.name);
+      }} />
+    </label>
+    {recording ? <button type="button" className="tool-button is-recording" title={t('mt.stop')} onClick={() => recorder.current?.stop()}><span aria-hidden="true">■</span><span className="sr-only">{t('mt.stop')}</span></button>
+      : <button type="button" className="tool-button" title={t('mt.record')} disabled={disabled || busy || !navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined'} onClick={() => void record()}><span aria-hidden="true">🎙</span><span className="sr-only">{t('mt.record')}</span></button>}
+    {busy && <span className="media-tools-status" role="status">{recording ? t('mt.recording') : t('mt.attaching')}</span>}
+    {error && <span className="media-tools-error" role="alert">{error}</span>}
   </div>;
 }

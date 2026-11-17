@@ -92,15 +92,25 @@ it('releases microphone tracks when recording fails', async () => {
   Object.defineProperty(navigator, 'mediaDevices', { configurable: true, value: { getUserMedia: vi.fn().mockResolvedValue({ getTracks: () => [{ stop }] }) } });
   try {
     render(<MediaTools onInsert={vi.fn()} />);
-    fireEvent.click(screen.getByText('Record audio'));
+    fireEvent.click(screen.getByRole('button', { name: 'Record audio' }));
     await screen.findByText('Stop recording and attach');
     act(() => instances[0].onerror?.());
     await screen.findByText('Recording failed. Please try again.');
     expect(stop).toHaveBeenCalled();
-    expect((screen.getByText('Record audio') as HTMLButtonElement).disabled).toBe(false);
+    expect((screen.getByRole('button', { name: 'Record audio' }) as HTMLButtonElement).disabled).toBe(false);
   } finally {
     vi.unstubAllGlobals();
     if (original) Object.defineProperty(navigator, 'mediaDevices', original);
     else Reflect.deleteProperty(navigator, 'mediaDevices');
   }
+});
+
+it('keeps rare formatting behind the more button', async () => {
+  const { default: FormattingTools } = await import('../components/FormattingTools');
+  render(<><FormattingTools targetId="f" disabled={false} onChange={() => undefined} /><textarea id="f" defaultValue="" /></>);
+  expect(screen.getByRole('button', { name: 'Bold' })).toBeDefined();
+  expect(screen.queryByRole('button', { name: 'Subscript' })).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: /More formatting/ }));
+  expect(screen.getByRole('button', { name: 'Subscript' })).toBeDefined();
+  expect(screen.getByRole('button', { name: 'Math' })).toBeDefined();
 });

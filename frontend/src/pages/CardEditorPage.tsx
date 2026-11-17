@@ -304,7 +304,6 @@ const CardEditorPageContent = () => {
                     <label htmlFor={`edit-field-${fieldName}`}>
                       {fieldName} {isOptional && <span style={{ opacity: 0.6 }}>{t('add.optional')}</span>}
                     </label>
-                    <FormattingTools targetId={`edit-field-${fieldName}`} disabled={savePending || mediaBusy > 0} onChange={value => setEditFields(prev => ({ ...prev, [fieldName]: value }))} />
                     <textarea
                       id={`edit-field-${fieldName}`}
                       aria-label={fieldName}
@@ -315,7 +314,10 @@ const CardEditorPageContent = () => {
                       disabled={savePending || mediaBusy > 0}
                       placeholder={t('add.enterField', { field: fieldName })}
                     />
-                    <MediaTools key={String(editingCard.id) + fieldName} disabled={savePending} onBusyChange={active => setMediaBusy(n => Math.max(0, n + (active ? 1 : -1)))} onInsert={markup => setEditFields(prev => ({ ...prev, [fieldName]: (prev[fieldName] || '') + markup }))} />
+                    <div className="field-tools">
+                      <FormattingTools targetId={`edit-field-${fieldName}`} disabled={savePending || mediaBusy > 0} onChange={value => setEditFields(prev => ({ ...prev, [fieldName]: value }))} />
+                      <MediaTools key={String(editingCard.id) + fieldName} disabled={savePending} onBusyChange={active => setMediaBusy(n => Math.max(0, n + (active ? 1 : -1)))} onInsert={markup => setEditFields(prev => ({ ...prev, [fieldName]: (prev[fieldName] || '') + markup }))} />
+                    </div>
                   </div>
                 );
               })}
