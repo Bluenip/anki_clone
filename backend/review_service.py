@@ -39,7 +39,10 @@ def claim_version(db, state, expected):
     db.refresh(state)
 
 
-def review(db, card, user_id, data, now=None, *, commit=True, filtered_session_id=None):
+QUIZ_UNDO_BLOCKED='Answers to exercises cannot be undone'
+
+
+def review(db, card, user_id, data, now=None, *, commit=True, filtered_session_id=None, quiz_graded=False):
     from routers.study_router import _handle_learning, _handle_relearning, _handle_lapse, _handle_review
     now = now or datetime.now(timezone.utc)
     if data.request_id:
@@ -133,7 +136,7 @@ def review(db, card, user_id, data, now=None, *, commit=True, filtered_session_i
               'note_tags_after':json.loads(card.note_link.note.tags_json) if card.note_link else None}
     db.add(StudyOperation(id=operation_id,user_id=user_id,card_id=card.id,request_id=data.request_id,
                          before_json=json.dumps({'progress':before,'state':before_state,'siblings':siblings,
-                                                  'note_tags':original_tags}),
+                                                  'note_tags':original_tags,'quiz':quiz_graded}),
                          response_json=json.dumps(response)))
     if commit: db.commit()
     return response
@@ -142,6 +145,9 @@ def review(db, card, user_id, data, now=None, *, commit=True, filtered_session_i
 def undo(db,user_id):
     operation=db.query(StudyOperation).filter_by(user_id=user_id,undone=False).order_by(StudyOperation.created_at.desc(),StudyOperation.id.desc()).first()
     if operation is None:raise HTTPException(status_code=404,detail='No review to undo')
+    if json.loads(operation.before_json).get('quiz'):
+        # Undoing would let a student retry an exercise they already got wrong.
+        raise HTTPException(status_code=409,detail=QUIZ_UNDO_BLOCKED)
     response=json.loads(operation.response_json)
     card=db.query(Card).join(Deck).filter(Card.id==operation.card_id,Deck.user_id==user_id).first()
     if card is None:raise HTTPException(status_code=409,detail='Card no longer exists')

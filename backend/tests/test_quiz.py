@@ -1,5 +1,7 @@
 import json
 
+import pytest
+
 from models import ReviewLog
 from quiz import compare, normalize, plain
 
@@ -200,3 +202,105 @@ def test_custom_study_without_quiz_mode_still_self_rates(client, auth_headers_a,
                             'expected_version': nxt['card']['version'], 'rating': 4})
     assert res.status_code == 200, res.text
     assert db_session.query(ReviewLog).filter_by(card_id=nxt['card']['card_id']).one().rating == 4
+
+
+def test_reloading_after_a_wrong_answer_keeps_the_first_answer(client, auth_headers_a, db_session):
+    from models import QuizAttempt
+    deck_id = make_deck(client, auth_headers_a, {'quiz_mode': True})
+    card = next_card(client, auth_headers_a, deck_id)
+    first = client.post(f"/api/study/{card['card_id']}/quiz/check", headers=auth_headers_a, json={'response': 'nope'}).json()
+    assert first['rating'] == 1
+    # The student saw the answer, reloads and tries again: the first answer still counts.
+    reloaded = next_card(client, auth_headers_a, deck_id)
+    assert reloaded['card_id'] == card['card_id']
+    second = client.post(f"/api/study/{card['card_id']}/quiz/check", headers=auth_headers_a, json={'response': first['expected']}).json()
+    assert second == {**first, 'response': 'nope'}
+    reviewed = client.post(f"/api/study/{card['card_id']}/review", headers=auth_headers_a,
+                           json={'rating': 3, 'expected_version': reloaded['version'], 'quiz': {'response': first['expected']}})
+    assert reviewed.status_code == 200, reviewed.text
+    assert db_session.query(ReviewLog).one().rating == 1
+    assert db_session.query(QuizAttempt).count() == 0  # cleared once the review is saved
+
+
+def test_a_hint_cannot_be_taken_back_by_checking_again(client, auth_headers_a, db_session):
+    deck_id = make_deck(client, auth_headers_a, {'quiz_mode': True, 'quiz_copy_new_cards': False, 'quiz_types': ['typing']})
+    card = next_card(client, auth_headers_a, deck_id)
+    word = next(w for w, m in WORDS if m == card['quiz']['meaning'])
+    client.post(f"/api/study/{card['card_id']}/quiz/check", headers=auth_headers_a, json={'response': word, 'hint_used': True})
+    again = client.post(f"/api/study/{card['card_id']}/quiz/check", headers=auth_headers_a, json={'response': word, 'hint_used': False})
+    assert again.json()['rating'] == 2
+    client.post(f"/api/study/{card['card_id']}/review", headers=auth_headers_a, json={'rating': 3, 'quiz': {'response': word}})
+    assert db_session.query(ReviewLog).one().rating == 2
+
+
+def test_the_next_review_of_a_card_gets_a_fresh_attempt(client, auth_headers_a, db_session):
+    deck_id = make_deck(client, auth_headers_a, {'quiz_mode': True}, WORDS[:1])
+    card = next_card(client, auth_headers_a, deck_id)
+    client.post(f"/api/study/{card['card_id']}/quiz/check", headers=auth_headers_a, json={'response': 'nope'})
+    client.post(f"/api/study/{card['card_id']}/review", headers=auth_headers_a, json={'rating': 1, 'quiz': {'response': 'nope'}})
+    from models import StudyProgress
+    from datetime import datetime, timedelta, timezone
+    db_session.query(StudyProgress).update({'next_review': datetime.now(timezone.utc) - timedelta(minutes=1)})
+    db_session.commit()
+    later = next_card(client, auth_headers_a, deck_id)
+    assert later['card_id'] == card['card_id'] and later['version'] > card['version']
+    check = client.post(f"/api/study/{card['card_id']}/quiz/check", headers=auth_headers_a, json={'response': 'apple'})
+    assert check.json()['correct'] is True
+
+
+def test_a_retried_review_request_is_not_graded_again(client, auth_headers_a, db_session):
+    # The retry arrives after the card's version moved on, so re-grading would use the next exercise.
+    deck_id = make_deck(client, auth_headers_a, {'quiz_mode': True, 'quiz_copy_new_cards': False,
+                                                 'quiz_types': ['multiple_choice']})
+    for index in range(len(WORDS)):
+        card = next_card(client, auth_headers_a, deck_id)
+        quiz = card['quiz']
+        word = next(w for w, m in WORDS if m == quiz['meaning'] or w == quiz.get('word'))
+        answer = dict(WORDS)[word] if quiz['direction'] == 'word_to_meaning' else word
+        check = client.post(f"/api/study/{card['card_id']}/quiz/check", headers=auth_headers_a, json={'response': answer}).json()
+        assert check['rating'] == 3
+        body = {'rating': 3, 'request_id': f'retry-{index}', 'expected_version': card['version'], 'quiz': {'response': answer}}
+        first = client.post(f"/api/study/{card['card_id']}/review", headers=auth_headers_a, json=body)
+        retry = client.post(f"/api/study/{card['card_id']}/review", headers=auth_headers_a, json=body)
+        assert first.status_code == retry.status_code == 200, retry.text
+        assert retry.json() == first.json()
+    assert db_session.query(ReviewLog).count() == len(WORDS)
+
+
+def test_answers_to_exercises_cannot_be_undone(client, auth_headers_a, auth_headers_b, db_session):
+    deck_id = make_deck(client, auth_headers_a, {'quiz_mode': True})
+    card = next_card(client, auth_headers_a, deck_id)
+    client.post(f"/api/study/{card['card_id']}/review", headers=auth_headers_a, json={'rating': 1, 'quiz': {'response': 'nope'}})
+    blocked = client.post('/api/study/undo/latest', headers=auth_headers_a)
+    assert blocked.status_code == 409
+    assert blocked.json()['detail'] == 'Answers to exercises cannot be undone'
+    assert db_session.query(ReviewLog).one().rating == 1
+    # Self-rated decks keep their undo.
+    plain = make_deck(client, auth_headers_b, {'quiz_mode': False})
+    other = next_card(client, auth_headers_b, plain)
+    client.post(f"/api/study/{other['card_id']}/review", headers=auth_headers_b, json={'rating': 3})
+    assert client.post('/api/study/undo/latest', headers=auth_headers_b).status_code == 200
+
+
+@pytest.mark.parametrize('reschedule', [True, False])
+def test_custom_study_exercise_answers_cannot_be_undone(client, auth_headers_a, db_session, reschedule):
+    make_deck(client, auth_headers_a, {'quiz_mode': True, 'quiz_copy_new_cards': False, 'quiz_types': ['typing']})
+    session = client.post('/api/filtered', headers=auth_headers_a,
+                          json={'name': f'S{reschedule}', 'search': '', 'reschedule': reschedule}).json()
+    nxt = client.get(f"/api/filtered/{session['id']}/next", headers=auth_headers_a).json()
+    res = client.post(f"/api/filtered/{session['id']}/answer", headers=auth_headers_a,
+                      json={'expected_session_version': nxt['session']['version'], 'card_id': nxt['card']['card_id'],
+                            'expected_version': nxt['card']['version'], 'rating': 4, 'quiz': {'response': 'nope'}})
+    assert res.status_code == 200, res.text
+    undo = client.post(f"/api/filtered/{session['id']}/undo", headers=auth_headers_a)
+    assert undo.status_code == 409, undo.text
+
+
+def test_deleting_the_account_removes_quiz_attempts(client, auth_headers_a, db_session, user_a):
+    from models import QuizAttempt
+    deck_id = make_deck(client, auth_headers_a, {'quiz_mode': True})
+    card = next_card(client, auth_headers_a, deck_id)
+    client.post(f"/api/study/{card['card_id']}/quiz/check", headers=auth_headers_a, json={'response': 'nope'})
+    assert db_session.query(QuizAttempt).count() == 1
+    assert client.delete('/api/auth/me', headers=auth_headers_a).status_code == 200
+    assert db_session.query(QuizAttempt).count() == 0

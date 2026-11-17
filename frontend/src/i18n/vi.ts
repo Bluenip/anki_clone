@@ -976,6 +976,7 @@ export const vi: Record<MessageKey, string> = {
   "study.undo": "Hoàn tác",
   "study.undoAria": "Hoàn tác lượt ôn",
   "study.undoFailed": "Không hoàn tác được lượt ôn.",
+  "study.quizUndoBlocked": "Không thể hoàn tác câu trả lời bài tập, kết quả lần trả lời đầu tiên được giữ nguyên.",
   "study.undoLast": "Hoàn tác lượt ôn vừa rồi",
   "study.undoTitle": "Hoàn tác lượt ôn vừa rồi (Ctrl+Z)",
   "study.waiting": "Đang chờ thẻ tiếp theo",

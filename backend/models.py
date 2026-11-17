@@ -24,6 +24,7 @@ class User(Base):
     study_operations = relationship("StudyOperation", cascade="all, delete-orphan")
     filtered_sessions = relationship('FilteredSession', cascade='all, delete-orphan')
     option_presets = relationship("OptionPreset", cascade="all, delete-orphan")
+    quiz_attempts = relationship("QuizAttempt", cascade="all, delete-orphan")
 
 
 class Deck(Base):
@@ -199,6 +200,25 @@ class SchedulerState(Base):
     fsrs_json = Column(Text, nullable=True)
     buried_until = Column(DateTime, nullable=True)
     version = Column(Integer, nullable=False, default=0)
+
+
+class QuizAttempt(Base):
+    """The first answer to a card's current exercise, so reloading cannot re-answer it.
+
+    Keyed by the card's scheduling version: a review bumps the version, which
+    starts a fresh exercise. Rows are deleted once the review is saved.
+    """
+    __tablename__ = 'quiz_attempts'
+    __table_args__ = (UniqueConstraint('user_id', 'card_id', 'version', name='uq_quiz_attempt'),)
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
+    card_id = Column(Integer, nullable=False, index=True)
+    version = Column(Integer, nullable=False)
+    expected = Column(Text, nullable=False)  # guards against a reused card id
+    response = Column(Text, nullable=False)
+    hint_used = Column(Boolean, nullable=False, default=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
 
 class StudyOperation(Base):

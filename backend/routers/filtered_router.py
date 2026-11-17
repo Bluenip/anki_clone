@@ -14,7 +14,7 @@ from models import User, Deck, Card, StudyProgress, SchedulerState, FilteredSess
 from scheduling import utc
 from typing import Optional
 from schemas import QuizAnswer
-from routers.study_router import _quiz_exercise, _quiz_grade
+from routers.study_router import _forget_quiz_attempts, _quiz_exercise, _quiz_grade
 
 router = APIRouter(prefix='/api/filtered', tags=['Custom Study'])
 
@@ -232,6 +232,7 @@ def answer(sid:int,data:Answer,db:Session=Depends(get_db),user:User=Depends(get_
             raise HTTPException(409,'This card is not available yet; reload')
         graded=_quiz_grade(db,item.card,user.id,data.quiz)
         if graded is not None:
+            _forget_quiz_attempts(db,item.card_id,user.id)
             if data.quiz is None:
                 raise HTTPException(400,'This deck requires answering the exercise before rating')
             data.rating=graded['rating']  # the server, not the student, decides the rating in quiz mode
@@ -241,7 +242,7 @@ def answer(sid:int,data:Answer,db:Session=Depends(get_db),user:User=Depends(get_
             before={'session_id':sid,'session_version':session.version,'position':item.position,
                     'available_at':utc(item.available_at).isoformat() if item.available_at else None}
             result=review(db,item.card,user.id,ReviewRequest(rating=data.rating,expected_version=data.expected_version,
-                          duration_ms=data.duration_ms),now,commit=False,filtered_session_id=sid)
+                          duration_ms=data.duration_ms),now,commit=False,filtered_session_id=sid,quiz_graded=graded is not None)
             db.flush()
             operation=db.get(StudyOperation,result['operation_id'])
             payload=json.loads(operation.before_json);payload['filtered']=before;operation.before_json=json.dumps(payload)
@@ -255,7 +256,7 @@ def answer(sid:int,data:Answer,db:Session=Depends(get_db),user:User=Depends(get_
             state=state_for(db,item.card)
             progress=db.query(StudyProgress).filter_by(card_id=item.card_id,user_id=user.id).first()
             tags=json.loads(item.card.note_link.note.tags_json) if item.card.note_link else None
-            before={'progress':serialize_progress(progress),'state':serialize_state(state),'siblings':{},'note_tags':tags,
+            before={'progress':serialize_progress(progress),'state':serialize_state(state),'siblings':{},'note_tags':tags,'quiz':graded is not None,
                     'filtered':{'session_id':sid,'session_version':session.version,'position':item.position,
                                 'available_at':utc(item.available_at).isoformat() if item.available_at else None}}
             claim_version(db,state,data.expected_version)

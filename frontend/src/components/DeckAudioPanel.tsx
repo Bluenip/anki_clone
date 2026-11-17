@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { cancelDeckTts, getDeckTtsJob, getDeckTtsSummary, getTtsStatus, startDeckTts } from '../api/tts';
 import type { TtsJob } from '../api/tts';
 import { usePrefs } from '../context/usePrefs';
@@ -13,21 +13,28 @@ export default function DeckAudioPanel({ deckId }: { deckId: number }) {
   const [piperWords, setPiperWords] = useState(0);
   const [job, setJob] = useState<TtsJob>({ state: 'idle' });
   const [error, setError] = useState<string | null>(null);
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const poll = useCallback(async () => {
-    try {
-      const res = await getDeckTtsJob(deckId);
-      setJob(res.data);
-      if (ACTIVE.has(res.data.state)) timer.current = setTimeout(poll, 2000);
-      else getDeckTtsSummary(deckId).then(r => setPiperWords(r.data.piper_words)).catch(() => undefined);
-    } catch {
-      timer.current = setTimeout(poll, 5000);
-    }
-  }, [deckId]);
+  /** Schedules the next job status check; replaced on mount so it never outlives this panel. */
+  const schedulePoll = useRef<(delay: number) => void>(() => undefined);
 
   useEffect(() => {
     let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const schedule = (delay: number) => {
+      clearTimeout(timer);
+      if (!cancelled) timer = setTimeout(() => void poll(), delay);
+    };
+    async function poll() {
+      try {
+        const res = await getDeckTtsJob(deckId);
+        if (cancelled) return;
+        setJob(res.data);
+        if (ACTIVE.has(res.data.state)) schedule(2000);
+        else getDeckTtsSummary(deckId).then(r => { if (!cancelled) setPiperWords(r.data.piper_words); }).catch(() => undefined);
+      } catch {
+        schedule(5000);
+      }
+    }
+    schedulePoll.current = schedule;
     getTtsStatus()
       .then(res => {
         if (cancelled || !res.data.enabled) return;
@@ -38,9 +45,10 @@ export default function DeckAudioPanel({ deckId }: { deckId: number }) {
       .catch(() => undefined);
     return () => {
       cancelled = true;
-      if (timer.current) clearTimeout(timer.current);
+      clearTimeout(timer);
+      schedulePoll.current = () => undefined;
     };
-  }, [poll]);
+  }, [deckId]);
 
   if (!enabled) return null;
 
@@ -49,8 +57,7 @@ export default function DeckAudioPanel({ deckId }: { deckId: number }) {
     try {
       const res = await startDeckTts(deckId, mode);
       setJob(res.data);
-      if (timer.current) clearTimeout(timer.current);
-      timer.current = setTimeout(poll, 1000);
+      schedulePoll.current(1000);
     } catch (err: any) {
       setError(err?.response?.data?.detail || t('tts.failed'));
     }
@@ -70,7 +77,17 @@ export default function DeckAudioPanel({ deckId }: { deckId: number }) {
         </div>
         {running ? (
           <button type="button" className="btn btn-ghost btn-sm" disabled={job.state === 'stopping'}
-            onClick={() => { setJob(j => ({ ...j, state: 'stopping' })); void cancelDeckTts(deckId).then(r => setJob(r.data)); }}>
+            onClick={() => {
+              setError(null);
+              setJob(j => ({ ...j, state: 'stopping' }));
+              cancelDeckTts(deckId)
+                .then(r => setJob(r.data))
+                .catch((err: any) => {
+                  setError(err?.response?.data?.detail || t('tts.failed'));
+                  // The job may still be running: show its real state instead of a stuck "Stopping…".
+                  schedulePoll.current(0);
+                });
+            }}>
             {job.state === 'stopping' ? t('tts.stopping') : t('tts.stop')}
           </button>
         ) : (

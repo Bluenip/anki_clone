@@ -68,6 +68,34 @@ describe('Student quiz mode', () => {
     expect(review.mock.calls[0][2]).toMatchObject({ quiz: { response: 'pear', hint_used: false } });
   });
 
+  it('after a reload shows the first recorded answer instead of the retry', async () => {
+    vi.spyOn(studyApi, 'getNextCard').mockResolvedValue({
+      data: { ...baseCard, quiz: { type: 'typing', direction: 'meaning_to_word', meaning: 'quả táo', answer_length: 5,
+        audio: null, tts: null } },
+    } as any);
+    vi.spyOn(studyApi, 'checkQuiz').mockResolvedValue({
+      data: { type: 'typing', result: 'wrong', correct: false, expected: 'apple', rating: 1, response: 'pear' },
+    } as any);
+    renderStudy();
+    const input = await screen.findByPlaceholderText(/type your answer|nhập câu trả lời/i);
+    fireEvent.change(input, { target: { value: 'apple' } });
+    fireEvent.submit(input.closest('form')!);
+    await screen.findByRole('button', { name: /continue|tiếp tục/i });
+    expect((input as HTMLInputElement).value).toBe('pear');
+  });
+
+  it('explains that an exercise answer cannot be undone', async () => {
+    vi.spyOn(studyApi, 'getNextCard').mockResolvedValue({
+      data: { ...baseCard, quiz: { type: 'typing', direction: 'meaning_to_word', meaning: 'quả táo', answer_length: 5,
+        audio: null, tts: null } },
+    } as any);
+    vi.spyOn(studyApi, 'undoReview').mockRejectedValue({ response: { status: 409, data: { detail: studyApi.QUIZ_UNDO_BLOCKED } } });
+    renderStudy();
+    await screen.findByPlaceholderText(/type your answer|nhập câu trả lời/i);
+    fireEvent.click(screen.getByRole('button', { name: /undo|hoàn tác/i }));
+    expect(await screen.findByText(/can't be undone|Không thể hoàn tác câu trả lời bài tập/)).toBeTruthy();
+  });
+
   it('multiple choice answers with number keys', async () => {
     vi.spyOn(studyApi, 'getNextCard').mockResolvedValue({
       data: { ...baseCard, quiz: { type: 'multiple_choice', direction: 'meaning_to_word', meaning: 'quả táo', answer_length: 5,

@@ -1,6 +1,7 @@
 import CustomStudyPresets from '../components/CustomStudyPresets';
 import StudyAutomation from '../components/StudyAutomation';
 import QuizPanel from '../components/QuizPanel';
+import { QUIZ_UNDO_BLOCKED } from '../api/study';
 import type { QuizAnswer } from '../api/study';
 import client from '../api/client';
 import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react';
@@ -363,7 +364,8 @@ export const CustomStudyPage = () => {
     } catch (err: unknown) {
       if (!isMountedRef.current || activeSessionIdRef.current !== sid || selectionEpochRef.current !== epoch) return;
       const anyErr = err as { response?: { status?: number; data?: { detail?: string } }; message?: string };
-      setReviewError(anyErr?.response?.data?.detail || anyErr?.message || tNow('study.undoFailed'));
+      const detail = anyErr?.response?.data?.detail;
+      setReviewError(detail === QUIZ_UNDO_BLOCKED ? tNow('study.quizUndoBlocked') : detail || anyErr?.message || tNow('study.undoFailed'));
     } finally {
       isSubmittingRef.current = false;
       if (isMountedRef.current) {
