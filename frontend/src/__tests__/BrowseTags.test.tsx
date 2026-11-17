@@ -4,6 +4,9 @@ import { MemoryRouter } from 'react-router-dom';
 import BrowsePage from '../pages/BrowsePage';
 import * as cardsApi from '../api/cards';
 
+// Rarely used bulk actions sit behind the "⋯" button of the selection bar.
+const openMore = () => { if (!screen.queryByRole('group', { name: /more actions/i })) fireEvent.click(screen.getByRole('button', { name: /more actions/i })); };
+
 vi.mock('../api/cards');
 vi.mock('../api/notes', () => ({ getCardNote: vi.fn().mockResolvedValue({data: {id: 10, fields: {Front: 'Question', Back: 'Answer'}, tags: []}}), updateNote: vi.fn() }));
 
@@ -116,7 +119,7 @@ describe('BrowseTags', () => {
     const card3Checkbox = await screen.findByLabelText('Select card 103');
     fireEvent.click(card3Checkbox);
 
-    const removeTagsBtn = screen.getByRole('button', { name: /^remove tags$/i });
+    const removeTagsBtn = (openMore(), screen.getByRole('button', { name: /^remove tags$/i }));
     fireEvent.click(removeTagsBtn);
 
     const removeInput = screen.getByLabelText(/^tags to remove$/i);
@@ -168,7 +171,7 @@ describe('BrowseTags', () => {
     expect(screen.queryByText('Removing a parent tag also removes its subtags.')).toBeNull();
 
     // Now switch to Remove Tags panel
-    const removeTagsBtn = screen.getByRole('button', { name: /^remove tags$/i });
+    const removeTagsBtn = (openMore(), screen.getByRole('button', { name: /^remove tags$/i }));
     fireEvent.click(removeTagsBtn);
 
     // Both explanations are shown
@@ -191,15 +194,13 @@ describe('BrowseTags', () => {
       </MemoryRouter>
     );
 
-    // Initial state: No cards selected -> Add Tags and Remove Tags are disabled
+    // Initial state: nothing selected -> the bulk actions are not offered yet
     await screen.findByLabelText('Select card 101');
-    const addTagsBtn = screen.getByRole('button', { name: /^add tags$/i });
-    const removeTagsBtn = screen.getByRole('button', { name: /^remove tags$/i });
-    expect((addTagsBtn as HTMLButtonElement).disabled).toBe(true);
-    expect((removeTagsBtn as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.queryByRole('button', { name: /^add tags$/i })).toBeNull();
 
     // Select card 101
     fireEvent.click(screen.getByLabelText('Select card 101'));
+    const addTagsBtn = screen.getByRole('button', { name: /^add tags$/i });
     expect((addTagsBtn as HTMLButtonElement).disabled).toBe(false);
 
     fireEvent.click(addTagsBtn);

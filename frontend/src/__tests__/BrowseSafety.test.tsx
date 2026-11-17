@@ -4,6 +4,9 @@ import { MemoryRouter } from 'react-router-dom';
 import BrowsePage from '../pages/BrowsePage';
 import * as api from '../api/cards';
 import * as decksApi from '../api/decks';
+// Rarely used bulk actions sit behind the "⋯" button of the selection bar.
+const openMore = () => { if (!screen.queryByRole('group', { name: /more actions/i })) fireEvent.click(screen.getByRole('button', { name: /more actions/i })); };
+
 vi.mock('../api/decks');
 vi.mock('../api/cards');
 const card: api.BrowseCard = { id: 1, deck_id: 1, front: 'question', back: 'answer', deck_name: 'Deck',
@@ -39,7 +42,7 @@ describe('Browser safety', () => {
     expect(screen.getByTestId('selection-count').textContent).toBe('0 selected');
     expect(screen.queryByLabelText('Select card 1')).toBeNull();
     fireEvent.click(screen.getByLabelText('Select card 1001'));
-    fireEvent.click(screen.getByRole('button',{name:'Bury'}));
+    fireEvent.click((openMore(), screen.getByRole('button',{name:'Bury'})));
     await screen.findByRole('status');
     expect(api.bulkActionCards).toHaveBeenCalledWith({action:'bury',cards:[{card_id:1001,expected_version:3}]});
     expect(api.browseCards).toHaveBeenLastCalledWith('',1000);
@@ -56,7 +59,7 @@ describe('Browser safety', () => {
     await screen.findByText('Saved!');
     expect(api.updateCard).toHaveBeenCalledWith(1,{front:'edited',back:'answer',expected_version:3});
     fireEvent.click(screen.getByLabelText('Select card 1'));
-    fireEvent.click(screen.getByRole('button',{name:'Bury'}));
+    fireEvent.click((openMore(), screen.getByRole('button',{name:'Bury'})));
     await waitFor(()=>expect(api.bulkActionCards).toHaveBeenCalledWith({action:'bury',cards:[{card_id:1,expected_version:9}]}));
   });
 

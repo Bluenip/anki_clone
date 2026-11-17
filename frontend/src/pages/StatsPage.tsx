@@ -1,3 +1,4 @@
+import './StatsPage.css';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { listDecks } from '../api/decks';
 import type { Deck } from '../api/decks';
@@ -24,7 +25,8 @@ const formatDuration = (seconds: number): string => {
 };
 
 export const StatsPage = () => {
-  const { t } = usePrefs();
+  const { t, lang } = usePrefs();
+  const locale = lang === 'vi' ? 'vi-VN' : 'en-US';
   const [days, setDays] = useState<number>(30);
   const [deckId, setDeckId] = useState<number | null>(null);
   const [decks, setDecks] = useState<Deck[]>([]);
@@ -135,17 +137,34 @@ export const StatsPage = () => {
         </div>
       )}
 
-      {!loading && !error && stats && (
+      {!loading && !error && stats && (() => {
+        const reviewCards = stats.counts.young + stats.counts.mature;
+        const forecastWeek = stats.forecast.filter(f => f.day < 7).reduce((sum, f) => sum + f.cards, 0);
+        const forecastAll = stats.forecast.reduce((sum, f) => sum + f.cards, 0);
+        const maxBucket = Math.max(1, ...stats.intervals.map(b => b.count));
+        const dateOf = (offset: number) => {
+          const d = new Date(); d.setDate(d.getDate() + offset);
+          return d.toLocaleDateString(locale, { day: 'numeric', month: 'numeric' });
+        };
+        const bucketLabel = (b: { min: number; max: number | null }) =>
+          b.max === null ? t('stats.bucketOpen', { min: b.min }) : b.min === b.max ? t('stats.bucketOne', { n: b.min }) : t('stats.bucketRange', { min: b.min, max: b.max });
+        const states = [
+          { key: 'new', label: t('stat.new'), value: stats.counts.new, color: 'var(--new-color)' },
+          { key: 'learning', label: t('stats.learning'), value: stats.counts.learning, color: 'var(--hard-color)' },
+          { key: 'young', label: t('stats.young'), value: stats.counts.young, color: 'var(--accent-cyan)' },
+          { key: 'mature', label: t('stats.mature'), value: stats.counts.mature, color: 'var(--good-color)' },
+        ];
+        return (
         <>
           <div className="stats-grid">
             <div className="stat-card glass-card">
-              <span className="stat-value">{stats.summary.reviews}</span>
+              <span className="stat-value">{stats.summary.reviews.toLocaleString(locale)}</span>
               <span className="stat-label">{t('stats.reviews', { days: stats.summary.active_days })}</span>
             </div>
             <div className="stat-card glass-card">
               <span className="stat-value">{formatDuration(stats.summary.seconds)}</span>
               <span className="stat-label">
-                {t('stats.studyTime')} ({stats.summary.seconds_per_review !== null ? t('stats.perReview', { s: stats.summary.seconds_per_review }) : t('common.na')})
+                {t('stats.studyTime')}{stats.summary.seconds_per_review !== null ? ` · ${t('stats.perReview', { s: stats.summary.seconds_per_review })}` : ''}
               </span>
             </div>
             <div className="stat-card glass-card">
@@ -153,152 +172,137 @@ export const StatsPage = () => {
                 {stats.summary.review_recall_percent !== null ? `${stats.summary.review_recall_percent}%` : t('common.na')}
               </span>
               <span className="stat-label" title={t('stats.recallTitle')}>
-                {t('stats.recall')} ({stats.summary.remembered}/{stats.summary.review_attempts})*
+                {stats.summary.review_attempts > 0
+                  ? t('stats.recallOf', { remembered: stats.summary.remembered, total: stats.summary.review_attempts })
+                  : t('stats.recallNone')}
               </span>
             </div>
             <div className="stat-card glass-card">
-              <span className="stat-value">{stats.counts.total}</span>
-              <span className="stat-label">{t('stats.cards', { notes: stats.counts.notes })}</span>
+              <span className="stat-value">{stats.counts.total.toLocaleString(locale)}</span>
+              <span className="stat-label">{stats.counts.notes !== stats.counts.total ? t('stats.cards', { notes: stats.counts.notes.toLocaleString(locale) }) : t('stats.cardsCol')}</span>
             </div>
           </div>
 
-          <div className="glass-card" style={{ padding: '1.25rem' }}>
-            <h2 style={{ fontSize: '1.2rem', marginBottom: '0.75rem' }}>{t('stats.countsByState')}</h2>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '0.75rem', marginBottom: '1rem' }}>
-              <div style={{ padding: '0.75rem', background: 'var(--surface)', borderRadius: 'var(--radius-sm)' }}>
-                <div style={{ color: 'var(--new-color)', fontWeight: 600 }}>{t('stat.new')}</div>
-                <div style={{ fontSize: '1.4rem', fontWeight: 700 }}>{stats.counts.new}</div>
+          <div className="glass-card stats-panel">
+            <h2>{t('stats.countsByState')}</h2>
+            {stats.counts.total > 0 && (
+              <div className="stats-stack" aria-hidden="true">
+                {states.filter(st => st.value > 0).map(st => (
+                  <span key={st.key} style={{ flexGrow: st.value, background: st.color }} title={`${st.label}: ${st.value}`} />
+                ))}
               </div>
-              <div style={{ padding: '0.75rem', background: 'var(--surface)', borderRadius: 'var(--radius-sm)' }}>
-                <div style={{ color: 'var(--hard-color)', fontWeight: 600 }}>{t('stats.learning')}</div>
-                <div style={{ fontSize: '1.4rem', fontWeight: 700 }}>{stats.counts.learning}</div>
-              </div>
-              <div style={{ padding: '0.75rem', background: 'var(--surface)', borderRadius: 'var(--radius-sm)' }}>
-                <div style={{ color: 'var(--accent-cyan)', fontWeight: 600 }}>{t('stats.young')}</div>
-                <div style={{ fontSize: '1.4rem', fontWeight: 700 }}>{stats.counts.young}</div>
-              </div>
-              <div style={{ padding: '0.75rem', background: 'var(--surface)', borderRadius: 'var(--radius-sm)' }}>
-                <div style={{ color: 'var(--good-color)', fontWeight: 600 }}>{t('stats.mature')}</div>
-                <div style={{ fontSize: '1.4rem', fontWeight: 700 }}>{stats.counts.mature}</div>
-              </div>
+            )}
+            <div className="stats-states">
+              {states.map(st => (
+                <div key={st.key} className="stats-state">
+                  <div style={{ color: st.color }}><span className="stats-dot" style={{ background: st.color }} />{st.label}</div>
+                  <div className="stats-state-value">{st.value.toLocaleString(locale)}</div>
+                </div>
+              ))}
             </div>
-            <p style={{ fontSize: '0.825rem', color: 'var(--text-secondary)', background: 'var(--surface)', padding: '0.5rem 0.75rem', borderRadius: 'var(--radius-sm)', margin: 0 }}>
-              <strong>{t('stats.notice')}</strong> {t('stats.suspended')} (<strong>{stats.counts.suspended}</strong>) {t('stats.and')} {t('stats.buried')} (<strong>{stats.counts.buried}</strong>) {t('stats.overlap')}
-            </p>
+            {(stats.counts.suspended > 0 || stats.counts.buried > 0) && (
+              <p className="stats-note">{t('stats.flagsNote', { suspended: stats.counts.suspended, buried: stats.counts.buried })}</p>
+            )}
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 320px), 1fr))', gap: '1.25rem' }}>
-            <div className="glass-card" style={{ padding: '1.25rem' }}>
-              <h2 style={{ fontSize: '1.2rem', marginBottom: '0.25rem' }}>{t('stats.intervals')}</h2>
-              <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.75rem' }}>{t('stats.intervalsHint')}</p>
-              <table className="browse-table" aria-label={t('stats.intervalsAria')} style={{ width: '100%' }}>
-                <thead>
-                  <tr>
-                    <th scope="col">{t('stats.interval')}</th>
-                    <th scope="col" style={{ textAlign: 'right' }}>{t('stats.cardsCol')}</th>
-                    <th scope="col" style={{ textAlign: 'right' }}>{t('stats.share')}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {stats.intervals.map((bucket) => {
-                    const reviewCards = stats.counts.young + stats.counts.mature;
-                    const share = reviewCards > 0 ? ((bucket.count / reviewCards) * 100).toFixed(1) : null;
-                    return (
-                      <tr key={bucket.label}>
-                        <td>{bucket.label}</td>
-                        <td style={{ textAlign: 'right', fontWeight: 600 }}>{bucket.count}</td>
-                        <td style={{ textAlign: 'right', color: 'var(--text-muted)' }}>{share !== null ? `${share}%` : t('common.na')}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
+          <div className="stats-two">
+            <div className="glass-card stats-panel">
+              <h2>{t('stats.forecast')}</h2>
+              <p className="stats-hint">{t('stats.forecastSummary', { today: stats.forecast[0]?.cards ?? 0, week: forecastWeek, days: stats.forecast.length, all: forecastAll })}</p>
+              <div className="stats-columns" role="img" aria-label={t('stats.forecastAria')}>
+                {stats.forecast.map(f => (
+                  <div key={f.day} className="stats-column" title={`${f.day === 0 ? t('stats.todayOverdue') : dateOf(f.day)}: ${f.cards}`}>
+                    <span style={{ height: `${f.cards ? Math.max(4, (f.cards / maxForecast) * 100) : 0}%` }} className={f.day === 0 ? 'is-today' : ''} />
+                  </div>
+                ))}
+              </div>
+              <div className="stats-axis" aria-hidden="true">
+                <span>{t('stats.today')}</span>
+                {stats.forecast.length > 14 && <span>{dateOf(Math.floor(stats.forecast.length / 2))}</span>}
+                <span>{dateOf(stats.forecast.length - 1)}</span>
+              </div>
+              <table className="sr-only">
+                <caption>{t('stats.forecastAria')}</caption>
+                <tbody>{stats.forecast.filter(f => f.cards > 0).map(f => <tr key={f.day}><th scope="row">{f.day === 0 ? t('stats.todayOverdue') : dateOf(f.day)}</th><td>{f.cards}</td></tr>)}</tbody>
               </table>
             </div>
 
-            <div className="glass-card" style={{ padding: '1.25rem' }}>
-              <h2 style={{ fontSize: '1.2rem', marginBottom: '0.25rem' }}>{t('stats.forecast')}</h2>
-              <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.75rem' }}>{t('stats.forecastHint')}</p>
-              <div style={{ maxHeight: '240px', overflow: 'auto' }}>
-                <table className="browse-table" aria-label={t('stats.forecastAria')} style={{ width: '100%' }}>
-                  <thead>
-                    <tr>
-                      <th scope="col">{t('stats.timeline')}</th>
-                      <th scope="col" style={{ textAlign: 'right' }}>{t('stat.due')}</th>
-                      <th scope="col" aria-hidden="true" style={{ width: '40%' }}>{t('stats.bar')}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {stats.forecast.map((f) => (
-                      <tr key={f.day}>
-                        <td>{f.day === 0 ? t('stats.todayOverdue') : `+${f.day}d`}</td>
-                        <td style={{ textAlign: 'right', fontWeight: 600 }}>{f.cards}</td>
-                        <td aria-hidden="true">
-                          <div style={{ background: 'var(--surface)', height: '8px', borderRadius: '4px', overflow: 'hidden' }}>
-                            <div style={{ width: `${(f.cards / maxForecast) * 100}%`, height: '100%', background: 'var(--accent-cyan)' }} />
-                          </div>
-                        </td>
-                      </tr>
+            <div className="glass-card stats-panel">
+              <h2>{t('stats.intervals')}</h2>
+              {reviewCards === 0 ? (
+                <p className="stats-empty">{t('stats.intervalsEmpty')}</p>
+              ) : (
+                <>
+                  <p className="stats-hint">{t('stats.intervalsHint')}</p>
+                  <ul className="stats-bars" aria-label={t('stats.intervalsAria')}>
+                    {stats.intervals.map(bucket => (
+                      <li key={bucket.label}>
+                        <span className="stats-bar-label">{bucketLabel(bucket)}</span>
+                        <span className="stats-bar-track"><span style={{ width: `${(bucket.count / maxBucket) * 100}%` }} /></span>
+                        <span className="stats-bar-value">{bucket.count} <small>{((bucket.count / reviewCards) * 100).toFixed(0)}%</small></span>
+                      </li>
                     ))}
-                  </tbody>
-                </table>
-              </div>
+                  </ul>
+                </>
+              )}
             </div>
           </div>
 
-          <div className="glass-card" style={{ padding: '1.25rem' }}>
-            <h2 style={{ fontSize: '1.2rem', marginBottom: '0.25rem' }}>{t('stats.history')}</h2>
-            <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.75rem' }}>
-              {t('stats.historyHint', { days })}
-            </p>
+          <div className="glass-card stats-panel">
+            <h2>{t('stats.history')}</h2>
+            <p className="stats-hint">{t('stats.historyHint', { days })}</p>
             {stats.summary.reviews === 0 ? (
-              <div style={{ textAlign: 'center', padding: '1.5rem', color: 'var(--text-muted)' }}>
-                {t('stats.noLogs')}
-              </div>
+              <p className="stats-empty">{t('stats.noLogs')}</p>
             ) : (
-              <div style={{ maxHeight: '280px', overflow: 'auto' }}>
+              <div style={{ maxHeight: '320px', overflow: 'auto' }}>
                 <table className="browse-table" aria-label={t('stats.historyAria')} style={{ width: '100%' }}>
                   <thead>
                     <tr>
                       <th scope="col">{t('stats.day')}</th>
                       <th scope="col" style={{ textAlign: 'right' }}>{t('stat.total')}</th>
                       <th scope="col" style={{ textAlign: 'right' }}>{t('stats.time')}</th>
-                      <th scope="col" style={{ textAlign: 'right', color: 'var(--again-color)' }}>{t('rate.again')}</th>
-                      <th scope="col" style={{ textAlign: 'right', color: 'var(--hard-color)' }}>{t('rate.hard')}</th>
-                      <th scope="col" style={{ textAlign: 'right', color: 'var(--good-color)' }}>{t('rate.good')}</th>
-                      <th scope="col" style={{ textAlign: 'right', color: 'var(--easy-color)' }}>{t('rate.easy')}</th>
-                      <th scope="col" aria-hidden="true" style={{ width: '25%' }}>Volume</th>
+                      <th scope="col" style={{ width: '40%' }}>{t('stats.answers')}</th>
                     </tr>
                   </thead>
                   <tbody>
                     {stats.history.filter((h) => h.reviews > 0).map((h) => (
                       <tr key={h.day}>
-                        <td>{h.day === 0 ? t('stats.today') : `${h.day}d`}</td>
+                        <td>{h.day === 0 ? t('stats.today') : dateOf(-h.day)}</td>
                         <td style={{ textAlign: 'right', fontWeight: 600 }}>{h.reviews}</td>
                         <td style={{ textAlign: 'right' }}>{formatDuration(h.seconds)}</td>
-                        <td style={{ textAlign: 'right' }}>{h.again}</td>
-                        <td style={{ textAlign: 'right' }}>{h.hard}</td>
-                        <td style={{ textAlign: 'right' }}>{h.good}</td>
-                        <td style={{ textAlign: 'right' }}>{h.easy}</td>
-                        <td aria-hidden="true">
-                          <div style={{ background: 'var(--surface)', height: '8px', borderRadius: '4px', overflow: 'hidden' }}>
-                            <div style={{ width: `${(h.reviews / maxHistory) * 100}%`, height: '100%', background: 'var(--accent-gradient-h)' }} />
+                        <td>
+                          <div className="stats-answers" style={{ width: `${Math.max(8, (h.reviews / maxHistory) * 100)}%` }}
+                            title={`${t('rate.again')} ${h.again} · ${t('rate.hard')} ${h.hard} · ${t('rate.good')} ${h.good} · ${t('rate.easy')} ${h.easy}`}>
+                            {([['again', h.again], ['hard', h.hard], ['good', h.good], ['easy', h.easy]] as const).filter(([, n]) => n > 0).map(([kind, n]) => (
+                              <span key={kind} style={{ flexGrow: n, background: `var(--${kind}-color)` }} />
+                            ))}
                           </div>
+                          <span className="sr-only">{t('rate.again')} {h.again}, {t('rate.hard')} {h.hard}, {t('rate.good')} {h.good}, {t('rate.easy')} {h.easy}</span>
                         </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
+                <div className="stats-legend" aria-hidden="true">
+                  {(['again', 'hard', 'good', 'easy'] as const).map(kind => (
+                    <span key={kind}><span className="stats-dot" style={{ background: `var(--${kind}-color)` }} />{t(`rate.${kind}`)}</span>
+                  ))}
+                </div>
               </div>
             )}
           </div>
 
-          <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
-            <div><strong>{t('stats.dayClock')}</strong> {stats.day_basis}</div>
-            <div><strong>{t('stats.forecastNote')}</strong> {stats.forecast_basis}</div>
-            <div><strong>{t('stats.recallNote')}</strong> {stats.recall_basis}</div>
-          </div>
+          <details className="stats-notes">
+            <summary>{t('stats.howCounted')}</summary>
+            <ul>
+              <li>{t('stats.noteDays')}</li>
+              <li>{t('stats.noteForecast')}</li>
+              <li>{t('stats.noteRecall')}</li>
+            </ul>
+          </details>
         </>
-      )}
+        );
+      })()}
     </div>
   );
 };

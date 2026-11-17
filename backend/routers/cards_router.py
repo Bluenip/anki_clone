@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, Response, status, Query
 from sqlalchemy.orm import Session
 from typing import List, Literal
 from datetime import datetime, timezone
@@ -23,6 +23,7 @@ def verify_deck_ownership(deck_id: int, user_id: int, db: Session) -> Deck:
 
 @router.get("/cards/browse", response_model=List[BrowseCardResponse])
 def browse_cards(
+    response: Response,
     search: str = "",
     offset: int = Query(default=0, ge=0, le=9223372036854775807),
     limit: int = Query(default=1000, ge=1, le=1000),
@@ -54,6 +55,8 @@ def browse_cards(
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from None
 
+    # The total lets the page say "1–1000 of 2,892" instead of only the page size.
+    response.headers["X-Total-Count"] = str(query.order_by(None).count())
     results = query.order_by(Card.created_at.desc(), Card.id.desc()).offset(offset).limit(limit).all()
 
     cards = []
