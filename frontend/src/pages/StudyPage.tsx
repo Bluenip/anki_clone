@@ -662,6 +662,7 @@ const StudyPageContent = () => {
             onRevealAnswer={handleRevealAnswer}
             cardCss={card.card_css}
             onAudioEnded={handleAudioEnded}
+            hideTypeAnswer={Boolean(card.quiz)}
           />
           )}
         </div>
