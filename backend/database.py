@@ -3,6 +3,8 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 import os
 
+import text_fold  # noqa: F401  registers unifold() on every SQLite connection
+
 BASE_DIR = os.getenv("DATABASE_DIR", os.path.dirname(os.path.abspath(__file__)))
 SQLALCHEMY_DATABASE_URL = f"sqlite:///{os.path.join(BASE_DIR, 'anki.db')}"
 

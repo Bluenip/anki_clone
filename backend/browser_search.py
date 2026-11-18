@@ -80,7 +80,8 @@ def matches(column, value, contains=False):
     pat = pattern(value)
     if contains:
         pat = '%' + pat + '%'
-    return column.ilike(pat, escape='\\')
+    from text_fold import folded_like
+    return folded_like(column, pat, escape='\\')
 
 
 def in_note(predicate):

@@ -10,6 +10,7 @@ from schemas import CardCreate, CardUpdate, CardResponse, BrowseCardResponse
 from auth import get_current_user
 from media_utils import cleanup_orphaned_media
 from notes import attach_basic_note, new_guid, sync_basic_note, cleanup_empty_notes
+from text_fold import folded_like
 
 router = APIRouter(prefix="/api", tags=["Cards"])
 
@@ -222,7 +223,7 @@ def list_cards(
     query = db.query(Card).filter(Card.deck_id == deck_id)
     if search:
         query = query.filter(
-            (Card.front.ilike(f"%{search}%")) | (Card.back.ilike(f"%{search}%"))
+            folded_like(Card.front, f"%{search}%") | folded_like(Card.back, f"%{search}%")
         )
     return query.order_by(Card.created_at.desc()).all()
 

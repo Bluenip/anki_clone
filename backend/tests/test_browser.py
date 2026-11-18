@@ -229,3 +229,29 @@ def test_browse_reports_the_total_match_count(client, auth_headers_a):
     assert page.headers['x-total-count'] == '5'
     filtered = client.get('/api/cards/browse', headers=auth_headers_a, params={'search': 'w1'})
     assert filtered.headers['x-total-count'] == '1'
+
+
+def test_search_ignores_case_and_accent_encoding_in_vietnamese(client, auth_headers_a):
+    import unicodedata
+    deck = client.post('/api/decks', headers=auth_headers_a, json={'name': 'Viet'}).json()
+    for front, back in [('Eat more fruit and vegetables', 'Ăn nhiều trái cây và rau hơn'),
+                        ('Road', unicodedata.normalize('NFD', 'Đường phố'))]:
+        assert client.post('/api/notes', headers=auth_headers_a, json={'deck_id': deck['id'], 'kind': 'basic',
+                           'fields': {'Front': front, 'Back': back}}).status_code == 201
+
+    def fronts(query):
+        res = client.get('/api/cards/browse', headers=auth_headers_a, params={'search': query})
+        assert res.status_code == 200, res.text
+        return [c['front'] for c in res.json()]
+
+    # The user's real query: lower-case "ăn" against "Ăn" at the start of the meaning.
+    assert fronts('ăn nhiều trái cây hơn ăn rau') == ['Eat more fruit and vegetables']
+    assert fronts('ĂN NHIỀU') == ['Eat more fruit and vegetables']
+    # Precomposed query against text stored with combining accents, and the other way round.
+    assert fronts('đường') == ['Road']
+    assert fronts(unicodedata.normalize('NFD', 'trái cây')) == ['Eat more fruit and vegetables']
+    # Accents still matter: "an" is a different word from "ăn".
+    assert fronts('an nhieu') == []
+    # The per-deck card list search behaves the same.
+    listed = client.get(f"/api/decks/{deck['id']}/cards", headers=auth_headers_a, params={'search': 'ăn nhiều'})
+    assert listed.status_code == 200 and [c['front'] for c in listed.json()] == ['Eat more fruit and vegetables']
