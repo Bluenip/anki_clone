@@ -115,6 +115,11 @@ def edit_note(note_id: int, data: NoteUpdate, db: Session = Depends(get_db), use
     except Exception:
         db.rollback()
         raise
+    # A changed word must not keep the pronunciation of the old one.
+    from tts_service import refresh_after_edit
+    from routers.tts_router import session_factory_for
+    refresh_after_edit(db, note, session_factory_for(db))
+    db.refresh(note)
     return note_response(note)
 
 

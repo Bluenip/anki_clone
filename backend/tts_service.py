@@ -178,6 +178,125 @@ def attach(db, card, *, synth=None):
     return 'added'
 
 
+# --------------------------------------------------------------------------- keeping audio in step with edits
+
+_TTS_TAG = re.compile(r'\[sound:(tts-[0-9a-f]{20}\.wav)\]')
+# Voices whose generated files may still be attached: Gemini and the Piper fallback named files after the
+# Gemini voice (Kore). A file made for the same text by any of them still says the right word.
+PAST_VOICES = ('Kore',)
+
+
+def _known_voices():
+    extra = [v.strip() for v in os.getenv('TTS_PAST_VOICES', '').split(',') if v.strip()]
+    return [voice_name(), *PAST_VOICES, *extra]
+
+
+def audio_matches(name, word):
+    """True when a generated file name was made for this word (by the current or an earlier voice)."""
+    text = speech_text(word)
+    return any(name == media_name(text, voice) for voice in _known_voices())
+
+
+def stale_audio(note):
+    """(word, [stale tts names]) when the note's generated pronunciation no longer matches its word, else None.
+
+    Only files this app generated (tts-…wav) are considered; the user's own recordings are never touched.
+    """
+    from quiz import card_material, settings_for
+    from deck_options import effective_settings
+    link = next(iter(note.card_links), None)
+    if link is None or link.card is None:
+        return None
+    values = json.loads(note.fields_json)
+    names = [m[1] for value in values for m in _TTS_TAG.finditer(value or '')]
+    if not names:
+        return None
+    # card_material reports the first sound it finds; we only need the word, which does not depend on it.
+    material = card_material(link.card, settings_for(effective_settings(link.card.deck)))
+    if material is None or material['kind'] != 'vocab' or not speech_text(material['word']):
+        return None
+    stale = [name for name in dict.fromkeys(names) if not audio_matches(name, material['word'])]
+    return (material['word'], stale) if stale else None
+
+
+def refresh_note_audio(db, note, *, synth=None):
+    """Replace generated audio that says an old word with audio for the current word.
+
+    Returns 'updated' or 'unchanged'; raises TTSError when new audio is needed and cannot be made
+    (the note is then left as it was).
+    """
+    from note_service import update_note
+    found = stale_audio(note)
+    if found is None:
+        return 'unchanged'
+    word, stale = found
+    path = _media_path(note.user_id, word)
+    if not os.path.exists(path):
+        _save(path, (synth or synthesize)(speech_text(word)))
+    fresh = f'[sound:{os.path.basename(path)}]'
+    names = json.loads(note.note_type.fields_json)
+    fields = dict(zip(names, json.loads(note.fields_json)))
+    placed = any(fresh in (value or '') for value in fields.values())
+    for name, value in fields.items():
+        for old in stale:
+            tag = f'[sound:{old}]'
+            if tag in (value or ''):
+                # The first stale tag becomes the new one in place; any further copies are dropped.
+                value = value.replace(tag, '' if placed else fresh, 1).replace(tag, '')
+                placed = True
+        fields[name] = re.sub(r'[ \t]{2,}', ' ', value or '').strip() if value != fields[name] else value
+    update_note(db, note, fields, json.loads(note.tags_json))
+    return 'updated'
+
+
+def refresh_after_edit(db, note, session_factory):
+    """After a note edit: fix stale pronunciation right away (Kokoro is fast); if the service is
+    unavailable, keep the saved edit and retry once in the background."""
+    if not enabled() or stale_audio(note) is None:
+        return
+    try:
+        if refresh_note_audio(db, note, synth=lambda text: synthesize(text, timeout=15)) == 'updated':
+            db.commit()
+        return
+    except TTSError as exc:
+        db.rollback()
+        log.warning('TTS refresh for note %s deferred: %s', note.id, exc)
+    except ValueError as exc:
+        db.rollback()
+        log.warning('TTS refresh for note %s skipped: %s', note.id, exc)
+        return
+    note_id = note.id
+
+    def work():
+        from models import Note
+        session = session_factory()
+        try:
+            again = session.get(Note, note_id)
+            if again is not None and refresh_note_audio(session, again) == 'updated':
+                session.commit()
+        except (TTSError, ValueError) as exc:
+            session.rollback()
+            log.warning('TTS refresh for note %s failed: %s', note_id, exc)
+        finally:
+            session.close()
+
+    threading.Thread(target=work, daemon=True, name='tts-refresh').start()
+
+
+def stale_notes(db, deck):
+    """Note ids in the deck (and subdecks) whose generated audio says an old word."""
+    from models import Card
+    found, seen = [], set()
+    for card_id in _deck_card_ids(db, deck):
+        card = db.get(Card, card_id)
+        if card is None or card.note_link is None or card.note_link.note_id in seen:
+            continue
+        seen.add(card.note_link.note_id)
+        if stale_audio(card.note_link.note) is not None:
+            found.append(card.note_link.note_id)
+    return found
+
+
 # --------------------------------------------------------------------------- background jobs
 
 @dataclass
@@ -190,7 +309,8 @@ class Job:
     done_words: int = 0
     failed: int = 0
     skipped: int = 0               # cards that already had audio or nothing to say
-    mode: str = 'fill'             # fill: give words audio; upgrade: replace Piper audio with Kokoro
+    mode: str = 'fill'             # fill: give words audio; upgrade: replace Piper audio with Kokoro;
+                                   # fix: re-voice generated audio that still says a word changed since
     error: str = ''
     started_at: float = field(default_factory=time.time)
     cancel: threading.Event = field(default_factory=threading.Event, repr=False)
@@ -266,6 +386,33 @@ def run_job(job, session_factory, *, synth=None, sleep=time.sleep):
     job.state = 'running'
     try:
         deck = db.get(Deck, job.deck_id)
+        if job.mode == 'fix':
+            from models import Note
+            note_ids = stale_notes(db, deck)
+            job.total = len(note_ids)
+            errors = 0
+            for note_id in note_ids:
+                if job.cancel.is_set():
+                    job.state = 'stopped'
+                    return job
+                note = db.get(Note, note_id)
+                try:
+                    if note is not None and refresh_note_audio(
+                            db, note, synth=lambda text: _speak_with_retries(job, text, synth, sleep)) == 'updated':
+                        db.commit()
+                        job.added += 1
+                    job.done_words += 1
+                    errors = 0
+                except (TTSError, ValueError) as exc:
+                    db.rollback()
+                    job.failed += 1
+                    job.error = str(exc)
+                    errors += 1
+                    if errors >= MAX_ERRORS:
+                        job.state = 'failed'
+                        return job
+            job.state = 'done'
+            return job
         words = {}  # fill: word -> [card ids]; upgrade: word -> audio path
         if job.mode == 'upgrade':
             words = upgrade_targets(db, deck)

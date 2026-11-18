@@ -234,14 +234,14 @@ def test_upgrade_replaces_piper_audio_with_kokoro_in_place(client, auth_headers_
     gemini_file = os.path.join(get_media_dir(user_id), card_material(tadpole, settings_for({}))['sound'])
     with open(gemini_file, 'wb') as out:
         out.write(fake_wav(rate=24000))
-    assert client.get(f'/api/decks/{deck_id}/tts/summary', headers=auth_headers_a).json() == {'piper_words': 2}
+    assert client.get(f'/api/decks/{deck_id}/tts/summary', headers=auth_headers_a).json()['piper_words'] == 2
     before = {c.id: (c.front, c.back) for c in db_session.query(Card).filter_by(deck_id=deck_id)}
 
     synth = FakeSynth()
     job = tts_service.Job(deck_id=deck_id, user_id=user_id, mode='upgrade')
     run(job, db_session, synth)
     assert job.state == 'done' and job.added == 2 and sorted(synth.calls) == ['Amphibious', 'Prehistoric']
-    assert client.get(f'/api/decks/{deck_id}/tts/summary', headers=auth_headers_a).json() == {'piper_words': 0}
+    assert client.get(f'/api/decks/{deck_id}/tts/summary', headers=auth_headers_a).json()['piper_words'] == 0
     # Same file names, so the cards themselves did not change.
     assert {c.id: (c.front, c.back) for c in db_session.query(Card).filter_by(deck_id=deck_id)} == before
 
@@ -283,3 +283,106 @@ def test_real_kokoro_service_voices_words_and_pairs(monkeypatch):
         with wave.open(io.BytesIO(data)) as source:
             assert source.getframerate() == 24000
             assert 0.2 < source.getnframes() / 24000 < 5
+
+
+# --------------------------------------------------------------------------- audio follows edits
+
+def voiced_note(client, headers, db_session, front='aple', back='quả táo', kind='basic'):
+    """A note whose pronunciation was generated for its current word."""
+    deck_id = make_deck(client, headers, [(front, back)], kind=kind)
+    card = db_session.query(Card).filter_by(deck_id=deck_id).first()
+    assert tts_service.attach(db_session, card, synth=FakeSynth()) == 'added'
+    db_session.commit()
+    return deck_id, card.note_link.note
+
+
+def edit(client, headers, note, fields):
+    response = client.put(f'/api/notes/{note.id}', headers=headers, json={'fields': fields, 'tags': []})
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+def sound_names(note_json):
+    import re
+    return re.findall(r'\[sound:([^\]]+)\]', ' '.join(note_json['fields'].values()))
+
+
+def test_fixing_the_word_re_voices_its_pronunciation(client, auth_headers_a, db_session, configured, monkeypatch):
+    deck_id, note = voiced_note(client, auth_headers_a, db_session)
+    old = sound_names({'fields': json.loads(note.fields_json) and dict(zip(['Front', 'Back'], json.loads(note.fields_json)))})
+    calls = FakeSynth()
+    monkeypatch.setattr(tts_service, 'synthesize', lambda text, **kw: calls(text))
+    back = json.loads(note.fields_json)[1]
+    result = edit(client, auth_headers_a, note, {'Front': 'apple', 'Back': back})
+    assert calls.calls == ['apple']
+    new = sound_names(result)
+    assert len(new) == 1 and new != old and new[0] == tts_service.media_name('apple')
+    assert result['fields']['Back'].startswith('quả táo [sound:tts-')
+    from media_utils import get_media_dir
+    assert os.path.exists(os.path.join(get_media_dir(note.user_id), new[0]))
+    # Nothing is stale any more, and the deck summary agrees.
+    assert client.get(f'/api/decks/{deck_id}/tts/summary', headers=auth_headers_a).json()['stale_notes'] == 0
+
+
+def test_editing_only_the_meaning_keeps_the_audio(client, auth_headers_a, db_session, configured, monkeypatch):
+    _, note = voiced_note(client, auth_headers_a, db_session, front='apple')
+    back = json.loads(note.fields_json)[1]
+    monkeypatch.setattr(tts_service, 'synthesize', lambda text, **kw: pytest.fail('must not re-voice'))
+    result = edit(client, auth_headers_a, note, {'Front': 'apple', 'Back': back.replace('quả táo', 'trái táo')})
+    assert sound_names(result) == [tts_service.media_name('apple')]
+
+
+def test_audio_made_by_the_earlier_gemini_voice_still_counts_as_matching(client, auth_headers_a, db_session, configured):
+    deck_id = make_deck(client, auth_headers_a, [('banana', 'quả chuối')])
+    card = db_session.query(Card).filter_by(deck_id=deck_id).one()
+    gemini_name = tts_service.media_name('banana', 'Kore')
+    note = card.note_link.note
+    edit(client, auth_headers_a, note, {'Front': 'banana', 'Back': f'quả chuối [sound:{gemini_name}]'})
+    assert tts_service.stale_audio(note) is None
+    assert client.get(f'/api/decks/{deck_id}/tts/summary', headers=auth_headers_a).json()['stale_notes'] == 0
+
+
+def test_own_recordings_and_removed_audio_are_left_alone(client, auth_headers_a, db_session, configured, monkeypatch):
+    _, note = voiced_note(client, auth_headers_a, db_session)
+    monkeypatch.setattr(tts_service, 'synthesize', lambda text, **kw: pytest.fail('must not re-voice'))
+    # The user removed the generated chip while fixing the word: it is not added back.
+    result = edit(client, auth_headers_a, note, {'Front': 'apple', 'Back': 'quả táo'})
+    assert sound_names(result) == []
+    # A recording of their own is never replaced, whatever the word says.
+    result = edit(client, auth_headers_a, note, {'Front': 'pear', 'Back': 'quả lê [sound:recording.webm]'})
+    assert sound_names(result) == ['recording.webm']
+
+
+def test_a_down_tts_service_does_not_block_saving(client, auth_headers_a, db_session, configured, monkeypatch):
+    deck_id, note = voiced_note(client, auth_headers_a, db_session, front='kumkwat')
+    def down(text, **kw):
+        raise tts_service.TTSError('network', 'refused')
+    monkeypatch.setattr(tts_service, 'synthesize', down)
+    monkeypatch.setattr(tts_service.threading, 'Thread', lambda *a, **k: type('T', (), {'start': lambda self: None})())
+    back = json.loads(note.fields_json)[1]
+    result = edit(client, auth_headers_a, note, {'Front': 'kumquat', 'Back': back})
+    assert result['fields']['Front'] == 'kumquat'  # the edit itself is saved
+    # The old audio is still attached and reported as stale, so the deck's fix button can repair it later.
+    assert client.get(f'/api/decks/{deck_id}/tts/summary', headers=auth_headers_a).json()['stale_notes'] == 1
+
+
+def test_fix_job_re_voices_every_stale_note_in_the_deck(client, auth_headers_a, db_session, configured):
+    deck_id = make_deck(client, auth_headers_a, [('mangoe', 'xoài'), ('papya', 'đu đủ'), ('cherry', 'anh đào')])
+    user_id = db_session.query(Deck).get(deck_id).user_id
+    run(tts_service.Job(deck_id=deck_id, user_id=user_id), db_session, FakeSynth())
+    # Fix two words directly in the database (as an import with "update" would), leaving their old audio.
+    for card in db_session.query(Card).filter_by(deck_id=deck_id):
+        note = card.note_link.note
+        values = json.loads(note.fields_json)
+        if values[0] in ('mangoe', 'papya'):
+            values[0] = {'mangoe': 'mango', 'papya': 'papaya'}[values[0]]
+            note.fields_json = json.dumps(values, ensure_ascii=False)
+    db_session.commit()
+    assert client.get(f'/api/decks/{deck_id}/tts/summary', headers=auth_headers_a).json()['stale_notes'] == 2
+    synth = FakeSynth()
+    job = tts_service.Job(deck_id=deck_id, user_id=user_id, mode='fix')
+    run(job, db_session, synth)
+    assert job.state == 'done' and job.total == 2 and job.added == 2 and job.failed == 0
+    assert sorted(synth.calls) == ['mango', 'papaya']
+    assert client.get(f'/api/decks/{deck_id}/tts/summary', headers=auth_headers_a).json()['stale_notes'] == 0
+    assert client.post(f'/api/decks/{deck_id}/tts', headers=auth_headers_a, params={'mode': 'fix'}).status_code == 202
