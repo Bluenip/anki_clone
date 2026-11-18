@@ -30,9 +30,9 @@ def tts_status(user: User = Depends(get_current_user)):
 
 @router.get('/decks/{deck_id}/tts/summary')
 def deck_tts_summary(deck_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    """How many words in the deck still use the old offline Piper voice (and can be re-voiced)."""
+    """Words still using the old Piper voice, and notes whose generated audio says a word changed since."""
     deck = _owned_deck(db, user, deck_id)
-    return {'piper_words': len(tts_service.upgrade_targets(db, deck))}
+    return {'piper_words': len(tts_service.upgrade_targets(db, deck)), 'stale_notes': len(tts_service.stale_notes(db, deck))}
 
 
 @router.get('/decks/{deck_id}/tts')
@@ -43,7 +43,7 @@ def deck_tts_job(deck_id: int, db: Session = Depends(get_db), user: User = Depen
 
 
 @router.post('/decks/{deck_id}/tts', status_code=202)
-def start_deck_tts(deck_id: int, mode: Literal['fill', 'upgrade'] = 'fill',
+def start_deck_tts(deck_id: int, mode: Literal['fill', 'upgrade', 'fix'] = 'fill',
                    db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     _owned_deck(db, user, deck_id)
     if not tts_service.enabled():

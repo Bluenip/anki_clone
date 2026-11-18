@@ -94,4 +94,15 @@ describe('DeckAudioPanel', () => {
     expect(await screen.findByText('Server busy')).toBeTruthy();
     expect(await screen.findByRole('button', { name: /^stop$|^dừng$/i })).toBeTruthy();
   });
+
+  it('offers to fix sounds that still say an edited word', async () => {
+    vi.spyOn(ttsApi, 'getTtsStatus').mockResolvedValue({ data: { enabled: true, engine: 'kokoro', voice: 'af_heart' } } as any);
+    vi.spyOn(ttsApi, 'getDeckTtsJob').mockResolvedValue({ data: { state: 'idle' } } as any);
+    vi.spyOn(ttsApi, 'getDeckTtsSummary').mockResolvedValue({ data: { piper_words: 0, stale_notes: 3 } } as any);
+    const start = vi.spyOn(ttsApi, 'startDeckTts').mockResolvedValue({ data: { state: 'running', mode: 'fix', total: 3, done: 1 } } as any);
+    render(<DeckAudioPanel deckId={5} />);
+    fireEvent.click(await screen.findByRole('button', { name: /fix 3 mismatched sounds|sửa 3 âm thanh không khớp/i }));
+    await waitFor(() => expect(start).toHaveBeenCalledWith(5, 'fix'));
+    expect(await screen.findByText(/Fixed 1 \/ 3 sounds|Đã sửa 1 \/ 3/)).toBeTruthy();
+  });
 });
