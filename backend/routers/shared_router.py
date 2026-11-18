@@ -8,6 +8,7 @@ from schemas import (
     ShareDeckRequest, SharedDeckResponse, SharedDeckDetailResponse, RateDeckRequest,
 )
 from auth import get_current_user
+from text_fold import folded_like
 
 router = APIRouter(prefix="/api/shared", tags=["Shared Decks"])
 
@@ -35,8 +36,8 @@ def browse_shared_decks(
     query = db.query(SharedDeck).join(User, User.id == SharedDeck.user_id)
     if search:
         query = query.filter(
-            (SharedDeck.title.ilike(f"%{search}%"))
-            | (SharedDeck.description.ilike(f"%{search}%"))
+            folded_like(SharedDeck.title, f"%{search}%")
+            | folded_like(SharedDeck.description, f"%{search}%")
         )
     if category:
         query = query.filter(SharedDeck.category == category)
