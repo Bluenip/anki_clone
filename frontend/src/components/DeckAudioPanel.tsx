@@ -129,6 +129,9 @@ export default function DeckAudioPanel({ deckId }: { deckId: number }) {
               : t('tts.summary', { added: job.added || 0, skipped: job.skipped || 0, failed: job.failed || 0 })}
         </p>
       )}
+      {!running && job.state === 'done' && (job.failed || 0) > 0 && job.error && (
+        <p className="deck-audio-error">{t('tts.failedReason', { error: job.error })}</p>
+      )}
       {error && <p className="deck-audio-error" role="alert">{error}</p>}
     </div>
   );

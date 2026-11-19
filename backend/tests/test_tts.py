@@ -208,7 +208,7 @@ def test_job_gives_up_when_the_service_stays_down(client, auth_headers_a, db_ses
     job = tts_service.Job(deck_id=deck_id, user_id=user_id)
     run(job, db_session, synth)
     assert job.state == 'failed' and 'refused' in job.error
-    assert len(synth.calls) == 2 * tts_service.RETRIES  # two words, three tries each, then it stops
+    assert len(synth.calls) == 2 * tts_service.RETRIES  # two words, RETRIES tries each, then it stops
 
 
 def test_cancel_stops_before_the_next_word(client, auth_headers_a, db_session, configured):

@@ -1034,6 +1034,7 @@ export const en = {
   "tts.fixHint": "Re-voice cards whose word was changed but still play the old word.",
   "tts.fixProgress": "Fixed {done} / {total} sounds",
   "tts.fixSummary": "Done: {added} cards now say their new word, {failed} could not be fixed.",
+  "tts.failedReason": "Reason: {error}. Press the button again to retry.",
   "tts.title": "Pronunciation audio",
   "tts.description": "Generate a natural English pronunciation (Kokoro) for every word that has no audio yet. Runs on the server with no quota.",
   "tts.start": "Generate audio",

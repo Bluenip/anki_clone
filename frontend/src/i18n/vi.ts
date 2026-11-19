@@ -1036,6 +1036,7 @@ export const vi: Record<MessageKey, string> = {
   "tts.fixHint": "Đọc lại phát âm cho các thẻ đã sửa từ nhưng vẫn còn âm thanh của từ cũ.",
   "tts.fixProgress": "Đã sửa {done} / {total} âm thanh",
   "tts.fixSummary": "Xong: {added} thẻ đã có phát âm đúng với từ mới, {failed} thẻ chưa sửa được.",
+  "tts.failedReason": "Lý do: {error}. Bấm lại nút để thử lần nữa.",
   "tts.title": "Âm thanh phát âm",
   "tts.description": "Tạo giọng đọc tiếng Anh tự nhiên (Kokoro) cho mọi từ chưa có âm thanh. Chạy ngay trên server, không giới hạn lượt.",
   "tts.start": "Tạo âm thanh",
