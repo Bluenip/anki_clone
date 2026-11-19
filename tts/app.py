@@ -6,10 +6,19 @@ GET  /health -> {"device": "cuda", "voice": "af_heart"}
 Uses hexgrad/kokoro (Kokoro-82M). Runs on the GPU when one is visible, else on the CPU.
 The model and the default voice are downloaded at image build time, so the
 container works offline.
+
+Containers can lose access to the GPU while running (nvidia-container-toolkit: a
+`systemctl daemon-reload` on the host drops the device permissions; nvidia-smi then says
+"Failed to initialize NVML"). When that happens a request falls back to the CPU at once, and a
+watchdog exits the process so Docker's restart policy restarts the container, which gives the
+GPU back.
 """
 import io
+import logging
 import os
+import subprocess
 import threading
+import time
 import wave
 
 import numpy as np
@@ -23,11 +32,38 @@ RATE = 24000
 REPO = 'hexgrad/Kokoro-82M'
 DEFAULT_VOICE = os.getenv('KOKORO_VOICE', 'af_heart')
 DEVICE = 'cuda' if torch.cuda.is_available() and os.getenv('KOKORO_DEVICE', '') != 'cpu' else 'cpu'
+GPU_EXPECTED = DEVICE == 'cuda'   # started with a working GPU: losing it later is worth a restart
+WATCH_SECONDS = float(os.getenv('KOKORO_GPU_WATCH_SECONDS', '60'))
+log = logging.getLogger('uvicorn.error')
 
 app = FastAPI(title='Kokoro TTS')
 _model = None
 _pipelines = {}
 _lock = threading.Lock()
+
+
+def _use_cpu(reason):
+    """Serve on the CPU from now on (rebuilding the model there) after the GPU stopped working."""
+    global DEVICE, _model
+    log.warning('GPU unavailable (%s); using the CPU until the container restarts', reason)
+    DEVICE = 'cpu'
+    _model = None
+    _pipelines.clear()
+
+
+def _gpu_alive():
+    try:
+        return subprocess.run(['nvidia-smi', '-L'], capture_output=True, timeout=20).returncode == 0
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+
+
+def _watch_gpu():
+    while True:
+        time.sleep(WATCH_SECONDS)
+        if not _gpu_alive():
+            log.error('Lost access to the GPU; exiting so Docker restarts the container')
+            os._exit(3)
 
 
 def pipeline(voice):
@@ -62,9 +98,18 @@ def to_wav(samples):
 
 @app.post('/speak')
 def speak(request: SpeakRequest):
+    def run():
+        return [result.audio for result in pipeline(request.voice)(request.text, voice=request.voice, speed=request.speed)
+                if result.audio is not None]
+
     with _lock:  # one model on one GPU: requests take turns
-        pieces = [result.audio for result in pipeline(request.voice)(request.text, voice=request.voice, speed=request.speed)
-                  if result.audio is not None]
+        try:
+            pieces = run()
+        except Exception as exc:  # torch raises RuntimeError / AcceleratorError for CUDA failures
+            if DEVICE != 'cuda' or 'cuda' not in str(exc).lower():
+                raise
+            _use_cpu(str(exc).splitlines()[0])
+            pieces = run()
     if not pieces:
         raise HTTPException(status_code=422, detail='Nothing to say')
     samples = np.concatenate([piece.detach().cpu().numpy() for piece in pieces])
@@ -74,6 +119,10 @@ def speak(request: SpeakRequest):
 @app.get('/health')
 def health():
     return {'device': DEVICE, 'voice': DEFAULT_VOICE, 'gpu': torch.cuda.get_device_name(0) if DEVICE == 'cuda' else None}
+
+
+if GPU_EXPECTED and WATCH_SECONDS > 0 and not os.getenv('KOKORO_WARMUP'):
+    threading.Thread(target=_watch_gpu, daemon=True, name='gpu-watch').start()
 
 
 if __name__ == '__main__' and os.getenv('KOKORO_WARMUP'):

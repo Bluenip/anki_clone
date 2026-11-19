@@ -105,4 +105,12 @@ describe('DeckAudioPanel', () => {
     await waitFor(() => expect(start).toHaveBeenCalledWith(5, 'fix'));
     expect(await screen.findByText(/Fixed 1 \/ 3 sounds|Đã sửa 1 \/ 3/)).toBeTruthy();
   });
+
+  it('says why some sounds could not be fixed', async () => {
+    vi.spyOn(ttsApi, 'getTtsStatus').mockResolvedValue({ data: { enabled: true, engine: 'kokoro', voice: 'af_heart' } } as any);
+    vi.spyOn(ttsApi, 'getDeckTtsJob').mockResolvedValue({ data: { state: 'done', mode: 'fix', total: 1, done: 0, added: 0, failed: 1, error: 'The voice service failed (500)' } } as any);
+    vi.spyOn(ttsApi, 'getDeckTtsSummary').mockResolvedValue({ data: { piper_words: 0, stale_notes: 1 } } as any);
+    render(<DeckAudioPanel deckId={6} />);
+    expect(await screen.findByText(/Reason: The voice service failed \(500\)|Lý do: The voice service failed \(500\)/)).toBeTruthy();
+  });
 });

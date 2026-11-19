@@ -88,7 +88,7 @@ def synthesize(text, *, timeout=120, opener=urllib.request.urlopen):
     except urllib.error.HTTPError as exc:
         detail = exc.read()[:300].decode('utf-8', 'replace')
         kind = 'busy' if exc.code in (500, 502, 503, 504) else 'other'
-        raise TTSError(kind, f'TTS service error {exc.code}: {detail}') from None
+        raise TTSError(kind, f'The voice service failed ({exc.code}); it may be restarting, try again in a minute') from None
     except (urllib.error.URLError, TimeoutError, OSError) as exc:
         raise TTSError('network', f'Could not reach the TTS service: {exc}') from None
     try:
@@ -323,7 +323,7 @@ class Job:
 
 
 ACTIVE_STATES = ('queued', 'running', 'stopping')  # a job in any of these can be stopped
-RETRIES = 3          # attempts per word when the service is busy or unreachable
+RETRIES = 4          # attempts per word when the service is busy or unreachable (it may be restarting)
 MAX_ERRORS = 10      # consecutive failed words before the job gives up (service down)
 
 _jobs = {}
