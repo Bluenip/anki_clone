@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload, selectinload
 from sqlalchemy import func
 from datetime import datetime, timedelta, timezone
 from typing import Optional
@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 from typing import Literal
 
 from database import get_db
-from models import User, Deck, Card, StudyProgress, ReviewLog
+from models import User, Deck, Card, StudyProgress, ReviewLog, DeckOptionsBinding
 from schemas import ReviewRequest, StudyCardResponse, StudyStatsResponse, ReviewResponse
 from auth import get_current_user
 from sm2 import (
@@ -57,16 +57,17 @@ def _count_studied_today(db: Session, deck_id: int, user_id: int):
 def today_summary(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     from scheduling import study_day, utc
     now = datetime.now(timezone.utc)
-    decks = db.query(Deck).filter_by(user_id=current_user.id).all()
+    decks = (db.query(Deck).filter_by(user_id=current_user.id)
+             .options(selectinload(Deck.options_binding).joinedload(DeckOptionsBinding.preset)).all())
     starts = {deck.id: study_day(now, _load_deck_config(deck)) for deck in decks}
     if not starts:
         return {'reviews': 0, 'seconds': 0, 'seconds_per_card': 0}
-    logs = db.query(ReviewLog).join(Card).filter(
+    rows = (db.query(ReviewLog, Card.deck_id).join(Card).options(joinedload(ReviewLog.record)).filter(
         ReviewLog.user_id == current_user.id, Card.deck_id.in_(starts),
-        ReviewLog.review_date >= min(starts.values()), ReviewLog.rating.in_([1,2,3,4])).all()
+        ReviewLog.review_date >= min(starts.values()), ReviewLog.rating.in_([1,2,3,4])).all())
     count = duration = 0
-    for log in logs:
-        if utc(log.review_date) < starts[log.card.deck_id]:
+    for log, deck_id in rows:
+        if utc(log.review_date) < starts[deck_id]:
             continue
         count += 1
         payload = json.loads(log.record.payload) if log.record else {}

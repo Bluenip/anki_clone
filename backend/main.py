@@ -1,19 +1,55 @@
-from fastapi import FastAPI
+import logging
+import os
+
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from database import engine, Base
-from routers import auth_router, decks_router, cards_router, study_router, shared_router, apkg_router, notes_router, options_router
-
-# Create all tables
-Base.metadata.create_all(bind=engine)
-
-# Older imports stored child names without their empty parent deck records.
-from database import SessionLocal
+from database import Base, SessionLocal, engine
 from deck_hierarchy import repair_missing_parents
-with SessionLocal() as hierarchy_db:
-    repair_missing_parents(hierarchy_db)
-    hierarchy_db.commit()
+from routers import (
+    apkg_router,
+    auth_router,
+    backups_router,
+    cards_router,
+    decks_router,
+    filtered_router,
+    import_jobs_router,
+    media_router,
+    note_types_router,
+    notes_router,
+    optimizer_router,
+    options_router,
+    shared_router,
+    stats_router,
+    study_router,
+    tts_router,
+)
+
+logger = logging.getLogger(__name__)
+
+
+def prepare_database():
+    """Create missing tables and indexes, then run best-effort data repairs."""
+    Base.metadata.create_all(bind=engine)
+    # create_all only builds indexes together with a new table; add ones declared later to existing tables.
+    for table in Base.metadata.sorted_tables:
+        for index in table.indexes:
+            index.create(bind=engine, checkfirst=True)
+
+    # Older imports stored child names without their empty parent deck records.
+    try:
+        with SessionLocal() as hierarchy_db:
+            repair_missing_parents(hierarchy_db)
+            hierarchy_db.commit()
+    except Exception:
+        logger.exception("Deck hierarchy repair failed; starting without it")
+
+
+prepare_database()
 
 app = FastAPI(
     title="AnkiClone API",
@@ -21,14 +57,10 @@ app = FastAPI(
     version="1.0.0",
 )
 
-import os
-
 MEDIA_DIR = os.getenv("MEDIA_DIR", os.path.join(os.path.dirname(__file__), "media"))
-# Create media/ directory if it doesn't exist
 os.makedirs(MEDIA_DIR, exist_ok=True)
 
-
-# CORS
+# The browser reaches the API through the same origin (nginx proxy); list extra origins only for dev servers.
 allowed_origins = os.getenv(
     "CORS_ORIGINS",
     "http://localhost:5173,http://127.0.0.1:5173"
@@ -43,13 +75,6 @@ app.add_middleware(
     expose_headers=["X-Total-Count"],
 )
 
-import logging
-from fastapi import HTTPException, Request
-from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
-from starlette.exceptions import HTTPException as StarletteHTTPException
-
-logger = logging.getLogger(__name__)
 
 @app.middleware("http")
 async def add_security_headers(request: Request, call_next):
@@ -66,6 +91,7 @@ async def add_security_headers(request: Request, call_next):
         "connect-src 'self' http: https: ws: wss:;"
     )
     return response
+
 
 @app.exception_handler(Exception)
 @app.exception_handler(RequestValidationError)
@@ -88,17 +114,20 @@ async def generic_exception_handler(request: Request, exc: Exception):
         content={"detail": "Internal server error"},
     )
 
-# Include routers
-app.include_router(auth_router.router)
-app.include_router(decks_router.router)
-app.include_router(cards_router.router)
-app.include_router(study_router.router)
-app.include_router(shared_router.router)
-app.include_router(apkg_router.router)
-app.include_router(notes_router.router)
-app.include_router(options_router.router)
 
-# Mount static files
+# Registration order matters where prefixes overlap: keep it as it was.
+for module in (
+    auth_router,
+    decks_router,
+    cards_router,
+    study_router,
+    shared_router,
+    apkg_router,
+    notes_router,
+    options_router,
+):
+    app.include_router(module.router)
+
 app.mount("/api/media", StaticFiles(directory=MEDIA_DIR), name="media")
 
 
@@ -106,26 +135,15 @@ app.mount("/api/media", StaticFiles(directory=MEDIA_DIR), name="media")
 def root():
     return {"message": "AnkiClone API is running", "docs": "/docs"}
 
-from routers import filtered_router
-app.include_router(filtered_router.router)
 
-from routers import stats_router
-app.include_router(stats_router.router)
-
-from routers import note_types_router
-app.include_router(note_types_router.router)
-
-from routers import tts_router
-app.include_router(tts_router.router)
-
-from routers import media_router
-app.include_router(media_router.router)
-
-from routers import optimizer_router
-app.include_router(optimizer_router.router)
-
-from routers import backups_router
-app.include_router(backups_router.router)
-
-from routers import import_jobs_router
-app.include_router(import_jobs_router.router)
+for module in (
+    filtered_router,
+    stats_router,
+    note_types_router,
+    tts_router,
+    media_router,
+    optimizer_router,
+    backups_router,
+    import_jobs_router,
+):
+    app.include_router(module.router)
