@@ -1,5 +1,5 @@
 from sqlalchemy import (
-    Column, Integer, String, Text, Boolean, Float, DateTime, ForeignKey, UniqueConstraint
+    Column, Integer, String, Text, Boolean, Float, DateTime, ForeignKey, Index, UniqueConstraint
 )
 from sqlalchemy.orm import relationship
 from datetime import datetime, timezone
@@ -29,6 +29,7 @@ class User(Base):
 
 class Deck(Base):
     __tablename__ = "decks"
+    __table_args__ = (Index("ix_decks_user_name", "user_id", "name"),)
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
@@ -50,7 +51,7 @@ class Card(Base):
     __tablename__ = "cards"
 
     id = Column(Integer, primary_key=True, index=True)
-    deck_id = Column(Integer, ForeignKey("decks.id"), nullable=False)
+    deck_id = Column(Integer, ForeignKey("decks.id"), nullable=False, index=True)
     front = Column(Text, nullable=False)
     back = Column(Text, nullable=False)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
@@ -107,6 +108,7 @@ class NoteCard(Base):
 
 class StudyProgress(Base):
     __tablename__ = "study_progress"
+    __table_args__ = (Index("ix_study_progress_user_card", "user_id", "card_id"), Index("ix_study_progress_card", "card_id"),)
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
@@ -132,6 +134,7 @@ class StudyProgress(Base):
 
 class ReviewLog(Base):
     __tablename__ = "review_logs"
+    __table_args__ = (Index("ix_review_logs_user_date", "user_id", "review_date"), Index("ix_review_logs_card", "card_id"),)
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
@@ -223,7 +226,7 @@ class QuizAttempt(Base):
 
 class StudyOperation(Base):
     __tablename__ = 'study_operations'
-    __table_args__ = (UniqueConstraint('user_id', 'request_id'),)
+    __table_args__ = (UniqueConstraint('user_id', 'request_id'), Index('ix_study_operations_user_open', 'user_id', 'undone', 'created_at'))
     id = Column(String(36), primary_key=True)
     user_id = Column(Integer, ForeignKey('users.id'), nullable=False, index=True)
     card_id = Column(Integer, nullable=False)

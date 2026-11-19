@@ -5,7 +5,8 @@ services:
     restart: unless-stopped
     environment:
       - DATABASE_DIR=/data
-      - CORS_ORIGINS=*
+      # The browser calls /api through nginx on the same origin; extra origins are only for other front ends.
+      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:3456}
       - ANKI_IMPORT_MAX_UPLOAD_BYTES=${ANKI_IMPORT_MAX_UPLOAD_BYTES:-1073741824}
       - ANKI_IMPORT_MAX_UNCOMPRESSED_BYTES=${ANKI_IMPORT_MAX_UNCOMPRESSED_BYTES:-3221225472}
       - ANKI_IMPORT_MAX_MEDIA_BYTES=${ANKI_IMPORT_MAX_MEDIA_BYTES:-2147483648}
@@ -30,6 +31,12 @@ services:
       - anki-media:/app/media
     depends_on:
       - tts
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/', timeout=4)"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
     networks:
       - anki-network
 
@@ -60,7 +67,8 @@ services:
     ports:
       - "3456:80"
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     networks:
       - anki-network
 

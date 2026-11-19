@@ -142,6 +142,9 @@ def review(db, card, user_id, data, now=None, *, commit=True, filtered_session_i
     return response
 
 
+UNDO_GUARD_WINDOW = 200
+
+
 def undo(db,user_id):
     operation=db.query(StudyOperation).filter_by(user_id=user_id,undone=False).order_by(StudyOperation.created_at.desc(),StudyOperation.id.desc()).first()
     if operation is None:raise HTTPException(status_code=404,detail='No review to undo')
@@ -190,7 +193,12 @@ def undo(db,user_id):
     # version is exactly the state that older event originally produced.
     changes = {str(card.id): (before['state']['version'], state.version)}
     changes.update({str(s.card_id): (value['version'], s.version) for s, value in restored})
-    for older in db.query(StudyOperation).filter_by(user_id=user_id, undone=False).all():
+    # Only recent operations can realistically be undone next; an older one left with a stale
+    # guard is refused with 409 rather than overwriting newer work.
+    recent = (db.query(StudyOperation).filter_by(user_id=user_id, undone=False)
+              .order_by(StudyOperation.created_at.desc(), StudyOperation.id.desc())
+              .limit(UNDO_GUARD_WINDOW).all())
+    for older in recent:
         if older.id == operation.id:
             continue
         old_before = json.loads(older.before_json)

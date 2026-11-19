@@ -22,6 +22,14 @@ def verify_deck_ownership(deck_id: int, user_id: int, db: Session) -> Deck:
     return deck
 
 
+def _owned_card(card_id: int, user_id: int, db: Session) -> Card:
+    """The user's card, or the same 404 whether it is missing or belongs to someone else."""
+    card = db.query(Card).join(Deck).filter(Card.id == card_id, Deck.user_id == user_id).first()
+    if not card:
+        raise HTTPException(status_code=404, detail="Card not found")
+    return card
+
+
 @router.get("/cards/browse", response_model=List[BrowseCardResponse])
 def browse_cards(
     response: Response,
@@ -256,12 +264,7 @@ def update_card(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    card = db.query(Card).filter(Card.id == card_id).first()
-    if not card:
-        raise HTTPException(status_code=404, detail="Card not found")
-
-    # Verify deck ownership
-    verify_deck_ownership(card.deck_id, current_user.id, db)
+    card = _owned_card(card_id, current_user.id, db)
 
     if data.front is not None:
         card.front = data.front
@@ -288,11 +291,7 @@ def delete_card(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    card = db.query(Card).filter(Card.id == card_id).first()
-    if not card:
-        raise HTTPException(status_code=404, detail="Card not found")
-
-    verify_deck_ownership(card.deck_id, current_user.id, db)
+    card = _owned_card(card_id, current_user.id, db)
 
     db.delete(card)
     cleanup_empty_notes(db, current_user.id)

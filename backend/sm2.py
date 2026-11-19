@@ -21,6 +21,9 @@ from dataclasses import dataclass, field
 from typing import List, Optional
 import re
 
+# Classic SM-2: the second successful review of a card schedules it six days out.
+SM2_SECOND_INTERVAL = 6
+
 
 @dataclass
 class DeckSchedulingConfig:
@@ -200,7 +203,7 @@ def sm2_algorithm(
         if repetitions == 0:
             interval_days = config.graduating_interval
         elif repetitions == 1:
-            interval_days = 6
+            interval_days = SM2_SECOND_INTERVAL
         else:
             interval_days = max(
                 int(interval_days * ease_factor * config.interval_modifier),
@@ -214,7 +217,7 @@ def sm2_algorithm(
             interval_days = config.easy_interval
         elif repetitions == 1:
             interval_days = max(
-                int(6 * config.easy_bonus * config.interval_modifier),
+                int(SM2_SECOND_INTERVAL * config.easy_bonus * config.interval_modifier),
                 7
             )
         else:

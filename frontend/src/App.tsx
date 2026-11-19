@@ -7,6 +7,7 @@ import { usePrefs } from './context/usePrefs';
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
 import ProtectedRoute from './components/ProtectedRoute';
+import ErrorBoundary from './components/ErrorBoundary';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import DecksPage from './pages/DecksPage';
@@ -16,7 +17,7 @@ const CardEditorPage = lazy(() => import('./pages/CardEditorPage'));
 import SharedDecksPage from './pages/SharedDecksPage';
 import SharedDeckDetailPage from './pages/SharedDeckDetailPage';
 const AddPage = lazy(() => import('./pages/AddPage'));
-import AccountPage from './pages/AccountPage';
+const AccountPage = lazy(() => import('./pages/AccountPage'));
 import ForgotPasswordPage from './pages/ForgotPasswordPage';
 import ResetPasswordPage from './pages/ResetPasswordPage';
 import IntroPage from './pages/IntroPage';
@@ -26,8 +27,7 @@ const MediaPage = lazy(() => import('./pages/MediaPage'));
 const NoteTypesPage = lazy(() => import('./pages/NoteTypesPage'));
 const BackupsPage = lazy(() => import('./pages/BackupsPage'));
 const StatsPage = lazy(() => import('./pages/StatsPage'));
-
-import DeckOptionsPage from './pages/DeckOptionsPage';
+const DeckOptionsPage = lazy(() => import('./pages/DeckOptionsPage'));
 
 const LoadingFallback = () => {
   const { t } = usePrefs();
@@ -42,7 +42,7 @@ function App() {
         <div className="app-layout">
           <Navbar />
           <main className="main-content">
-            <Suspense fallback={<LoadingFallback />}><Routes>
+            <ErrorBoundary><Suspense fallback={<LoadingFallback />}><Routes>
               <Route path="/" element={<Navigate to="/decks" replace />} />
               <Route path="/login" element={<LoginPage />} />
               <Route path="/register" element={<RegisterPage />} />
@@ -65,7 +65,7 @@ function App() {
               <Route path="/study/:deckId" element={<ProtectedRoute><StudyPage /></ProtectedRoute>} />
               <Route path="/shared" element={<SharedDecksPage />} />
               <Route path="/shared/:id" element={<SharedDeckDetailPage />} />
-            </Routes></Suspense>
+            </Routes></Suspense></ErrorBoundary>
           </main>
           <Footer />
         </div>

@@ -30,6 +30,8 @@ import wave
 from dataclasses import dataclass, field
 
 log = logging.getLogger(__name__)
+# Edits and new notes each voice in their own thread; at most this many talk to Kokoro at once.
+_background_slots = threading.BoundedSemaphore(2)
 if not log.handlers:  # make job results visible in `docker compose logs backend`
     _handler = logging.StreamHandler()
     _handler.setFormatter(logging.Formatter('%(levelname)s:     tts: %(message)s'))
@@ -269,16 +271,17 @@ def refresh_after_edit(db, note, session_factory):
 
     def work():
         from models import Note
-        session = session_factory()
-        try:
-            again = session.get(Note, note_id)
-            if again is not None and refresh_note_audio(session, again) == 'updated':
-                session.commit()
-        except (TTSError, ValueError) as exc:
-            session.rollback()
-            log.warning('TTS refresh for note %s failed: %s', note_id, exc)
-        finally:
-            session.close()
+        with _background_slots:
+            session = session_factory()
+            try:
+                again = session.get(Note, note_id)
+                if again is not None and refresh_note_audio(session, again) == 'updated':
+                    session.commit()
+            except (TTSError, ValueError) as exc:
+                session.rollback()
+                log.warning('TTS refresh for note %s failed: %s', note_id, exc)
+            finally:
+                session.close()
 
     threading.Thread(target=work, daemon=True, name='tts-refresh').start()
 
@@ -501,19 +504,20 @@ def attach_in_background(card_ids, session_factory):
 
     def work():
         from models import Card
-        db = session_factory()
-        try:
-            for card_id in card_ids:
-                card = db.get(Card, card_id)
-                if card is None:
-                    continue
-                try:
-                    attach(db, card, synth=synthesize)
-                    db.commit()
-                except (TTSError, ValueError) as exc:
-                    db.rollback()
-                    log.warning('TTS for card %s skipped: %s', card_id, exc)
-        finally:
-            db.close()
+        with _background_slots:
+            db = session_factory()
+            try:
+                for card_id in card_ids:
+                    card = db.get(Card, card_id)
+                    if card is None:
+                        continue
+                    try:
+                        attach(db, card, synth=synthesize)
+                        db.commit()
+                    except (TTSError, ValueError) as exc:
+                        db.rollback()
+                        log.warning('TTS for card %s skipped: %s', card_id, exc)
+            finally:
+                db.close()
 
     threading.Thread(target=work, daemon=True, name='tts-note').start()
