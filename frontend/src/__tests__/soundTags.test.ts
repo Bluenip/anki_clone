@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { joinSounds, splitSounds } from '../utils/soundTags';
+import { joinSounds, splitSounds, tidySoundField } from '../utils/soundTags';
 
 describe('sound tags in a field', () => {
   it('splits generated pronunciation out of the meaning and puts it back', () => {
@@ -15,6 +15,12 @@ describe('sound tags in a field', () => {
     for (const typed of ['tích trữ ', 'tích trữ  ', 'tích trữ\n', 'tích trữ\nnghĩa', ' ']) {
       expect(splitSounds(joinSounds(typed, sounds))).toEqual({ text: typed, sounds });
     }
+  });
+  it('drops spaces left before the sound when the field is saved', () => {
+    expect(tidySoundField('mơ hồ, nước đôi   [sound:a.wav]')).toBe('mơ hồ, nước đôi [sound:a.wav]');
+    expect(tidySoundField('nghĩa\n [sound:a.wav]')).toBe('nghĩa [sound:a.wav]');
+    expect(tidySoundField(' [sound:a.wav]')).toBe('[sound:a.wav]');
+    expect(tidySoundField('no sound  ')).toBe('no sound  ');
   });
   it('leaves fields without sounds untouched', () => {
     expect(splitSounds('  plain <b>text</b> ')).toEqual({ text: '  plain <b>text</b> ', sounds: [] });

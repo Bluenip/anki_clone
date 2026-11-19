@@ -11,6 +11,7 @@ import type { BrowseCard, BulkActionType, BulkActionRequest } from '../api/cards
 import { usePrefs } from '../context/usePrefs';
 import { tNow } from '../context/prefs-context-base';
 import NoteFieldEditor from '../components/NoteFieldEditor';
+import { tidySoundField } from '../utils/soundTags';
 
 const plainPreview = (html: string) => {
   const text = document.createElement('textarea');
@@ -301,7 +302,9 @@ const BrowsePage = () => {
     setErrorMessage('');
     try {
       if (sourceNote?.id != null) {
-        await updateNote(sourceNote.id, { fields: noteFields, tags: sourceNote.tags, expected_revision: sourceNote.revision });
+        const fields = Object.fromEntries(Object.entries(noteFields).map(([name, value]) => [name, tidySoundField(value)]));
+        await updateNote(sourceNote.id, { fields, tags: sourceNote.tags, expected_revision: sourceNote.revision });
+        setNoteFields(fields);
       } else {
         await updateCard(selectedCard.id, { front: editFront, back: editBack, expected_version: selectedCard.version });
       }

@@ -16,3 +16,9 @@ export function joinSounds(text: string, sounds: string[]): string {
   const tags = sounds.map(name => `[sound:${name}]`).join(' ');
   return text ? `${text} ${tags}` : tags;
 }
+
+/** What a field is saved as: spaces left at the end of the text, before its sounds, are dropped. */
+export function tidySoundField(value: string): string {
+  const { text, sounds } = splitSounds(value);
+  return sounds.length ? joinSounds(text.replace(/\s+$/, ''), sounds) : value;
+}
