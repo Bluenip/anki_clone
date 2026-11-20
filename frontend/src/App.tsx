@@ -22,6 +22,7 @@ import ForgotPasswordPage from './pages/ForgotPasswordPage';
 import ResetPasswordPage from './pages/ResetPasswordPage';
 import IntroPage from './pages/IntroPage';
 import BrowsePage from './pages/BrowsePage';
+import NotFoundPage from './pages/NotFoundPage';
 const CustomStudyPage = lazy(() => import('./pages/CustomStudyPage'));
 const MediaPage = lazy(() => import('./pages/MediaPage'));
 const NoteTypesPage = lazy(() => import('./pages/NoteTypesPage'));
@@ -65,6 +66,7 @@ function App() {
               <Route path="/study/:deckId" element={<ProtectedRoute><StudyPage /></ProtectedRoute>} />
               <Route path="/shared" element={<SharedDecksPage />} />
               <Route path="/shared/:id" element={<SharedDeckDetailPage />} />
+              <Route path="*" element={<NotFoundPage />} />
             </Routes></Suspense></ErrorBoundary>
           </main>
           <Footer />
