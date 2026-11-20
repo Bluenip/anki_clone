@@ -89,7 +89,7 @@ def add_note(data: NoteCreate, db: Session = Depends(get_db), user: User = Depen
         db.rollback()
         raise
     response = note_response(note)
-    # New vocabulary gets pronunciation audio in the background when Gemini TTS is configured.
+    # New vocabulary gets pronunciation audio in the background from the Kokoro TTS service when TTS_URL is set.
     from tts_service import attach_in_background
     from routers.tts_router import session_factory_for
     attach_in_background([card['id'] for card in response['cards']], session_factory_for(db))

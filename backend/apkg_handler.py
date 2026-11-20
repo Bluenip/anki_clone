@@ -202,7 +202,6 @@ def import_apkg(
         if not col:
             conn.close()
             raise ValueError("Corrupted APKG database: col record missing")
-        col_crt = col['crt']
         note_count = cursor.execute('SELECT COUNT(*) FROM notes').fetchone()[0]
         if note_count > MAX_NOTES:
             conn.close()
@@ -345,14 +344,7 @@ def import_apkg(
         if media_remaps:
             from media_remap import package
             col = package(cursor, col, media_remaps)
-        decks_json = json.loads(col['decks'])
         models_json = json.loads(col['models'])
-        
-        deck_name = "Imported Deck"
-        for d in decks_json.values():
-            if d.get("name") and d.get("name") != "Default":
-                deck_name = d["name"]
-                break
 
         if any('<script' in json.dumps(m).lower() for m in models_json.values()):
             warnings.append('Template scripts are preserved for export but disabled in web rendering')

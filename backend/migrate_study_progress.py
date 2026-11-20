@@ -60,7 +60,7 @@ if applied > 0:
 
     print(f"\n  Migrated {review_count} cards to 'review' state")
     print(f"  Migrated {learning_count} cards to 'learning' state")
-    print(f"  Remaining cards stay as 'new' (default)")
+    print("  Remaining cards stay as 'new' (default)")
 
 conn.commit()
 conn.close()
