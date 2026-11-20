@@ -88,7 +88,6 @@ def synthesize(text, *, timeout=120, opener=urllib.request.urlopen):
         with opener(request, timeout=timeout) as response:
             data = response.read()
     except urllib.error.HTTPError as exc:
-        detail = exc.read()[:300].decode('utf-8', 'replace')
         kind = 'busy' if exc.code in (500, 502, 503, 504) else 'other'
         raise TTSError(kind, f'The voice service failed ({exc.code}); it may be restarting, try again in a minute') from None
     except (urllib.error.URLError, TimeoutError, OSError) as exc:

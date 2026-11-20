@@ -108,21 +108,17 @@ def migrate_media(apkg_path: str, deck_id: int, user_id: int):
             if not media:
                 continue
             
-            changed = False
-            
             # Add missing audio
             if media['sounds'] and '<audio' not in card.back:
                 for sound_file in media['sounds']:
                     card.back += f'\n<audio src="/api/media/{user_id}/{sound_file}" controls class="anki-audio"></audio>'
                 updated_audio += 1
-                changed = True
             
             # Add missing images
             if media['images'] and '<img' not in card.back:
                 for img_file in media['images']:
                     card.back += f'\n<img src="/api/media/{user_id}/{img_file}">'
                 updated_images += 1
-                changed = True
         
         db.commit()
         print(f"✅ Updated {updated_audio} cards with audio, {updated_images} cards with images")

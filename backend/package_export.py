@@ -213,7 +213,7 @@ def export_package(deck_id, user_id, include_scheduling, db):
             with zipfile.ZipFile(output,'w',compression=zipfile.ZIP_DEFLATED) as archive:
                 archive.write(col_path,'collection.anki2')
                 archive.writestr('media',json.dumps({key:name for name,(key,path) in media.items()},ensure_ascii=False))
-                for name,(key,path) in media.items():archive.write(path,key)
+                for key,path in media.values():archive.write(path,key)
             return output
         except BaseException:
             os.unlink(output)

@@ -258,7 +258,11 @@ const DecksPage = () => {
     }
   }, []);
 
-  useEffect(() => { fetchDecks(); }, [fetchDecks]);
+  useEffect(() => {
+    let active = true;
+    queueMicrotask(() => { if (active) fetchDecks(); });
+    return () => { active = false; };
+  }, [fetchDecks]);
 
   useEffect(() => {
     let active = true;

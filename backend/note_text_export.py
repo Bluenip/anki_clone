@@ -37,7 +37,7 @@ def export_notes_text(cards, user_id, separator, include_guid):
         output.write(f'#notetype column:{offset + 1}\n#deck column:{offset + 2}\n#tags column:{offset + 3 + size}\n')
         output.write('#columns:')
         writer.writerow((['GUID'] if include_guid else []) + ['Note Type', 'Deck'] + [f'Field {i+1}' for i in range(size)] + ['Tags'])
-        for name, fields, values, tags, guid, deck in records:
+        for name, _fields, values, tags, guid, deck in records:
             writer.writerow(([guid] if include_guid else []) + [name, deck] + values + [''] * (size - len(values)) + [' '.join(tags)])
     else:
         name, fields, *_ = records[0]

@@ -1,7 +1,8 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import IntroPage, { INTRO_STEPS } from '../pages/IntroPage';
+import IntroPage from '../pages/IntroPage';
+import { INTRO_STEPS } from '../pages/introSteps';
 import * as auth from '../context/useAuth';
 import * as prefs from '../context/usePrefs';
 import { translator } from '../context/prefs-context-base';

@@ -15,5 +15,3 @@ anki==26.9.3
 
 # Crop raster output from the optional portable TeX runtime.
 Pillow==13.0.0
-
-# Offline pronunciation fallback when the free Gemini TTS quota runs out.
