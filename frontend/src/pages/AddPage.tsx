@@ -31,14 +31,16 @@ const AddPage = () => {
   const pendingRef = useRef(false);
   const textRef = useRef<HTMLTextAreaElement | null>(null);
   const fieldsRef = useRef<HTMLDivElement | null>(null);
+  // The text boxes of the note fields in page order (a field in visual mode is edited in its contenteditable).
+  const fieldEditors = () =>
+    Array.from(fieldsRef.current?.querySelectorAll<HTMLElement>('textarea:not([hidden]):not(:disabled), [contenteditable="true"]') ?? []);
   const refocusRef = useRef(false);
 
   // Fields are disabled while saving, which drops focus; put it back on the first field so the next note can be typed.
   useEffect(() => {
     if (pending || !refocusRef.current) return;
     refocusRef.current = false;
-    const first = fieldsRef.current?.querySelector<HTMLElement>('textarea:not([hidden]):not(:disabled), [contenteditable="true"]');
-    first?.focus();
+    fieldEditors()[0]?.focus();
   }, [pending]);
 
   useEffect(() => {
@@ -101,6 +103,19 @@ const AddPage = () => {
   };
 
   const handleKeyDown = (e: KeyboardEvent) => {
+    if (e.key === 'Tab' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      // Like Anki, Tab moves between fields instead of stepping through every formatting button.
+      const editors = fieldEditors();
+      const index = editors.indexOf(e.target as HTMLElement);
+      if (index !== -1) {
+        const next = e.shiftKey ? editors[index - 1] : editors[index + 1] ?? document.getElementById('note-tags');
+        if (next) {
+          e.preventDefault();
+          next.focus();
+        }
+        return;
+      }
+    }
     if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
       e.preventDefault();
       handleSubmit();
