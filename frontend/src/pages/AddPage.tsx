@@ -30,6 +30,16 @@ const AddPage = () => {
   const [mediaBusy, setMediaBusy] = useState(0);
   const pendingRef = useRef(false);
   const textRef = useRef<HTMLTextAreaElement | null>(null);
+  const fieldsRef = useRef<HTMLDivElement | null>(null);
+  const refocusRef = useRef(false);
+
+  // Fields are disabled while saving, which drops focus; put it back on the first field so the next note can be typed.
+  useEffect(() => {
+    if (pending || !refocusRef.current) return;
+    refocusRef.current = false;
+    const first = fieldsRef.current?.querySelector<HTMLElement>('textarea:not([hidden]):not(:disabled), [contenteditable="true"]');
+    first?.focus();
+  }, [pending]);
 
   useEffect(() => {
     let ignore = false;
@@ -152,6 +162,7 @@ const AddPage = () => {
       setSuccessMsg(t(cardsCount === 1 ? 'add.created.one' : 'add.created.other', { count: cardsCount }));
       setFields({});
       setTags('');
+      refocusRef.current = true;
     } catch (err: any) {
       const msg = err.response?.data?.detail || err.response?.data?.message || err.message || t('add.createFailed');
       setErrorMsg(typeof msg === 'string' ? msg : JSON.stringify(msg));
@@ -227,7 +238,7 @@ const AddPage = () => {
           )}
 
           {isImageOcclusion && <ImageOcclusionEditor key={selectedKind} fields={fields} onChange={setFields} disabled={pending} onBusyChange={active => setMediaBusy(n => Math.max(0, n + (active ? 1 : -1)))} />}
-          <div className="add-note-fields">
+          <div className="add-note-fields" ref={fieldsRef}>
           {currentFields.filter(f => !isImageOcclusion || !['Image', 'Occlusion'].includes(f)).map(fieldName => {
             const isOptional = isImageOcclusion || fieldName === 'Extra' || fieldName === 'Add Reverse';
             return (

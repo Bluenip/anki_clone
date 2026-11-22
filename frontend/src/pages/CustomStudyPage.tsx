@@ -608,7 +608,6 @@ export const CustomStudyPage = () => {
 
   return (
     <div className="page-container custom-study-container" style={{ padding: '2rem 1rem', maxWidth: '900px', margin: '0 auto' }}>
-      {!selectedSession && <CustomStudyPresets onChoose={(name, search, reschedule) => { setCreateForm(old => ({ ...old, name, search, reschedule, filters: [], order: 'due' })); setEditingSession(null); setCreateError(null); setIsCreateModalOpen(true); }} />}
       {/* Top Header */}
       <div
         className="custom-study-header"
@@ -677,6 +676,7 @@ export const CustomStudyPage = () => {
           )}
         </div>
       </div>
+      {!selectedSession && <CustomStudyPresets onChoose={(name, search, reschedule) => { setCreateForm(old => ({ ...old, name, search, reschedule, filters: [], order: 'due' })); setEditingSession(null); setCreateError(null); setIsCreateModalOpen(true); }} />}
 
       {sessionsError && (
         <div className="alert alert-error" role="alert" style={{ marginBottom: '1rem' }}>

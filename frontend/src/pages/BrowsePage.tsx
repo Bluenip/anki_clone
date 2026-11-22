@@ -643,7 +643,7 @@ const BrowsePage = () => {
                       </td>
                       <td title={plainPreview(card.front)}>{plainPreview(card.front)}</td>
                       <td title={answerPreview(card.back)}>{answerPreview(card.back)}</td>
-                      <td>{card.deck_name}</td>
+                      <td title={card.deck_name}>{card.deck_name}</td>
                       <td>
                         {card.card_state === 'new' ? '—' : card.next_review
                           ? new Date(card.next_review).toLocaleDateString(locale)

@@ -11,6 +11,7 @@ import { sanitizeHtml } from '../utils/sanitize';
 import { usePrefs } from '../context/usePrefs';
 import { tNow } from '../context/prefs-context-base';
 import BackButton from '../components/BackButton';
+import { getDeck } from '../api/decks';
 
 const getErrMsg = (err: unknown, fallback: string) => {
   const e = err as { response?: { data?: { detail?: string; message?: string } }; message?: string };
@@ -22,6 +23,13 @@ const CardEditorPageContent = () => {
   const { t } = usePrefs();
   const { deckId } = useParams<{ deckId: string }>();
   const [cards, setCards] = useState<Card[]>([]);
+  const [loadedDeck, setLoadedDeck] = useState<{ id: string; name: string } | null>(null);
+  useEffect(() => {
+    let ignore = false;
+    if (deckId) getDeck(Number(deckId)).then(res => { if (!ignore) setLoadedDeck({ id: deckId, name: res.data?.name ?? '' }); }).catch(() => {});
+    return () => { ignore = true; };
+  }, [deckId]);
+  const deckName = loadedDeck && loadedDeck.id === deckId ? loadedDeck.name : '';
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
 
@@ -239,7 +247,7 @@ const CardEditorPageContent = () => {
         <BackButton to={`/decks/${deckId}`} />
         <div className="breadcrumb">
           <Link to="/decks">{t('nav.decks')}</Link> <span>/</span>
-          <Link to={`/decks/${deckId}`}>{t('add.deck')}</Link> <span>/</span> <span>{t('stats.cardsCol')}</span>
+          <Link to={`/decks/${deckId}`}>{deckName || t('add.deck')}</Link> <span>/</span> <span>{t('stats.cardsCol')}</span>
         </div>
       </div>
 

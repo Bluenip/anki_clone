@@ -7,6 +7,18 @@ const PACKAGE_API_BASE = import.meta.env.VITE_PACKAGE_API_URL || '';
 const isPackageRequest = (url = '') => /^\/api\/apkg\/(?:uploads|jobs|limits)(?:\/|$)/.test(url);
 let packageRelayUnavailableUntil = 0;
 
+type ValidationIssue = { loc?: unknown; msg?: unknown };
+export const validationText = (issues: unknown[]): string =>
+  issues
+    .map((issue) => {
+      const { loc, msg } = (issue ?? {}) as ValidationIssue;
+      const text = String(msg ?? '').replace(/^Value error, /, '');
+      const field = Array.isArray(loc) ? loc.filter((p) => p !== 'body' && typeof p === 'string').pop() : undefined;
+      return field && text ? `${field}: ${text}` : text;
+    })
+    .filter(Boolean)
+    .join('\n') || 'Invalid request';
+
 const client = axios.create({
   baseURL: API_BASE,
   headers: { 'Content-Type': 'application/json' },
@@ -27,6 +39,8 @@ client.interceptors.response.use(
   (response) => response,
   (error) => {
     const data = error.response?.data;
+    // Request validation errors (422) carry a list of {loc, msg}; pages render `detail` as text.
+    if (data && Array.isArray(data.detail)) data.detail = validationText(data.detail);
     if (data && typeof data.detail === 'string') data.detail = translateServerError(data.detail);
     // Let the upload's existing offset reconciliation/retry use the original API.
     // Do not replay mutations here: a lost confirmation may already have committed.

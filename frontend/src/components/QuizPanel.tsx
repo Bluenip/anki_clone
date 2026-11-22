@@ -218,7 +218,7 @@ export default function QuizPanel({ card, exercise, disabled, onReveal, onSubmit
         <form className="quiz-form" onSubmit={e => { e.preventDefault(); void submit(response); }}>
           <input
             ref={inputRef}
-            className={`quiz-input ${result ? (result.correct ? 'is-correct' : 'is-wrong') : ''}`}
+            className={`quiz-input ${result ? (result.result === 'close' ? 'is-close' : result.correct ? 'is-correct' : 'is-wrong') : ''}`}
             value={response}
             onChange={e => { setResponse(e.target.value); if (exercise.type === 'scramble' && !e.target.value) setUsed([]); }}
             readOnly={Boolean(result)}

@@ -23,7 +23,9 @@
 .browser-page .browse-table { width: 100%; table-layout: fixed; }
 .browser-page .browse-table th { background: var(--panel); color: var(--text-secondary); font-size: 10px; letter-spacing: .7px; padding: 14px 10px; }
 .browser-page .browse-table td { padding: 13px 10px; font-size: 13px; border-bottom: 1px solid rgba(var(--fg-rgb),0.031); }
-.browser-page .browse-table th:nth-child(2), .browser-page .browse-table th:nth-child(3) { width: 26%; }
+.browser-page .browse-table th:nth-child(2), .browser-page .browse-table th:nth-child(3) { width: 22%; }
+/* Due dates and state badges are short and fixed; keep them whole so the deck column absorbs the squeeze. */
+.browser-page .browse-table th:nth-child(5), .browser-page .browse-table th:nth-child(6) { width: 92px; }
 .browser-page .browse-table tr:hover { background: rgba(var(--fg-rgb),0.016); }
 .browser-page .browse-table tr.selected { background: color-mix(in srgb, var(--accent-cyan) 7%, transparent); }
 .browser-page .browse-table tr.selected td:first-child { box-shadow: inset 3px 0 var(--accent-cyan); }
@@ -68,6 +70,9 @@
   .browser-page-heading h1 { font-size: 24px; }
   .browser-page-heading { align-items: flex-start; }
   .browser-page .browse-sidebar, .browser-page .browse-editor { padding: 14px; }
+  .browser-page .browse-table th:nth-child(2) { width: auto; }
+  .browser-page .browse-table th:nth-child(5), .browser-page .browse-table th:nth-child(6) { width: 84px; }
+  .browser-page .browse-table th, .browser-page .browse-table td { padding-inline: 6px; }
   .browser-page .browse-table-container { height: 340px; }
   .browser-page .browse-table th:nth-child(2) { width: 40%; }
   .browser-page .browse-search { flex-wrap: wrap; }
