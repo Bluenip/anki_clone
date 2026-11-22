@@ -37,6 +37,20 @@ describe('AddPage note creation', () => {
     vi.mocked(notesApi.getNoteTypes).mockResolvedValue({ data: mockNoteTypes } as any);
   });
 
+  it('Tab moves from field to field, then to tags; Shift+Tab goes back', async () => {
+    render(<MemoryRouter><AddPage /></MemoryRouter>);
+    const front = await screen.findByLabelText(/^Front/i);
+    const back = screen.getByLabelText(/^Back/i);
+    front.focus();
+    fireEvent.keyDown(front, { key: 'Tab' });
+    expect(document.activeElement).toBe(back);
+    fireEvent.keyDown(back, { key: 'Tab' });
+    expect(document.activeElement).toBe(screen.getByLabelText(/Tags/i));
+    back.focus();
+    fireEvent.keyDown(back, { key: 'Tab', shiftKey: true });
+    expect(document.activeElement).toBe(front);
+  });
+
   it('reversed creates ONE note payload and reports two cards', async () => {
     const mockCreatedNote: notesApi.Note = {
       id: 10,
