@@ -103,6 +103,8 @@ const CardFace = forwardRef<CardFaceRef, CardFaceProps>(
       return doc.body.innerHTML;
     }, [html, t]);
     const safeCss = useMemo(() => cardCss.replace(/<\/style/gi, '<\\/style'), [cardCss]);
+    // Anki's stock note types centre the card at 20px; built-in types here carry no `.card` rule, so supply it.
+    const baseCardCss = /\.card\b/.test(cardCss) ? '' : '.card { font-size: 20px; text-align: center; line-height: 1.5; }';
 
     const srcDoc = useMemo(() => {
       // Firefox resolves 'self' differently for sandboxed about:srcdoc media.
@@ -152,6 +154,7 @@ const CardFace = forwardRef<CardFaceRef, CardFaceProps>(
       border-top: 1px dashed ${theme === 'light' ? 'rgba(15, 23, 42, 0.2)' : 'rgba(255, 255, 255, 0.2)'};
       margin: 1.5rem 0;
     }
+    ${baseCardCss}
     ${safeCss}
   </style>
 </head>
@@ -159,7 +162,7 @@ const CardFace = forwardRef<CardFaceRef, CardFaceProps>(
   ${cleanHtml}
 </body>
 </html>`;
-    }, [cleanHtml, safeCss, theme]);
+    }, [cleanHtml, safeCss, baseCardCss, theme]);
 
     const updateHeight = useCallback(() => {
       const iframe = iframeRef.current;

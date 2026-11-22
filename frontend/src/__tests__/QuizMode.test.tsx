@@ -68,6 +68,23 @@ describe('Student quiz mode', () => {
     expect(review.mock.calls[0][2]).toMatchObject({ quiz: { response: 'pear', hint_used: false } });
   });
 
+  it('marks a nearly right spelling as close rather than correct', async () => {
+    vi.spyOn(studyApi, 'getNextCard').mockResolvedValue({
+      data: { ...baseCard, quiz: { type: 'typing', direction: 'meaning_to_word', meaning: 'quả táo', answer_length: 5,
+        audio: null, tts: null } },
+    } as any);
+    vi.spyOn(studyApi, 'checkQuiz').mockResolvedValue({
+      data: { type: 'typing', result: 'close', correct: true, expected: 'apple', rating: 2 },
+    } as any);
+    renderStudy();
+    const input = await screen.findByPlaceholderText(/type your answer|nhập câu trả lời/i);
+    fireEvent.change(input, { target: { value: 'appel' } });
+    fireEvent.submit(input.closest('form')!);
+    await screen.findByRole('button', { name: /continue|tiếp tục/i });
+    expect(input.classList.contains('is-close')).toBe(true);
+    expect(input.classList.contains('is-correct')).toBe(false);
+  });
+
   it('after a reload shows the first recorded answer instead of the retry', async () => {
     vi.spyOn(studyApi, 'getNextCard').mockResolvedValue({
       data: { ...baseCard, quiz: { type: 'typing', direction: 'meaning_to_word', meaning: 'quả táo', answer_length: 5,

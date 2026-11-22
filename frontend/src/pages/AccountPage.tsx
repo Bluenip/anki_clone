@@ -62,7 +62,7 @@ const AccountPage = () => {
     <div className="page-container account-page">
       <div className="account-header">
         <h1>{t('account.title')}</h1>
-        <button className="btn btn-ghost" style={{ color: 'var(--accent-cyan)' }} onClick={handleRemoveAccount}>
+        <button className="btn btn-ghost" style={{ color: 'var(--danger-text)' }} onClick={handleRemoveAccount}>
           {t('account.remove')}
         </button>
       </div>

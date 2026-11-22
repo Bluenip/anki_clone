@@ -128,6 +128,7 @@
 
 .quiz-input:focus { border-color: var(--accent-cyan); }
 .quiz-input.is-correct { border-color: var(--success); }
+.quiz-input.is-close { border-color: var(--warning); }
 .quiz-input.is-wrong { border-color: var(--danger); text-decoration: line-through; }
 
 .quiz-form-actions {

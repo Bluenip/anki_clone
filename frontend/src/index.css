@@ -241,7 +241,7 @@ a:hover { color: var(--link-hover); }
 /* ─── Alerts ────────────────────────────────────── */
 .alert {
   padding: 0.75rem 1rem; border-radius: var(--radius-sm);
-  font-size: 0.9rem; margin-bottom: 1rem;
+  font-size: 0.9rem; margin-bottom: 1rem; white-space: pre-line; overflow-wrap: anywhere;
 }
 .alert-error { background: rgba(239,68,68,0.1); color: var(--danger-text); border: 1px solid rgba(239,68,68,0.3); }
 .alert-success { background: rgba(34,197,94,0.1); color: var(--success-text); border: 1px solid rgba(34,197,94,0.3); }
@@ -373,7 +373,7 @@ a:hover { color: var(--link-hover); }
 .stats-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 1rem; margin-top: 1.5rem; }
 .stat-card { text-align: center; padding: 1.25rem; }
 .stat-value { display: block; font-size: 2rem; font-weight: 700; }
-.stat-label { color: var(--text-muted); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; }
+.stat-label { color: var(--text-secondary); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; }
 
 /* ─── Deck Detail ───────────────────────────────── */
 .deck-detail { padding: 2rem; }
@@ -855,9 +855,8 @@ a:hover { color: var(--link-hover); }
   }
 }
 
-/* P2.1: Prevent horizontal overflow on mobile */
+/* P2.1: Prevent horizontal overflow on mobile (each container keeps its own max-width) */
 .page-container, .study-container, .options-container {
-  max-width: 100vw;
   overflow-x: hidden;
 }
 

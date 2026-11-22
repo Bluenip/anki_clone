@@ -159,7 +159,7 @@ export const StatsPage = () => {
           <div className="stats-grid">
             <div className="stat-card glass-card">
               <span className="stat-value">{stats.summary.reviews.toLocaleString(locale)}</span>
-              <span className="stat-label">{t('stats.reviews', { days: stats.summary.active_days })}</span>
+              <span className="stat-label">{t(stats.summary.active_days === 1 ? 'stats.reviews.one' : 'stats.reviews.other', { days: stats.summary.active_days })}</span>
             </div>
             <div className="stat-card glass-card">
               <span className="stat-value">{formatDuration(stats.summary.seconds)}</span>
