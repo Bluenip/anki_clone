@@ -185,7 +185,18 @@ def bulk_card_action(data: BulkCardAction, current_user: User = Depends(get_curr
                     if state.fsrs_json:
                         import json
                         memory = json.loads(state.fsrs_json)
-                        memory['card']['due'] = progress.next_review.isoformat()
+                        saved = memory['card']
+                        saved['due'] = progress.next_review.isoformat()
+                        # The card is now a review card; a learning-step FSRS state would disagree with it.
+                        if saved.get('state') != 2:
+                            from fsrs import Rating
+                            from scheduling import fsrs_scheduler
+                            if saved.get('stability') is None or saved.get('difficulty') is None:
+                                scheduler = fsrs_scheduler(config_for(card.deck))
+                                saved['stability'] = scheduler._initial_stability(rating=Rating.Good)
+                                saved['difficulty'] = scheduler._initial_difficulty(rating=Rating.Good, clamp=True)
+                            saved['state'], saved['step'] = 2, None
+                            saved['last_review'] = saved.get('last_review') or now.isoformat()
                         state.fsrs_json = json.dumps(memory)
             elif data.action == 'move':
                 card.deck_id = data.target_deck_id

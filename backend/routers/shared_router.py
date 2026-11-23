@@ -103,6 +103,44 @@ def share_deck(
     )
 
 
+def _media_copier(source_user_id, target_user_id):
+    """Rewrites /api/media links to the downloader's own media folder, copying each file once."""
+    import os, re, shutil
+    from urllib.parse import quote, unquote
+    from media_utils import get_media_dir
+    if source_user_id == target_user_id:
+        return lambda html: html or ''
+    source_dir, target_dir = get_media_dir(source_user_id), get_media_dir(target_user_id)
+    copied = {}
+
+    def copy_one(match):
+        name = match[2]
+        if int(match[1]) != source_user_id:
+            return match[0]
+        if name not in copied:
+            raw = unquote(name)
+            source = os.path.join(source_dir, raw)
+            if os.path.basename(raw) != raw or raw.startswith('.') or not os.path.isfile(source):
+                copied[name] = None
+            else:
+                os.makedirs(target_dir, exist_ok=True)
+                stem, ext = os.path.splitext(raw)
+                target_name, n = raw, 1
+                # Never overwrite a different file the downloader already has under that name.
+                while os.path.exists(os.path.join(target_dir, target_name)):
+                    with open(source, 'rb') as a, open(os.path.join(target_dir, target_name), 'rb') as b:
+                        if a.read() == b.read():
+                            break
+                    target_name, n = f'{stem}_{n}{ext}', n + 1
+                else:
+                    shutil.copy2(source, os.path.join(target_dir, target_name))
+                copied[name] = name if target_name == raw else quote(target_name)
+        target = copied[name]
+        return match[0] if target is None else f'/api/media/{target_user_id}/{target}'
+
+    return lambda html: re.sub(r'/api/media/(\d+)/([^"\'<>\s)]+)', copy_one, html or '')
+
+
 @router.post("/decks/{shared_id}/download")
 def download_shared_deck(
     shared_id: int, current_user: User = Depends(get_current_user),
@@ -118,8 +156,13 @@ def download_shared_deck(
     db.add(new_deck)
     db.flush()
     original_cards = db.query(Card).filter(Card.deck_id == sd.deck_id).all()
+    copy_media = _media_copier(original_deck.user_id, current_user.id)
+    from notes import attach_basic_note
     for card in original_cards:
-        db.add(Card(deck_id=new_deck.id, front=card.front, back=card.back))
+        copy = Card(deck_id=new_deck.id, front=copy_media(card.front), back=copy_media(card.back))
+        db.add(copy)
+        # A note of its own, so the copy can be edited and exported like any other card.
+        attach_basic_note(db, copy, current_user.id)
     sd.download_count += 1
     db.commit()
     return {"message": f"Deck '{sd.title}' added to your collection", "deck_id": new_deck.id}

@@ -154,7 +154,9 @@ def import_rows(cursor, collection, user_id, db, include_scheduling=True, whole_
         checkpoint('importing_notes', index, len(planned))
         if note is not None and duplicate_policy == 'skip':
             skipped += len(rows); continue
-        rendered = render_cards(models[str(raw['mid'])][0], values, user_id, tags)
+        target_deck = deck_map.get(str(rows[0]['did'])) if rows else None
+        rendered = render_cards(models[str(raw['mid'])][0], values, user_id, tags,
+                                deck_name=target_deck.name if target_deck else '')
         source_mod = datetime.fromtimestamp(raw.get('mod', 0), timezone.utc).replace(tzinfo=None)
         if note is None:
             note = Note(user_id=user_id, guid=raw['guid'], note_type=models[str(raw['mid'])][0],

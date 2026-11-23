@@ -75,6 +75,10 @@ def export_package(deck_id, user_id, include_scheduling, db):
         media = {}
         media_root = Path(get_media_dir(user_id)).resolve()
         def register(filename):
+            # A /api/media link is already decoded when its src is scanned again; decoding twice
+            # would turn a real "%41" in a file name into "A".
+            if filename in media:
+                return filename
             filename = unquote(filename)
             if Path(filename).name != filename or '\\' in filename or filename.startswith('.'):
                 raise ValueError('Unsafe media reference in export')

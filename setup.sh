@@ -19,8 +19,6 @@ export NVM_DIR="$HOME/.nvm"
 [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
 nvm use 20 2>/dev/null || true
 npm install
-npm install react-router-dom axios
-rm -f src/App.css src/assets/react.svg
 echo ">>> Frontend ready!"
 
 echo "=== Setup complete! ==="

@@ -147,7 +147,7 @@ def _media_path(user_id, word):
 
 def _save(path, data):
     os.makedirs(os.path.dirname(path), exist_ok=True)
-    tmp = path + '.part'
+    tmp = f'{path}.{os.getpid()}.{threading.get_ident()}.part'  # two threads may voice the same word
     with open(tmp, 'wb') as out:
         out.write(data)
     os.replace(tmp, path)
@@ -388,6 +388,9 @@ def run_job(job, session_factory, *, synth=None, sleep=time.sleep):
     job.state = 'running'
     try:
         deck = db.get(Deck, job.deck_id)
+        if deck is None:
+            job.state, job.error = 'failed', 'Deck was deleted'
+            return job
         if job.mode == 'fix':
             from models import Note
             note_ids = stale_notes(db, deck)

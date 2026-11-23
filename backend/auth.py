@@ -140,7 +140,7 @@ def get_current_user(
         if user_id_str is None or payload.get("purpose") is not None:
             raise credentials_exception
         user_id = int(user_id_str)
-    except JWTError:
+    except (JWTError, ValueError, TypeError):
         raise credentials_exception
 
     from account_lifecycle import account_lock

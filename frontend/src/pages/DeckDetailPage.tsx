@@ -9,10 +9,12 @@ import { usePrefs } from '../context/usePrefs';
 import BackButton from '../components/BackButton';
 import { sanitizeHtml } from '../utils/sanitize';
 import DeckAudioPanel from '../components/DeckAudioPanel';
+import NotFoundPage from './NotFoundPage';
 
 const DeckDetailPage = () => {
   const { id } = useParams<{ id: string }>();
   const [deck, setDeck] = useState<Deck | null>(null);
+  const [failedId, setFailedId] = useState<string | null>(null);  // the deck id that could not be loaded
   const [stats, setStats] = useState<StudyStats | null>(null);
   const [showShare, setShowShare] = useState(false);
   const [shareTitle, setShareTitle] = useState('');
@@ -23,7 +25,7 @@ const DeckDetailPage = () => {
 
   useEffect(() => {
     if (!id) return;
-    getDeck(+id).then(r => { setDeck(r.data); setShareTitle(r.data.name); });
+    getDeck(+id).then(r => { setDeck(r.data); setShareTitle(r.data.name); }).catch(() => setFailedId(id));
     getStudyStats(+id).then(r => setStats(r.data)).catch(() => {});
   }, [id]);
 
@@ -42,6 +44,7 @@ const DeckDetailPage = () => {
     } catch { /* */ }
   };
 
+  if (failedId === id) return <NotFoundPage />;
   if (!deck) return <div className="loading-screen"><div className="spinner" /></div>;
 
   const categories = ['Arabic','Chinese','English','French','German','Hebrew','Japanese','Korean','Russian','Spanish','Anatomy','Biology','Chemistry','Geography','History','Law','Math','Music','Pathology','Physics','Other'];

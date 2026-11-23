@@ -269,7 +269,9 @@ const DecksPage = () => {
     Promise.all([getNoteTypes(), getImportNoteTypes()]).then(([builtins, existing]) => {
       if (!active) return;
       const base = Array.isArray(builtins?.data) && builtins.data.length ? builtins.data : BUILTIN_NOTE_TYPES;
-      const saved = Array.isArray(existing?.data) ? existing.data.map(model => ({ ...model, kind: `custom:${model.id}`, name: `${model.name} (existing)` })) : [];
+      // /api/note-types already lists the saved note types; add only those it does not (e.g. when it failed).
+      const listed = new Set(base.map((nt: NoteType & { id?: number }) => nt.id).filter(Boolean));
+      const saved = Array.isArray(existing?.data) ? existing.data.filter(model => !listed.has(model.id)).map(model => ({ ...model, kind: `custom:${model.id}`, name: `${model.name} (existing)` })) : [];
       setNoteTypes([...base, ...saved]);
     }).catch(() => {});
     return () => { active = false; };

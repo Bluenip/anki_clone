@@ -82,19 +82,22 @@ const AddPage = () => {
   const currentType = noteTypes.find(t => t.kind === selectedKind) || noteTypes[0];
   const isImageOcclusion = selectedKind === 'image_occlusion' || currentType?.editor_kind === 'image_occlusion';
   const currentFields = currentType ? currentType.fields : [];
+  // A custom note type built on Cloze comes back as `model:{id}` with editor_kind 'cloze'.
+  const isCloze = selectedKind === 'cloze' || currentType?.editor_kind === 'cloze';
+  const clozeField = currentFields.includes('Text') ? 'Text' : currentFields[0] ?? 'Text';
 
   const handleInsertCloze = () => {
     const textarea = textRef.current;
     if (!textarea || pendingRef.current) return;
     const start = textarea.selectionStart ?? 0;
     const end = textarea.selectionEnd ?? 0;
-    const currentVal = fields['Text'] || '';
+    const currentVal = fields[clozeField] || '';
     const selected = currentVal.substring(start, end);
     const indexes = [...currentVal.matchAll(/\{\{c(\d+)::/g)].map(match => Number(match[1]));
     const ordinal = Math.max(0, ...indexes) + 1;
     const replacement = `{{c${ordinal}::${selected}}}`;
     const nextVal = currentVal.slice(0, start) + replacement + currentVal.slice(end);
-    setFields(prev => ({ ...prev, Text: nextVal }));
+    setFields(prev => ({ ...prev, [clozeField]: nextVal }));
     setTimeout(() => {
       textarea.focus();
       const cursor = selected ? start + replacement.length : start + replacement.indexOf('::') + 2;
@@ -107,6 +110,11 @@ const AddPage = () => {
       // Like Anki, Tab moves between fields instead of stepping through every formatting button.
       const editors = fieldEditors();
       const index = editors.indexOf(e.target as HTMLElement);
+      if (e.shiftKey && (e.target as HTMLElement).id === 'note-tags' && editors.length) {
+        e.preventDefault();
+        editors[editors.length - 1].focus();
+        return;
+      }
       if (index !== -1) {
         const next = e.shiftKey ? editors[index - 1] : editors[index + 1] ?? document.getElementById('note-tags');
         if (next) {
@@ -120,7 +128,7 @@ const AddPage = () => {
       e.preventDefault();
       handleSubmit();
     } else if (
-      selectedKind === 'cloze' &&
+      isCloze &&
       (e.ctrlKey || e.metaKey) &&
       e.shiftKey &&
       (e.key === 'C' || e.key === 'c')
@@ -147,7 +155,7 @@ const AddPage = () => {
       return;
     }
 
-    if (selectedKind === 'cloze' && !fields['Text']?.trim()) {
+    if (isCloze && !fields[clozeField]?.trim()) {
       setErrorMsg(t('add.textRequired'));
       return;
     }
@@ -248,7 +256,7 @@ const AddPage = () => {
           </div>
 
           </div>
-          {selectedKind === 'cloze' && (
+          {isCloze && (
             <p className="add-note-help">{t('add.clozeHint1')} <code>{'{{c1::answer}}'}</code>{t('add.clozeHint2')}</p>
           )}
 
@@ -262,7 +270,7 @@ const AddPage = () => {
                   <label htmlFor={`field-${fieldName}`}>
                     {fieldName} {isOptional && <span style={{ opacity: 0.6 }}>{t('add.optional')}</span>}
                   </label>
-                  {selectedKind === 'cloze' && fieldName === 'Text' && (
+                  {isCloze && fieldName === clozeField && (
                     <button
                       type="button"
                       className="btn btn-sm btn-ghost"
@@ -276,7 +284,7 @@ const AddPage = () => {
                 </div>
                 <textarea
                   id={`field-${fieldName}`}
-                  ref={fieldName === 'Text' ? textRef : undefined}
+                  ref={isCloze && fieldName === clozeField ? textRef : undefined}
                   value={fields[fieldName] || ''}
                   onChange={e => setFields(prev => ({ ...prev, [fieldName]: e.target.value }))}
                   rows={fieldName === 'Add Reverse' ? 2 : 4}

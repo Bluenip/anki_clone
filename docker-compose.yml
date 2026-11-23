@@ -42,7 +42,11 @@ services:
 
   # Kokoro text-to-speech (hexgrad/kokoro) on the NVIDIA GPU. Needs nvidia-container-toolkit on the host.
   tts:
-    build: ./tts
+    build:
+      context: ./tts
+      # The image works offline, so the chosen voice has to be downloaded at build time.
+      args:
+        - KOKORO_VOICE=${KOKORO_VOICE:-af_heart}
     container_name: anki-tts
     restart: unless-stopped
     environment:
