@@ -86,6 +86,9 @@ npm run build    # type-check and production build
    docker compose up -d --build
    ```
    The application will be accessible at `http://localhost:3456`.
+   nginx listens on `127.0.0.1` only, for a Cloudflare tunnel (or another reverse proxy) on the same host.
+   Set `ANKI_BIND=0.0.0.0` in `.env` to open port 3456 on every interface instead; behind no tunnel, a client
+   can then set its own `CF-Connecting-IP`, which weakens the per-address sign-in limits.
 
 ---
 
