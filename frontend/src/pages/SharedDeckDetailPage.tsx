@@ -5,17 +5,19 @@ import type { SharedDeck } from '../api/shared';
 import { useAuth } from '../context/useAuth';
 import { usePrefs } from '../context/usePrefs';
 import BackButton from '../components/BackButton';
+import NotFoundPage from './NotFoundPage';
 
 const SharedDeckDetailPage = () => {
   const { id } = useParams<{ id: string }>();
   const [deck, setDeck] = useState<SharedDeck | null>(null);
+  const [failedId, setFailedId] = useState<string | null>(null);  // the deck id that could not be loaded
   const [message, setMessage] = useState('');
   const [userRating, setUserRating] = useState(0);
   const { user } = useAuth();
   const navigate = useNavigate();
   const { t } = usePrefs();
 
-  useEffect(() => { if (id) getSharedDeck(+id).then(r => setDeck(r.data)); }, [id]);
+  useEffect(() => { if (id) { getSharedDeck(+id).then(r => setDeck(r.data)).catch(() => setFailedId(id)); } }, [id]);
 
   const handleDownload = async () => {
     if (!user) { navigate('/login'); return; }
@@ -32,6 +34,7 @@ const SharedDeckDetailPage = () => {
     catch { /* */ }
   };
 
+  if (failedId === id) return <NotFoundPage />;
   if (!deck) return <div className="loading-screen"><div className="spinner" /></div>;
 
   return (

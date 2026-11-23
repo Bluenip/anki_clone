@@ -1,29 +1,32 @@
 # AnkiWeb Clone 🌟
 
-A modern, full-stack web application clone of AnkiWeb, built with **React** (TypeScript/Vite) on the frontend and **FastAPI** (Python/SQLite) on the backend. This application features a robust Spaced Repetition (SM-2) algorithm, dynamic UI with glassmorphism design, and a full suite of flashcard management features.
+A full-stack flashcard web app modelled on AnkiWeb, built with **React** (TypeScript/Vite) on the frontend and **FastAPI** (Python/SQLite) on the backend.
 
 ## ✨ Features
 
-- **Spaced Repetition (SM-2):** Intelligent card scheduling based on your performance (Again, Hard, Good, Easy).
-- **Daily Limits:** Enforces daily limits for new cards and reviews to prevent burnout.
-- **Card Browser:** Search, view, and edit all your saved cards in a dual-pane master-detail interface.
-- **Shared Decks:** Download and import community-created flashcard decks (categorized by topics like Biology, Languages, etc.).
-- **User Accounts:** Full authentication system (Sign Up, Log In) with account management.
-- **Modern UI:** Responsive, dark-mode focused design with dynamic animations and glassmorphism elements.
+- **Scheduling:** SM-2 or FSRS (the pinned `fsrs` Python package), per-deck learning/relearning steps, daily limits, load balancing, early review and an FSRS parameter optimizer.
+- **Notes and note types:** Basic, reversed, cloze, image occlusion and custom note types with editable templates, LaTeX and MathJax-style math (rendered with KaTeX), sound and image fields.
+- **Study:** review with interval previews, undo, custom study / filtered decks, and an optional quiz mode (typing, listening, cloze, word scramble, multiple choice).
+- **Text-to-speech:** pronunciation audio from a Kokoro TTS service (NVIDIA GPU in Docker), filled per deck in the background.
+- **Card browser:** search with Anki-style syntax, edit notes, bulk actions (move, tag, flag, suspend, reschedule, delete) with undo.
+- **Import / export:** `.apkg` / `.colpkg` packages (resumable chunked upload, background jobs), text/CSV import, and deck export.
+- **Shared decks:** publish a deck and download others' decks, including their media.
+- **Accounts:** sign up, log in, password reset by email, backups/restore, statistics, English and Vietnamese UI.
 
 ## 🛠️ Technology Stack
 
-- **Frontend:** React, TypeScript, Vite, React Router, Context API, Vanilla CSS.
-- **Backend:** FastAPI, Python 3, SQLAlchemy, SQLite, JWT Authentication.
+- **Frontend:** React, TypeScript, Vite, React Router, Context API, Vanilla CSS, Vitest, Oxlint.
+- **Backend:** FastAPI, Python 3, SQLAlchemy, SQLite (WAL), JWT authentication, pytest.
+- **TTS:** Kokoro (`tts/`), a small FastAPI service.
 
 ---
 
 ## 🚀 Getting Started
 
-You can run this project locally on your machine. Ensure you have **Python 3.14** (backend CI also covers Python 3.12) and **Node.js (v20+)** installed.
+You need **Python 3.14** (the backend Docker image; 3.12+ works for local tests) and **Node.js 20+**.
 
 ### Option 1: Quick Start (Automated Script)
-If you are on Linux/macOS, you can use the provided setup script to install all dependencies; the script prints the commands to start both servers:
+On Linux/macOS the setup script installs all dependencies and prints the commands to start both servers (set `PYTHON=python3.13` to use another interpreter):
 ```bash
 bash setup.sh
 ```
@@ -31,9 +34,9 @@ bash setup.sh
 ### Option 2: Manual Setup
 
 #### 1. Start the Backend
-On this machine, copy the following block into a terminal (requires `python3.14`):
+From the project folder:
 ```bash
-cd /mnt/BACKUP/Code/anki_clone/backend
+cd backend
 python3.14 -m venv venv
 source venv/bin/activate
 python -m pip install --upgrade pip
@@ -42,10 +45,10 @@ python -m pip install -r requirements.txt
 # Run the backend server (FastAPI)
 python -m uvicorn main:app --reload --port 8000
 ```
-The backend API will be available at `http://localhost:8000`, with interactive API documentation at `http://localhost:8000/docs`. On another machine, adjust the `cd` path to your project location.
-*(Note: An SQLite database `anki.db` will be automatically generated upon startup).*
+The backend API will be available at `http://localhost:8000`, with interactive API documentation at `http://localhost:8000/docs`.
+*(Note: an SQLite database `anki.db` is created on startup.)*
 
-If you have a virtual environment created with an older Python version, deactivate it and rename it before running the block above; virtual environments should be recreated when changing Python versions. The existing environment on this machine has already been rebuilt for Python 3.14. Database and media files are kept separately from `venv`.
+Recreate the virtual environment when you change Python versions. Database and media files are kept separately from `venv`.
 
 To run backend regression tests:
 ```bash
@@ -54,27 +57,30 @@ python -m pytest -q
 ```
 
 #### 2. Start the Frontend
-Open a new, separate terminal and navigate to the `frontend` folder:
+Open a new, separate terminal:
 ```bash
 cd frontend
 npm install
 
-# Run the frontend development server
-npm run dev
+npm run dev      # development server
+npm test         # Vitest
+npm run lint     # Oxlint
+npm run build    # type-check and production build
 ```
+
 #### 3. Docker Compose Deployment
 
-To deploy using Docker Compose:
-
-1. Create a local `.env` file for Docker Compose with your `JWT_SECRET_KEY`. Keep it on the server; do not commit credentials.
-2. Generate a secure secret and set it in `.env`:
+1. Create a local `.env` file for Docker Compose. Keep it on the server; do not commit credentials.
+2. Generate a secure secret and set it as `JWT_SECRET_KEY` in `.env`:
    ```bash
-   # Generate secret:
    openssl rand -hex 32
    ```
-   Set `JWT_SECRET_KEY` in `.env`. Note that in production (`APP_ENV=production`), the backend will immediately fail to start if `JWT_SECRET_KEY` is omitted, default, or less than 32 characters.
-
-3. Start services:
+   Compose refuses to start without it, and in production (`APP_ENV=production`) the backend also fails to start if the key is a default or shorter than 32 characters.
+3. Optional settings in `.env`:
+   - `SMTP_USER` / `SMTP_PASSWORD` (and `SMTP_HOST`, `SMTP_PORT`, `APP_BASE_URL`) for password-reset emails.
+   - `KOKORO_VOICE` (default `af_heart`; English `a*`/`b*` voices). The TTS image downloads this voice at build time and then runs offline, so rebuild it after a change: `docker compose build tts`.
+   - The `tts` service needs an NVIDIA GPU and `nvidia-container-toolkit`. Without one, remove the `tts` service and set `TTS_URL=` (empty) to turn text-to-speech off.
+4. Start services:
    ```bash
    docker compose up -d --build
    ```

@@ -20,7 +20,6 @@ import re
 import unicodedata
 from urllib.parse import quote
 
-from sqlalchemy import func
 
 from models import Card, NoteCard, Note
 from note_rendering import text_only
@@ -321,12 +320,15 @@ def plan(db, card, raw_settings, progress, version):
     return {'type': kind, 'direction': direction, 'material': material, 'settings': settings}
 
 
-def _distractors(db, card, settings, target_key, target, count=3):
+def _distractors(db, card, settings, target_key, target, count=3, version=0):
     candidates = []
     seen = {normalize(target)}
     from models import NoteType
     types = {}
-    rows = _sibling_query(db, card).order_by(func.random()).limit(60).all()
+    # Seeded, so reloading the page shows the same options (otherwise the one option that never
+    # changes gives the answer away). Every sibling is a candidate, so fewer get filtered short.
+    rows = _sibling_query(db, card).order_by(Note.id).limit(2000).all()
+    random.Random(f'{card.id}:{version}:distractors').shuffle(rows)
     for fields_json, note_type_id in rows:
         if note_type_id not in types:
             types[note_type_id] = json.loads(db.get(NoteType, note_type_id).fields_json)
@@ -379,7 +381,7 @@ def build(db, card, raw_settings, progress, version, user_id):
     elif kind == 'multiple_choice':
         target_key = 'word' if planned['direction'] == 'meaning_to_word' else 'meaning'
         target = material[target_key]
-        options = _distractors(db, card, settings, target_key, target) + [target]
+        options = _distractors(db, card, settings, target_key, target, version=version) + [target]
         random.Random(f'{card.id}:{version}:options').shuffle(options)
         exercise['options'] = options
         if planned['direction'] == 'word_to_meaning':

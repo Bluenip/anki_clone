@@ -83,6 +83,7 @@ const BrowsePage = () => {
   const [editFront, setEditFront] = useState('');
   const [editBack, setEditBack] = useState('');
   const [saving, setSaving] = useState(false);
+  const [mediaBusy, setMediaBusy] = useState(0);  // a recording or upload is still running
   const [saveSuccess, setSaveSuccess] = useState(false);
 
   // Bulk action state
@@ -287,7 +288,7 @@ const BrowsePage = () => {
   };
 
   const handleSave = async () => {
-    if (!selectedCard || !sourceReady || loading || saving || actionPending) return;
+    if (!selectedCard || !sourceReady || loading || saving || actionPending || mediaBusy > 0) return;
 
     // Check if card is still in current displayed list
     const currentInList = cards.find((c) => c.id === selectedCard.id);
@@ -735,7 +736,8 @@ const BrowsePage = () => {
 
             {!sourceReady ? <p role="status">{t('browse.loadingNote')}</p> : sourceNote?.id != null ? Object.entries(noteFields).map(([name, value]) => (
               <NoteFieldEditor key={name} id={`note-edit-${name}`} label={name} value={value} disabled={saving || actionPending}
-                onChange={next => setNoteFields(prev => ({ ...prev, [name]: next }))} />
+                onChange={next => setNoteFields(prev => ({ ...prev, [name]: next }))}
+                onBusyChange={busy => setMediaBusy(n => Math.max(0, n + (busy ? 1 : -1)))} />
             )) : <>
             <div className="form-group">
               <label htmlFor="card-edit-front">{t('editor.front')}</label>
@@ -784,7 +786,7 @@ const BrowsePage = () => {
                 id="save-btn"
                 className="btn btn-primary"
                 onClick={handleSave}
-                disabled={saving || actionPending || loading || !sourceReady}
+                disabled={saving || actionPending || loading || !sourceReady || mediaBusy > 0}
               >
                 {saving ? t('common.saving') : t('browse.saveChanges')}
               </button>

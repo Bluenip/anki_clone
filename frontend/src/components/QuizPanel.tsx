@@ -115,7 +115,8 @@ export default function QuizPanel({ card, exercise, disabled, onReveal, onSubmit
         // Before answering, R replays the exercise audio (the card itself is still hidden).
         e.preventDefault();
         speak();
-      } else if (!result && isChoice && /^[1-9]$/.test(e.key) && exercise.options) {
+      } else if (!result && isChoice && /^[1-9]$/.test(e.key) && exercise.options
+        && tag !== 'INPUT' && tag !== 'TEXTAREA' && tag !== 'SELECT' && !(e.target as HTMLElement | null)?.isContentEditable) {
         const option = exercise.options[Number(e.key) - 1];
         if (option !== undefined) { e.preventDefault(); void submit(option); }
       }
@@ -220,7 +221,16 @@ export default function QuizPanel({ card, exercise, disabled, onReveal, onSubmit
             ref={inputRef}
             className={`quiz-input ${result ? (result.result === 'close' ? 'is-close' : result.correct ? 'is-correct' : 'is-wrong') : ''}`}
             value={response}
-            onChange={e => { setResponse(e.target.value); if (exercise.type === 'scramble' && !e.target.value) setUsed([]); }}
+            onChange={e => {
+              const next = e.target.value;
+              if (exercise.type === 'scramble') {
+                // Deleting letters frees the most recently used letter buttons again.
+                const removed = response.length - next.length;
+                if (!next) setUsed([]);
+                else if (removed > 0) setUsed(u => u.slice(0, Math.max(0, u.length - removed)));
+              }
+              setResponse(next);
+            }}
             readOnly={Boolean(result)}
             placeholder={t('quiz.placeholder')}
             autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false}

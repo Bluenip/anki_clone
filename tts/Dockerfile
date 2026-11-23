@@ -13,7 +13,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 ENV HF_HOME=/opt/hf
 COPY app.py .
-# Download the model, the default voice and spaCy's English model now, then run offline.
+# Download the model, the chosen voice and spaCy's English model now, then run offline.
+# Changing KOKORO_VOICE needs a rebuild (docker compose build tts).
+ARG KOKORO_VOICE=af_heart
+ENV KOKORO_VOICE=${KOKORO_VOICE}
 RUN KOKORO_WARMUP=1 KOKORO_DEVICE=cpu python app.py
 ENV HF_HUB_OFFLINE=1
 

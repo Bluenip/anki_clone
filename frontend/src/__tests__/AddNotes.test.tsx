@@ -51,6 +51,29 @@ describe('AddPage note creation', () => {
     expect(document.activeElement).toBe(front);
   });
 
+  it('Shift+Tab from tags goes back to the last field', async () => {
+    render(<MemoryRouter><AddPage /></MemoryRouter>);
+    await screen.findByLabelText(/^Front/i);
+    const tags = screen.getByLabelText(/Tags/i);
+    tags.focus();
+    fireEvent.keyDown(tags, { key: 'Tab', shiftKey: true });
+    expect(document.activeElement).toBe(screen.getByLabelText(/^Back/i));
+  });
+
+  it('a custom note type built on Cloze gets the cloze tools', async () => {
+    vi.mocked(notesApi.getNoteTypes).mockResolvedValue({ data: [
+      ...mockNoteTypes,
+      { kind: 'model:7', editor_kind: 'cloze', name: 'My Cloze', fields: ['Body', 'Notes'] },
+    ] } as any);
+    render(<MemoryRouter><AddPage /></MemoryRouter>);
+    fireEvent.change(await screen.findByLabelText(/Type/i), { target: { value: 'model:7' } });
+    const body = screen.getByLabelText(/^Body/i) as HTMLTextAreaElement;
+    fireEvent.change(body, { target: { value: 'Paris' } });
+    body.setSelectionRange(0, 5);
+    fireEvent.click(screen.getByRole('button', { name: /Cloze/i }));
+    await waitFor(() => expect(body.value).toBe('{{c1::Paris}}'));
+  });
+
   it('reversed creates ONE note payload and reports two cards', async () => {
     const mockCreatedNote: notesApi.Note = {
       id: 10,
