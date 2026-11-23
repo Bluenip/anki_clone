@@ -169,25 +169,28 @@ def apply(data: Apply, db: Session = Depends(get_db), user: User = Depends(get_c
     path = folder(user.id) / ('pending-' + identifier(data.token) + '.colpkg')
     if not path.is_file(): raise HTTPException(404, 'Preview upload not found')
     if datetime.now(timezone.utc).timestamp() - path.stat().st_mtime > 86400: raise HTTPException(409, 'Preview expired; upload again')
-    current = begin(db, user.id)
-    if fingerprint(current) != data.expected_revision:
-        db.rollback(); raise HTTPException(409, 'Collection changed since preview; preview again')
-    safety = create_backup(db, user.id, current)
-    # Keep newly imported IDs above the old global maximum so stale tabs cannot
-    # accidentally address a different card that reused a deleted SQLite ID.
-    floors = {model: db.query(func.max(model.id)).scalar() or 0 for model in TABLES if hasattr(model, 'id') and model.__table__.c.id.type.python_type is int}
-    def allocate(session, context, instances):
-        for obj in session.new:
-            model = type(obj)
-            if model in floors and obj.id is None: floors[model] += 1; obj.id = floors[model]
-    event.listen(db, 'before_flush', allocate)
-    try:
-        clear(db, user.id)
-        db.query(CollectionOperation).filter_by(user_id=user.id).delete(synchronize_session=False)
-        from apkg_handler import import_apkg
-        result = import_apkg(str(path), user.id, db, include_scheduling=True, whole_collection=True, media_conflicts='rename')
-        path.unlink(missing_ok=True)
-        return {'restored': True, 'safety_backup': safety, **result}
-    except BaseException:
-        db.rollback(); raise
-    finally: event.remove(db, 'before_flush', allocate)
+    from import_jobs import import_gate
+    # Restoring is an import too: never alongside another package import.
+    with import_gate():
+        current = begin(db, user.id)
+        if fingerprint(current) != data.expected_revision:
+            db.rollback(); raise HTTPException(409, 'Collection changed since preview; preview again')
+        safety = create_backup(db, user.id, current)
+        # Keep newly imported IDs above the old global maximum so stale tabs cannot
+        # accidentally address a different card that reused a deleted SQLite ID.
+        floors = {model: db.query(func.max(model.id)).scalar() or 0 for model in TABLES if hasattr(model, 'id') and model.__table__.c.id.type.python_type is int}
+        def allocate(session, context, instances):
+            for obj in session.new:
+                model = type(obj)
+                if model in floors and obj.id is None: floors[model] += 1; obj.id = floors[model]
+        event.listen(db, 'before_flush', allocate)
+        try:
+            clear(db, user.id)
+            db.query(CollectionOperation).filter_by(user_id=user.id).delete(synchronize_session=False)
+            from apkg_handler import import_apkg
+            result = import_apkg(str(path), user.id, db, include_scheduling=True, whole_collection=True, media_conflicts='rename')
+            path.unlink(missing_ok=True)
+            return {'restored': True, 'safety_backup': safety, **result}
+        except BaseException:
+            db.rollback(); raise
+        finally: event.remove(db, 'before_flush', allocate)

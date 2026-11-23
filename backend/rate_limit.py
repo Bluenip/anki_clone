@@ -1,23 +1,24 @@
 """In-memory sliding-window rate limits for the sign-in endpoints.
 
 The API runs as one uvicorn process, so a per-process table is enough; counters reset on restart.
+The table holds at most MAX_KEYS keys: the least recently used ones are forgotten first.
 """
 import threading
 import time
-from collections import defaultdict, deque
+from collections import OrderedDict, deque
 
 from fastapi import HTTPException, Request
 
-_hits = defaultdict(deque)
+MAX_KEYS = 20000
+_hits = OrderedDict()  # (scope, key) -> deque of hit times, least recently used first
 _lock = threading.Lock()
 
 
 def client_ip(request: Request) -> str:
-    # Requests reach the API through Cloudflare's tunnel and nginx, which set these headers.
-    for header in ('cf-connecting-ip', 'x-real-ip'):
-        value = request.headers.get(header, '').strip()
-        if value:
-            return value
+    """nginx sets X-Real-IP (the tunnel's CF-Connecting-IP only when the request came through it)."""
+    value = request.headers.get('x-real-ip', '').strip()
+    if value:
+        return value
     return request.client.host if request.client else 'unknown'
 
 
@@ -25,16 +26,19 @@ def check(scope: str, key: str, limit: int, window: float) -> None:
     """Raises 429 once `key` used `scope` more than `limit` times within `window` seconds."""
     now = time.monotonic()
     with _lock:
-        hits = _hits[(scope, key)]
+        hits = _hits.get((scope, key))
+        if hits is None:
+            hits = _hits[(scope, key)] = deque()
+        else:
+            _hits.move_to_end((scope, key))
         while hits and now - hits[0] > window:
             hits.popleft()
         if len(hits) >= limit:
             retry = max(1, int(window - (now - hits[0])) + 1)
             raise HTTPException(429, 'Too many attempts. Try again later.', headers={'Retry-After': str(retry)})
         hits.append(now)
-        if len(_hits) > 50000:  # forget idle keys so the table cannot grow without bound
-            for stale in [k for k, v in _hits.items() if not v or now - v[-1] > 3600]:
-                del _hits[stale]
+        while len(_hits) > MAX_KEYS:
+            _hits.popitem(last=False)
 
 
 def reset() -> None:

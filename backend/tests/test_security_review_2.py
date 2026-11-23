@@ -47,12 +47,14 @@ def test_media_rejects_path_tricks(client, auth_headers_a, user_a):
         assert client.get(f'/api/media/{user_a.id}/{name}', headers=auth_headers_a).status_code == 404
 
 
-def test_old_shared_copies_may_still_load_the_sharers_media(client, auth_headers_a, auth_headers_b, user_a, user_b, db_session):
-    name = _media_file(user_a, 'legacy.png')
-    deck = client.post('/api/decks', headers=auth_headers_b, json={'name': 'Old copy'}).json()
-    db_session.add(Card(deck_id=deck['id'], front=f'<img src="/api/media/{user_a.id}/{name}">', back='x'))
-    db_session.commit()
-    assert client.get(f'/api/media/{user_a.id}/{name}', headers=auth_headers_b).status_code == 200
+def test_a_card_pointing_at_another_accounts_media_does_not_unlock_it(client, auth_headers_b, user_a, db_session):
+    """Card text is written by the viewer, so it must never grant access to someone else's files."""
+    name = _media_file(user_a, 'diary.png')
+    deck = client.post('/api/decks', headers=auth_headers_b, json={'name': 'Probe'}).json()
+    made = client.post(f"/api/decks/{deck['id']}/cards", headers=auth_headers_b,
+                       json={'front': f'<img src="/api/media/{user_a.id}/{name}">', 'back': 'x'})
+    assert made.status_code == 201, made.text
+    assert client.get(f'/api/media/{user_a.id}/{name}', headers=auth_headers_b).status_code == 404
 
 
 # ----------------------------------------------------------------------------- sessions and rate limits
@@ -241,3 +243,66 @@ def test_each_account_rates_a_shared_deck_once(client, auth_headers_a, auth_head
     db_session.expire_all()
     deck = db_session.get(SharedDeck, shared_id)
     assert deck.rating_count == 1 and deck.rating == 1.0
+
+
+def test_repeated_votes_cannot_push_the_average_out_of_range(client, auth_headers_a, auth_headers_b, db_session):
+    shared_id = _share(client, auth_headers_a, 'Drift', [('basic', {'Front': 'a', 'Back': 'b'})])
+    client.post(f'/api/shared/decks/{shared_id}/rate', headers=auth_headers_a, json={'rating': 5})
+    for _ in range(50):
+        for value in (1, 2, 1, 5):
+            client.post(f'/api/shared/decks/{shared_id}/rate', headers=auth_headers_b, json={'rating': value})
+    db_session.expire_all()
+    deck = db_session.get(SharedDeck, shared_id)
+    assert deck.rating_count == 2 and deck.rating == 5.0  # (5 + 5) / 2
+    for bad in (1.06, 0, 6):
+        assert client.post(f'/api/shared/decks/{shared_id}/rate', headers=auth_headers_b, json={'rating': bad}).status_code == 422
+
+
+# ----------------------------------------------------------------------------- rate limiter
+
+def test_only_nginx_decides_the_client_address(client, user_a):
+    # A forged CF-Connecting-IP header no longer gives each attempt a fresh address.
+    codes = [client.post('/api/auth/register', headers={'CF-Connecting-IP': f'10.0.0.{i}', 'X-Real-IP': '203.0.113.9'},
+                         json={'email': f'new{i}@example.com', 'username': f'n{i}', 'password': 'password-123'}).status_code
+             for i in range(11)]
+    assert codes[:10] == [200] * 10 and codes[10] == 429
+
+
+def test_the_rate_table_stays_bounded():
+    import rate_limit
+    for i in range(rate_limit.MAX_KEYS + 500):
+        rate_limit.check('test', f'k{i}', 5, 3600)
+    assert len(rate_limit._hits) == rate_limit.MAX_KEYS
+
+
+# ----------------------------------------------------------------------------- background audio (2)
+
+def test_a_job_that_voiced_a_word_first_still_keeps_a_later_edit(client, auth_headers_a, db_session, monkeypatch):
+    import tts_service
+    from test_tts import make_deck
+    monkeypatch.setenv('TTS_URL', 'http://tts.invalid')
+    deck_id = make_deck(client, auth_headers_a, [('lake', 'cái hồ')])
+    card = db_session.query(Card).filter_by(deck_id=deck_id).one()
+    note = card.note_link.note
+    assert json.loads(note.fields_json)[1] == 'cái hồ'  # loaded before the edit
+    db_session.execute(text('UPDATE notes SET fields_json = :f WHERE id = :id'),
+                       {'f': json.dumps(['lake', 'hồ nước']), 'id': note.id})
+    tts_service._save(tts_service._media_path(note.user_id, 'lake'), b'RIFF....WAVEfmt ')  # the job voiced it already
+    assert tts_service.attach(db_session, card) == 'added'
+    db_session.commit()
+    assert json.loads(db_session.get(Note, note.id).fields_json)[1].startswith('hồ nước [sound:tts-')
+
+
+def test_a_note_deleted_while_speaking_is_skipped(client, auth_headers_a, db_session, monkeypatch):
+    import tts_service
+    from test_tts import make_deck
+    monkeypatch.setenv('TTS_URL', 'http://tts.invalid')
+    deck_id = make_deck(client, auth_headers_a, [('cloud', 'đám mây')])
+    card = db_session.query(Card).filter_by(deck_id=deck_id).one()
+    note_id = card.note_link.note_id
+
+    def synth_then_delete(text_to_say):
+        db_session.execute(text('DELETE FROM note_cards WHERE note_id = :id'), {'id': note_id})
+        db_session.execute(text('DELETE FROM notes WHERE id = :id'), {'id': note_id})
+        return b'RIFF....WAVEfmt '
+    assert tts_service.attach(db_session, card, synth=synth_then_delete) == 'skipped'
