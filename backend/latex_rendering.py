@@ -26,7 +26,19 @@ def tectonic_root():
     return Path(os.getenv('ANKI_TECTONIC_DIR', str(Path.home() / '.cache' / 'anki-latex')))
 
 
+def remote_url():
+    """Docker runs the compiler in its own locked-down `latex` container (see latex_service.py):
+    the sandbox needs user namespaces, which the main backend container should not be given."""
+    return os.getenv('LATEX_URL', '').rstrip('/')
+
+
 def available():
+    if remote_url():
+        return True
+    return local_available()
+
+
+def local_available():
     runtime = all(shutil.which(name) for name in ('latex', 'dvipng')) or ((tectonic_root() / 'tectonic').is_file() and (tectonic_root() / 'cache').is_dir() and shutil.which('pdftoppm'))
     return bool(runtime and all(shutil.which(name) for name in ('bwrap', 'prlimit')))
 
@@ -38,7 +50,37 @@ def settings(model):
 
 
 def compile_png(body, header, footer):
-    if not available():
+    if remote_url():
+        return _compile_remote(body, header, footer)
+    return compile_local(body, header, footer)
+
+
+def _compile_remote(body, header, footer, timeout=60):
+    import urllib.error
+    import urllib.request
+    if len(body) + len(header) + len(footer) > 100000:
+        raise ValueError('LaTeX source exceeds 100000 characters')
+    request = urllib.request.Request(remote_url() + '/compile', method='POST',
+                                     data=json.dumps({'body': body, 'header': header, 'footer': footer}).encode(),
+                                     headers={'Content-Type': 'application/json'})
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            data = response.read(20 * 1024 * 1024 + 1)
+    except urllib.error.HTTPError as exc:
+        try:
+            detail = json.loads(exc.read(10000)).get('detail')
+        except ValueError:
+            detail = None
+        raise ValueError(detail if isinstance(detail, str) else f'LaTeX renderer failed ({exc.code})') from None
+    except (urllib.error.URLError, OSError) as exc:
+        raise ValueError(f'LaTeX renderer is unavailable: {exc}') from None
+    if not data.startswith(b'\x89PNG') or len(data) > 20 * 1024 * 1024:
+        raise ValueError('LaTeX produced no usable image')
+    return data
+
+
+def compile_local(body, header, footer):
+    if not local_available():
         raise ValueError('LaTeX generation requires latex, dvipng, bubblewrap and prlimit on the server. Use the provided Docker image or install these tools.')
     if len(body) + len(header) + len(footer) > 100000:
         raise ValueError('LaTeX source exceeds 100000 characters')

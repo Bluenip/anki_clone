@@ -86,6 +86,7 @@ def review(db, card, user_id, data, now=None, *, commit=True, filtered_session_i
     from early_review import intervals as early_intervals
     early = early_intervals(progress,config,now) if filtered_session_id is not None else None
     previous_ease = progress.ease_factor
+    previous_lapses = progress.lapse_count or 0
     if config.fsrs:
         initialization=apply_fsrs(db,card,progress,data.rating,config,now,duration)
     else:
@@ -103,7 +104,11 @@ def review(db, card, user_id, data, now=None, *, commit=True, filtered_session_i
             from load_balancing import choose_interval
             progress.interval_days = choose_interval(db, card, progress, config, now, progress.interval_days)
             progress.next_review=next_study_day(now,config,progress.interval_days)
-    if progress.lapse_count>=config.leech_threshold:
+    # Like Anki: only a lapse in this review can make a leech, at the threshold and every half
+    # threshold after it. A good answer to an unsuspended leech must not suspend it again.
+    threshold=max(1,config.leech_threshold)
+    if (progress.lapse_count>previous_lapses and progress.lapse_count>=threshold
+            and (progress.lapse_count-threshold)%max(1,threshold//2)==0):
         progress.is_leech=True
         if config.leech_action in ('Suspend Card','suspend'):progress.is_suspended=True
         if card.note_link:

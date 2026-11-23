@@ -88,6 +88,17 @@ describe('StatsPage UI and safeguards', () => {
     expect(screen.getByText(/timezone and next-day start hour/i)).toBeDefined();
   });
 
+  it('labels past review days with past dates, not future ones', async () => {
+    render(<StatsPage />);
+    await waitFor(() => expect(screen.queryByRole('status', { name: /loading statistics/i })).toBeNull());
+    const yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1);
+    const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1);
+    const label = (d: Date) => d.toLocaleDateString('en', { day: 'numeric', month: 'numeric' });
+    const historyText = Array.from(document.querySelectorAll('td')).map(cell => cell.textContent);
+    expect(historyText).toContain(label(yesterday));
+    expect(historyText).not.toContain(label(tomorrow));
+  });
+
   it('handles missing data with N/A instead of false 0%', async () => {
     const emptyStats: statsApi.StatsResponse = {
       ...mockStats,

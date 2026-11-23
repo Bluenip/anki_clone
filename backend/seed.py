@@ -2,35 +2,34 @@ from database import SessionLocal
 from models import User, Deck, Card, SharedDeck
 from auth import get_password_hash
 
-def seed():
-    db = SessionLocal()
-    
-    # 1. Create the user's account
-    user = db.query(User).filter(User.email == "thaituan23062007@gmail.com").first()
-    if not user:
-        user = User(
-            email="thaituan23062007@gmail.com",
-            username="Thai Tuan",
-            password_hash=get_password_hash("qH6PknXGZvzviaa")
-        )
+def _account(db, email, username, password):
+    user = db.query(User).filter(User.email == email).first()
+    if user is None:
+        user = User(email=email, username=username, password_hash=get_password_hash(password))
         db.add(user)
         db.commit()
         db.refresh(user)
         print("Created user:", user.email)
-    else:
-        print("User already exists:", user.email)
-    
-    # 2. Create a dummy admin for shared decks
-    admin = db.query(User).filter(User.email == "admin@ankiclone.com").first()
-    if not admin:
-        admin = User(
-            email="admin@ankiclone.com",
-            username="AnkiClone Admin",
-            password_hash=get_password_hash("admin123")
-        )
-        db.add(admin)
-        db.commit()
-        db.refresh(admin)
+    return user
+
+
+def seed():
+    """Development data only. Credentials come from the environment and are never stored in the repository:
+
+    SEED_EMAIL / SEED_PASSWORD   optional personal account
+    SEED_ADMIN_PASSWORD          owner of the sample shared deck (random when unset)
+    """
+    import os
+    import secrets
+    db = SessionLocal()
+
+    # 1. Optional personal account
+    if os.getenv("SEED_EMAIL") and os.getenv("SEED_PASSWORD"):
+        _account(db, os.environ["SEED_EMAIL"], os.getenv("SEED_USERNAME", "Dev User"), os.environ["SEED_PASSWORD"])
+
+    # 2. Owner of the sample shared deck; without SEED_ADMIN_PASSWORD nobody can sign in to it
+    admin = _account(db, "admin@ankiclone.com", "AnkiClone Admin",
+                     os.getenv("SEED_ADMIN_PASSWORD") or secrets.token_urlsafe(32))
 
     # 3. Add a sample shared deck so the 'Shared Decks' page isn't empty
     shared = db.query(SharedDeck).first()

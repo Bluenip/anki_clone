@@ -148,15 +148,21 @@ def media_for_web(value, user_id):
     return re.sub(r'((?:src|href)=["\'])([^"\']+)(["\'])', source, value, flags=re.I)
 
 
-def css_for_web(value, user_id):
-    """Resolve portable CSS assets without changing the stored note type."""
+def css_for_web(value, user_id, strict=False):
+    """Resolve portable CSS assets without changing the stored note type.
+
+    strict (the note type editor) rejects a url() that is not a flat media file name. Otherwise, as
+    when studying an imported deck, such a url() is dropped so one odd rule cannot break the card.
+    """
     from urllib.parse import quote
     def source(match):
         filename = match[1].strip().strip('"\'')
         if re.match(r'^(?:[a-z][a-z0-9+.-]*:|/|#)', filename, re.I):
             return match[0]
         if not filename or '/' in filename or '\\' in filename or filename in ('.', '..'):
-            raise ValueError('Unsupported relative CSS media path')
+            if strict:
+                raise ValueError('Unsupported relative CSS media path')
+            return 'url("")'
         return 'url("/api/media/' + str(user_id) + '/' + quote(filename, safe='') + '")'
     return re.sub(r'url\(\s*([^)]*?)\s*\)', source, value or '', flags=re.I)
 

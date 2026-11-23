@@ -53,7 +53,13 @@ def tokenize(source):
             tokens.append(Token(kind, value))
         if len(tokens) > 128:
             raise ValueError('Too many search terms (maximum 128 tokens)')
+        # Each regex term scans the whole collection in a separate process.
+        if sum(1 for token in tokens if re.match(r'^-?(?:re:|[^:]+:re:)', token.value, re.I)) > MAX_REGEX_TERMS:
+            raise ValueError(f'Too many regular expressions in one search (maximum {MAX_REGEX_TERMS})')
     return tokens
+
+
+MAX_REGEX_TERMS = 4
 
 
 def pattern(value):

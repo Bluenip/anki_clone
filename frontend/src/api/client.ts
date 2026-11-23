@@ -53,11 +53,15 @@ client.interceptors.response.use(
       // Don't redirect on auth endpoints — let the login/register page handle the error
       const url = error.config?.url || '';
       const isAuthEndpoint = url.includes('/auth/login') || url.includes('/auth/register');
-      
+      // A stale token on a public page (e.g. a reset link opened later) must not send the visitor away;
+      // AuthProvider drops it after /auth/me fails, and protected pages redirect on their own.
+      const isSessionCheck = /\/api\/auth\/me$/.test(url);
+      const publicPage = /^\/(?:login|register|forgot-password|reset-password|intro|shared)(?:\/|$)/.test(window.location.pathname);
+
       if (!isAuthEndpoint) {
         localStorage.removeItem('token');
         localStorage.removeItem('user');
-        window.location.href = '/login';
+        if (!isSessionCheck && !publicPage) window.location.href = '/login';
       }
     }
     return Promise.reject(error);

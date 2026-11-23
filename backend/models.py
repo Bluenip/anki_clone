@@ -25,6 +25,7 @@ class User(Base):
     filtered_sessions = relationship('FilteredSession', cascade='all, delete-orphan')
     option_presets = relationship("OptionPreset", cascade="all, delete-orphan")
     quiz_attempts = relationship("QuizAttempt", cascade="all, delete-orphan")
+    shared_deck_ratings = relationship("SharedDeckRating", cascade="all, delete-orphan")
 
 
 class Deck(Base):
@@ -256,6 +257,17 @@ class SharedDeck(Base):
 
     deck = relationship("Deck", back_populates="shared_info")
     owner = relationship("User", foreign_keys=[user_id])
+    ratings = relationship("SharedDeckRating", cascade="all, delete-orphan")
+
+
+class SharedDeckRating(Base):
+    """One vote per account and shared deck; voting again replaces the earlier vote."""
+    __tablename__ = "shared_deck_ratings"
+    __table_args__ = (UniqueConstraint("shared_deck_id", "user_id", name="uq_shared_deck_rating"),)
+    id = Column(Integer, primary_key=True)
+    shared_deck_id = Column(Integer, ForeignKey("shared_decks.id"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    rating = Column(Float, nullable=False)
 
 
 class FilteredSession(Base):

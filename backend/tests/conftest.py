@@ -35,7 +35,7 @@ from sqlalchemy.pool import StaticPool
 from database import Base, get_db
 
 from main import app
-from auth import get_password_hash, create_access_token
+from auth import get_password_hash, create_access_token, create_session_token
 from models import User
 
 
@@ -158,14 +158,31 @@ def user_b(db_session):
 
 @pytest.fixture
 def auth_headers_a(user_a):
-    token = create_access_token({"sub": str(user_a.id)})
+    token = create_session_token(user_a)
     return {"Authorization": f"Bearer {token}"}
 
 
 @pytest.fixture
 def auth_headers_b(user_b):
-    token = create_access_token({"sub": str(user_b.id)})
+    token = create_session_token(user_b)
     return {"Authorization": f"Bearer {token}"}
+
+
+@pytest.fixture(autouse=True)
+def fresh_rate_limits():
+    import rate_limit
+    rate_limit.reset()
+    yield
+    rate_limit.reset()
+
+
+@pytest.fixture(autouse=True)
+def forget_deleted_accounts():
+    """Tests reuse user ids after a rollback; production never does (see allocate_user_id)."""
+    import account_lifecycle
+    account_lifecycle._deleted.clear()
+    yield
+    account_lifecycle._deleted.clear()
 
 
 @pytest.fixture(autouse=True)

@@ -109,6 +109,51 @@ def create_reset_token(user: User) -> str:
     )
 
 
+def create_session_token(user: User) -> str:
+    """Access token bound to the current password: changing or resetting it signs every session out."""
+    return create_access_token({"sub": str(user.id), "pwf": _password_fingerprint(user.password_hash)})
+
+
+MEDIA_COOKIE = "anki_media"
+
+
+def set_media_cookie(response, request: Request, user: User) -> None:
+    """<img>/<audio> cannot send the Authorization header, so media is authorised by this cookie.
+
+    HttpOnly, limited to /api/media and same-site; it carries a media-only token, never the session token.
+    """
+    token = create_access_token({"sub": str(user.id), "purpose": "media", "pwf": _password_fingerprint(user.password_hash)})
+    secure = request.url.scheme == "https" or request.headers.get("x-forwarded-proto") == "https"
+    response.set_cookie(MEDIA_COOKIE, token, max_age=ACCESS_TOKEN_EXPIRE_HOURS * 3600, path="/api/media",
+                        httponly=True, samesite="strict", secure=secure)
+
+
+def clear_media_cookie(response) -> None:
+    response.delete_cookie(MEDIA_COOKIE, path="/api/media")
+
+
+def media_user_id(request: Request, db: Session) -> Optional[int]:
+    """The signed-in user for a media request, from the media cookie or a Bearer token."""
+    header = request.headers.get("authorization", "")
+    candidates = [(request.cookies.get(MEDIA_COOKIE), "media")]
+    if header.lower().startswith("bearer "):
+        candidates.append((header[7:], None))
+    for token, purpose in candidates:
+        if not token:
+            continue
+        try:
+            payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+            user_id = int(payload.get("sub"))
+        except (JWTError, TypeError, ValueError):
+            continue
+        if payload.get("purpose") != purpose:
+            continue
+        user = db.get(User, user_id)
+        if user is not None and payload.get("pwf") == _password_fingerprint(user.password_hash):
+            return user.id
+    return None
+
+
 def verify_reset_token(token: str, db: Session) -> Optional[User]:
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
@@ -147,6 +192,6 @@ def get_current_user(
     deleting = request.method == 'DELETE' and request.scope['route'].path == '/api/auth/me'
     with account_lock(user_id, deleting=deleting):
         user = db.query(User).filter(User.id == user_id).first()
-        if user is None:
+        if user is None or payload.get("pwf") != _password_fingerprint(user.password_hash):
             raise credentials_exception
         yield user

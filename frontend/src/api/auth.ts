@@ -8,6 +8,8 @@ export const registerApi = (email: string, username: string, password: string) =
 
 export const getMeApi = () => client.get('/api/auth/me');
 
+export const logoutApi = () => client.post('/api/auth/logout');
+
 export const forgotPasswordApi = (email: string) =>
   client.post('/api/auth/forgot-password', { email });
 

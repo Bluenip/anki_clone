@@ -124,6 +124,20 @@ def restore_backup(backup_id: str, guard: Guard, db: Session = Depends(get_db), 
     return {'restored': True, 'safety_backup': safety}
 
 
+def _preview_counts(path, user_id):
+    from apkg_handler import import_apkg
+    with tempfile.TemporaryDirectory(prefix='anki_restore_preview_') as directory:
+        engine = create_engine('sqlite:///' + str(Path(directory) / 'validation.db'))
+        try:
+            Base.metadata.create_all(engine)
+            with Session(engine) as staging:
+                staging.add(User(id=user_id, email='preview@example.invalid', username='Preview', password_hash='not-a-login')); staging.commit()
+                import_apkg(str(path), user_id, staging, include_scheduling=True, whole_collection=True, media_directory=str(Path(directory) / 'media'))
+                data = capture(staging, user_id)
+                return {key: len(data[key]) for key in ('decks', 'notes', 'cards', 'review_logs')}
+        finally: engine.dispose()
+
+
 @router.post('/preview')
 async def preview(file: UploadFile = File(...), db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     if not file.filename or not file.filename.lower().endswith('.colpkg'):
@@ -136,17 +150,11 @@ async def preview(file: UploadFile = File(...), db: Session = Depends(get_db), u
                 size += len(chunk)
                 if size > 50 * 1024 * 1024: raise HTTPException(413, 'Collection package exceeds 50 MB')
                 output.write(chunk)
-        from apkg_handler import import_apkg
-        with tempfile.TemporaryDirectory(prefix='anki_restore_preview_') as directory:
-            engine = create_engine('sqlite:///' + str(Path(directory) / 'validation.db'))
-            try:
-                Base.metadata.create_all(engine)
-                with Session(engine) as staging:
-                    staging.add(User(id=user.id, email='preview@example.invalid', username='Preview', password_hash='not-a-login')); staging.commit()
-                    import_apkg(str(path), user.id, staging, include_scheduling=True, whole_collection=True, media_directory=str(Path(directory) / 'media'))
-                    data = capture(staging, user.id)
-                    counts = {key: len(data[key]) for key in ('decks', 'notes', 'cards', 'review_logs')}
-            finally: engine.dispose()
+        from starlette.concurrency import run_in_threadpool
+        from import_jobs import import_gate
+        # Parsing a collection is slow, blocking work: keep it off the event loop, one import at a time.
+        with import_gate():
+            counts = await run_in_threadpool(_preview_counts, path, user.id)
         return {'token': key, 'expected_revision': fingerprint(capture(db, user.id)), 'incoming': counts,
                 'message': 'Applying replaces this account collection. A complete backup is saved first.'}
     except BaseException as exc:

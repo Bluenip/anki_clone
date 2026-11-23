@@ -47,6 +47,17 @@ def account_lock(user_id, *, deleting=False):
         stream.close()
 
 
+_deleted = set()  # ids are never reused, so this only grows with deletions in this process
+
+
+def mark_deleted(user_id):
+    _deleted.add(int(user_id))
+
+
+def is_deleted(user_id):
+    return int(user_id) in _deleted
+
+
 def remove_tree(path):
     """Do not follow a symlink or silently ignore a failed deletion."""
     path = Path(path)
