@@ -96,7 +96,10 @@ services:
     container_name: anki-frontend
     restart: unless-stopped
     ports:
-      - "3456:80"
+      # Only the Cloudflare tunnel on this host should reach nginx; a client connecting directly could
+      # otherwise pass a forged CF-Connecting-IP through the Docker gateway. Use ANKI_BIND=0.0.0.0 to
+      # open it on every interface (for example on a machine without the tunnel).
+      - "${ANKI_BIND:-127.0.0.1}:3456:80"
     depends_on:
       backend:
         condition: service_healthy

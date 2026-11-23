@@ -18,15 +18,15 @@ def media_file(owner_id: int, filename: str, request: Request, db: Session = Dep
     viewer = media_user_id(request, db)
     if viewer is None:
         raise HTTPException(401, 'Sign in to load media')
+    # Only the owner. Card text is written by the viewer, so it can never grant access to another
+    # account's files; shared decks copy their media into the downloader's folder instead.
+    if viewer != owner_id:
+        raise HTTPException(404, 'Not found')
     if os.path.basename(filename) != filename or filename.startswith('.') or '\\' in filename:
         raise HTTPException(404, 'Not found')
     folder = os.path.realpath(get_media_dir(owner_id))
     path = os.path.realpath(os.path.join(folder, filename))
     if os.path.dirname(path) != folder or not os.path.isfile(path):
-        raise HTTPException(404, 'Not found')
-    # Only the owner. Card text is written by the viewer, so it can never grant access to another
-    # account's files; shared decks copy their media into the downloader's folder instead.
-    if viewer != owner_id:
         raise HTTPException(404, 'Not found')
     media_type = mimetypes.guess_type(filename)[0] or 'application/octet-stream'
     return FileResponse(path, media_type=media_type, headers={
