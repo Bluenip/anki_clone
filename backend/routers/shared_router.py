@@ -265,22 +265,21 @@ def rate_shared_deck(
     shared_id: int, data: RateDeckRequest,
     current_user: User = Depends(get_current_user), db: Session = Depends(get_db),
 ):
-    if not (1.0 <= data.rating <= 5.0):
-        raise HTTPException(status_code=400, detail="Rating must be between 1 and 5")
     sd = db.query(SharedDeck).filter(SharedDeck.id == shared_id).first()
     if not sd:
         raise HTTPException(status_code=404, detail="Shared deck not found")
+    from sqlalchemy import func
     from models import SharedDeckRating
-    # One vote per account: rating again replaces the earlier vote instead of adding another.
+    # One vote per account: rating again replaces the earlier vote. The shown average is always
+    # recomputed from the votes, so it cannot drift outside 1–5.
     vote = db.query(SharedDeckRating).filter_by(shared_deck_id=sd.id, user_id=current_user.id).first()
-    total = (sd.rating or 0) * (sd.rating_count or 0)
     if vote is None:
         db.add(SharedDeckRating(shared_deck_id=sd.id, user_id=current_user.id, rating=data.rating))
-        total += data.rating
-        sd.rating_count = (sd.rating_count or 0) + 1
     else:
-        total += data.rating - vote.rating
         vote.rating = data.rating
-    sd.rating = round(total / sd.rating_count, 1)
+    db.flush()
+    count, average = db.query(func.count(SharedDeckRating.id), func.avg(SharedDeckRating.rating)).filter(
+        SharedDeckRating.shared_deck_id == sd.id).one()
+    sd.rating_count, sd.rating = count, round(float(average or 0), 1)
     db.commit()
     return {"message": "Rating submitted", "new_rating": sd.rating}

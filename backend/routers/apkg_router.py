@@ -56,7 +56,8 @@ async def import_apkg_file(
 
     try:
         with os.fdopen(fd, "wb") as f:
-            check_space(tempfile.gettempdir(), file.size or 0)
+            # Without a declared size, make sure the largest allowed package would fit.
+            check_space(tempfile.gettempdir(), file.size or MAX_APKG_UPLOAD_SIZE)
             while True:
                 chunk = await file.read(CHUNK_SIZE)
                 if not chunk:

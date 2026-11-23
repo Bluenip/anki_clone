@@ -167,6 +167,16 @@ def _write(path, data):
     os.replace(tmp, path)
 
 
+def _reload(db, note):
+    """Re-reads `note` from the database; False when it was deleted meanwhile."""
+    from sqlalchemy.exc import InvalidRequestError
+    try:
+        db.refresh(note)
+    except InvalidRequestError:
+        return False
+    return True
+
+
 def attach(db, card, *, synth=None):
     """Attach audio to one card's note. Uses an existing file, else ``synth(text)``.
 
@@ -184,13 +194,14 @@ def attach(db, card, *, synth=None):
         if synth is None:
             return 'skipped'
         _save(path, synth(speech_text(word)))
-        # Speaking can take a while; build on the note as it is now, not as it was before,
-        # so an edit saved in the meantime is not overwritten.
-        db.refresh(note)
-        target = note_target(card)
-        if target is None or target[1] != word:
-            return 'skipped'
-        note, word, field_name = target
+    # Build on the note as it is now, not as it was loaded: speaking can take a while, and a job
+    # may have voiced this word before attaching it, so an edit saved meanwhile must not be lost.
+    if not _reload(db, note):
+        return 'skipped'  # deleted meanwhile
+    target = note_target(card)
+    if target is None or target[1] != word:
+        return 'skipped'
+    note, word, field_name = target
     filename = os.path.basename(path)
     names = json.loads(note.note_type.fields_json)
     fields = dict(zip(names, json.loads(note.fields_json)))
@@ -255,7 +266,8 @@ def refresh_note_audio(db, note, *, synth=None):
     path = _media_path(note.user_id, word)
     if not os.path.exists(path):
         _save(path, (synth or synthesize)(speech_text(word)))
-        db.refresh(note)  # an edit may have been saved while the audio was made
+        if not _reload(db, note):  # an edit (or deletion) may have been saved while the audio was made
+            return 'unchanged'
         found = stale_audio(note)
         if found is None or found[0] != word:
             return 'unchanged'

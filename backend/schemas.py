@@ -560,4 +560,4 @@ class SharedDeckDetailResponse(SharedDeckResponse):
 
 
 class RateDeckRequest(BaseModel):
-    rating: float  # 1.0 - 5.0
+    rating: int = Field(ge=1, le=5)  # whole stars
