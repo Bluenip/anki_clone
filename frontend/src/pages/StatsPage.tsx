@@ -267,7 +267,7 @@ export const StatsPage = () => {
                   <tbody>
                     {stats.history.filter((h) => h.reviews > 0).map((h) => (
                       <tr key={h.day}>
-                        <td>{h.day === 0 ? t('stats.today') : dateOf(-h.day)}</td>
+                        <td>{h.day === 0 ? t('stats.today') : dateOf(h.day)}</td>
                         <td style={{ textAlign: 'right', fontWeight: 600 }}>{h.reviews}</td>
                         <td style={{ textAlign: 'right' }}>{formatDuration(h.seconds)}</td>
                         <td>

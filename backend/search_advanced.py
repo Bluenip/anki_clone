@@ -2,6 +2,7 @@
 import json
 import subprocess
 import sys
+import threading
 from pathlib import Path
 from datetime import timedelta
 from sqlalchemy import and_, or_, false, func, select
@@ -37,6 +38,9 @@ def dates(db, uid, key, argument, now):
     return or_(*terms) if terms else false()
 
 
+_regex_slots = threading.BoundedSemaphore(2)
+
+
 def regex_predicate(db, uid, expression, field=None):
     if not expression or len(expression) > 512:
         raise ValueError('Regular expressions must contain 1 to 512 characters')
@@ -52,10 +56,15 @@ def regex_predicate(db, uid, expression, field=None):
         size += sum(len(v) for v in texts)
         if size > 20000000: raise ValueError('Regex source exceeds 20 million characters; use a smaller collection')
         items.append((card.id, texts))
+    # At most two regex workers run at once across all users; others wait briefly, then give up.
+    if not _regex_slots.acquire(timeout=5):
+        raise ValueError('Regex search is busy; try again shortly')
     try:
         run = subprocess.run([sys.executable, str(Path(__file__).with_name('search_regex_worker.py'))], input=json.dumps({'pattern': expression, 'items': items}), text=True, capture_output=True, timeout=3)
     except subprocess.TimeoutExpired:
         raise ValueError('Regex exceeded its time limit; simplify the expression') from None
+    finally:
+        _regex_slots.release()
     if run.returncode: raise ValueError('Invalid or too expensive regular expression')
     ids = json.loads(run.stdout)
     values = func.json_each(json.dumps(ids)).table_valued('value')

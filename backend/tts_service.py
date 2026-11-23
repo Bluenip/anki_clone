@@ -146,6 +146,20 @@ def _media_path(user_id, word):
 
 
 def _save(path, data):
+    from account_lifecycle import account_lock, is_deleted
+    from fastapi import HTTPException
+    user_id = int(os.path.basename(os.path.dirname(path)))
+    try:
+        with account_lock(user_id):
+            # A deleted account's folder must not come back from a thread that was still speaking.
+            if is_deleted(user_id):
+                raise TTSError('other', 'account deleted')
+            _write(path, data)
+    except HTTPException:  # the account is being deleted right now
+        raise TTSError('other', 'account deleted') from None
+
+
+def _write(path, data):
     os.makedirs(os.path.dirname(path), exist_ok=True)
     tmp = f'{path}.{os.getpid()}.{threading.get_ident()}.part'  # two threads may voice the same word
     with open(tmp, 'wb') as out:
@@ -170,6 +184,13 @@ def attach(db, card, *, synth=None):
         if synth is None:
             return 'skipped'
         _save(path, synth(speech_text(word)))
+        # Speaking can take a while; build on the note as it is now, not as it was before,
+        # so an edit saved in the meantime is not overwritten.
+        db.refresh(note)
+        target = note_target(card)
+        if target is None or target[1] != word:
+            return 'skipped'
+        note, word, field_name = target
     filename = os.path.basename(path)
     names = json.loads(note.note_type.fields_json)
     fields = dict(zip(names, json.loads(note.fields_json)))
@@ -234,6 +255,11 @@ def refresh_note_audio(db, note, *, synth=None):
     path = _media_path(note.user_id, word)
     if not os.path.exists(path):
         _save(path, (synth or synthesize)(speech_text(word)))
+        db.refresh(note)  # an edit may have been saved while the audio was made
+        found = stale_audio(note)
+        if found is None or found[0] != word:
+            return 'unchanged'
+        word, stale = found
     fresh = f'[sound:{os.path.basename(path)}]'
     names = json.loads(note.note_type.fields_json)
     fields = dict(zip(names, json.loads(note.fields_json)))
@@ -486,6 +512,14 @@ def run_job(job, session_factory, *, synth=None, sleep=time.sleep):
         return job
     finally:
         db.close()
+
+
+def cancel_jobs(user_id):
+    """Stops every TTS job of an account (used when the account is deleted)."""
+    with _jobs_lock:
+        for (owner, _), job in _jobs.items():
+            if owner == user_id:
+                job.cancel.set()
 
 
 def start_job(user_id, deck_id, session_factory, mode='fill'):

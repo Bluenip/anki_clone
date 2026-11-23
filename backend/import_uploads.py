@@ -68,6 +68,24 @@ def cleanup():
             continue
 
 
+MAX_ACTIVE_UPLOADS = 3
+
+
+def _active_uploads(user_id):
+    """(bytes still expected by every unfinished upload, this user's unfinished upload count)."""
+    pending = own = 0
+    for path in root().iterdir():
+        try:
+            data = json.loads((path / 'status.json').read_text())
+        except (OSError, ValueError):
+            continue
+        if data.get('status') != 'uploading':
+            continue
+        pending += max(0, int(data.get('size', 0)) - int(data.get('received', 0)))
+        own += data.get('user_id') == user_id
+    return pending, own
+
+
 def create(user_id, filename, size, options):
     if not filename.lower().endswith(('.apkg', '.colpkg')):
         raise HTTPException(400, 'Only .apkg and .colpkg files are supported')
@@ -81,7 +99,11 @@ def create(user_id, filename, size, options):
     options['include_scheduling'] = options['include_scheduling'] or whole_collection
     root().mkdir(parents=True, exist_ok=True, mode=0o700)
     cleanup()
-    check_space(root(), size)
+    pending, own = _active_uploads(user_id)
+    if own >= MAX_ACTIVE_UPLOADS:
+        raise HTTPException(429, f'Finish or cancel your other uploads first (at most {MAX_ACTIVE_UPLOADS} at a time)')
+    # Room for this package and for the bytes other unfinished uploads may still send.
+    check_space(root(), size + pending)
     path = root() / uuid.uuid4().hex
     path.mkdir(mode=0o700)
     (path / 'package.apkg').touch(mode=0o600)

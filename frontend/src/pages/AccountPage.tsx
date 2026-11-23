@@ -7,7 +7,7 @@ import { usePrefs } from '../context/usePrefs';
 const AccountPage = () => {
   const [activeTab, setActiveTab] = useState<'email' | 'password'>('email');
   const navigate = useNavigate();
-  const { logout } = useAuth();
+  const { logout, login, user } = useAuth();
   const { t } = usePrefs();
   
   // Email Form State
@@ -37,7 +37,9 @@ const AccountPage = () => {
     e.preventDefault();
     setError(''); setSuccess('');
     try {
-      await client.put('/api/auth/me/password', { current_password: currentPassword, new_password: newPassword });
+      const res = await client.put('/api/auth/me/password', { current_password: currentPassword, new_password: newPassword });
+      // Changing the password signs out every session; this one continues with the new token.
+      if (res.data?.access_token && user) login(res.data.access_token, user);
       setSuccess(t('account.passwordUpdated'));
       setCurrentPassword('');
       setNewPassword('');

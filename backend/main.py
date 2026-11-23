@@ -5,7 +5,6 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from database import Base, SessionLocal, engine
@@ -82,14 +81,15 @@ async def add_security_headers(request: Request, call_next):
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "SAMEORIGIN"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
-    response.headers["Content-Security-Policy"] = (
+    # setdefault: a response with a stricter policy of its own (media files) keeps it.
+    response.headers.setdefault("Content-Security-Policy", (
         "default-src 'self'; "
         "script-src 'self'; "
         "style-src 'self' 'unsafe-inline'; "
         "img-src 'self' data: blob: https:; "
         "media-src 'self' data: blob: https:; "
         "connect-src 'self' http: https: ws: wss:;"
-    )
+    ))
     return response
 
 
@@ -128,7 +128,8 @@ for module in (
 ):
     app.include_router(module.router)
 
-app.mount("/api/media", StaticFiles(directory=MEDIA_DIR), name="media")
+from routers import media_files_router
+app.include_router(media_files_router.router)  # media needs a signed-in owner
 
 
 @app.get("/")

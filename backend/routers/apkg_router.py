@@ -104,6 +104,23 @@ async def import_apkg_file(
                 pass
 
 
+def _build_export(deck_id, user_id, include_scheduling, modern, db):
+    zip_path = export_apkg(deck_id, user_id, include_scheduling, db)
+    if not modern:
+        return zip_path
+    from package_codec import modernize_package
+    fd, modern_path = tempfile.mkstemp(suffix='.apkg')
+    os.close(fd)
+    try:
+        modernize_package(zip_path, modern_path, include_scheduling)
+    except BaseException:
+        os.remove(modern_path)
+        raise
+    finally:
+        os.remove(zip_path)
+    return modern_path
+
+
 @router.get("/export/{deck_id}")
 async def export_apkg_file(
     deck_id: int,
@@ -118,19 +135,9 @@ async def export_apkg_file(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Deck not found")
 
     try:
-        zip_path = export_apkg(deck_id, user.id, include_scheduling, db)
-        if modern:
-            from package_codec import modernize_package
-            fd, modern_path = tempfile.mkstemp(suffix='.apkg')
-            os.close(fd)
-            try:
-                modernize_package(zip_path, modern_path, include_scheduling)
-            except BaseException:
-                os.remove(modern_path)
-                raise
-            finally:
-                os.remove(zip_path)
-            zip_path = modern_path
+        from starlette.concurrency import run_in_threadpool
+        # Building a package is slow, blocking work: keep it off the event loop.
+        zip_path = await run_in_threadpool(_build_export, deck_id, user.id, include_scheduling, modern, db)
         # Sanitize download filename for safe header
         safe_name = "".join(c for c in deck.name if c.isalnum() or c in (" ", "-", "_")).strip() or "deck"
         return FileResponse(

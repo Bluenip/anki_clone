@@ -26,11 +26,14 @@ services:
       # Pronunciation audio for vocabulary comes from the Kokoro service below (unset TTS_URL to disable).
       - TTS_URL=${TTS_URL:-http://tts:8880}
       - KOKORO_VOICE=${KOKORO_VOICE:-af_heart}
+      # [latex] is compiled in the separate `latex` container below.
+      - LATEX_URL=http://latex:8890
     volumes:
       - anki-data:/data
       - anki-media:/app/media
     depends_on:
       - tts
+      - latex
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/', timeout=4)"]
       interval: 10s
@@ -39,6 +42,30 @@ services:
       start_period: 30s
     networks:
       - anki-network
+      - latex-network
+
+  # LaTeX compiler. Its bubblewrap sandbox needs user namespaces, which Docker's default AppArmor,
+  # seccomp and /proc masking block, so only this container runs without them: it holds no data or volumes,
+  # runs as nobody on a read-only file system, has no capabilities and no route to the internet.
+  latex:
+    build: ./backend
+    container_name: anki-latex
+    restart: unless-stopped
+    command: ["uvicorn", "latex_service:app", "--host", "0.0.0.0", "--port", "8890"]
+    user: "65534:65534"
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - apparmor=unconfined
+      - seccomp=unconfined
+      - systempaths=unconfined  # lets bubblewrap mount its own /proc
+    environment:
+      - HOME=/tmp
+    networks:
+      - latex-network
 
   # Kokoro text-to-speech (hexgrad/kokoro) on the NVIDIA GPU. Needs nvidia-container-toolkit on the host.
   tts:
@@ -85,3 +112,6 @@ volumes:
 networks:
   anki-network:
     driver: bridge
+  latex-network:
+    driver: bridge
+    internal: true

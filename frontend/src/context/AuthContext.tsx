@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import type { ReactNode } from 'react';
-import { getMeApi } from '../api/auth';
+import { getMeApi, logoutApi } from '../api/auth';
 import { AuthContext } from './auth-context-base';
 import type { User } from './auth-context-base';
 
@@ -39,6 +39,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const logout = () => {
+    void logoutApi().catch(() => undefined);  // clears the media cookie
     localStorage.removeItem('token');
     setToken(null);
     setUser(null);

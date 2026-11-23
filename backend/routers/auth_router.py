@@ -1,19 +1,22 @@
 import os
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, Response, status
 from sqlalchemy.orm import Session
 
 from database import get_db
 from models import User
 from schemas import UserRegister, UserLogin, UserResponse, TokenResponse, EmailUpdate, PasswordUpdate, ForgotPasswordRequest, ResetPasswordRequest
-from auth import verify_password, get_password_hash, create_access_token, get_current_user, create_reset_token, verify_reset_token
+from auth import (verify_password, get_password_hash, create_session_token, get_current_user, create_reset_token,
+                  verify_reset_token, set_media_cookie, clear_media_cookie)
+import rate_limit
 from mailer import send_reset_email
 
 router = APIRouter(prefix="/api/auth", tags=["Authentication"])
 
 
 @router.post("/register", response_model=TokenResponse)
-def register(data: UserRegister, db: Session = Depends(get_db)):
+def register(data: UserRegister, request: Request, response: Response, db: Session = Depends(get_db)):
+    rate_limit.check('register', rate_limit.client_ip(request), 10, 3600)
     # Check if email already exists
     existing = db.query(User).filter(User.email == data.email).first()
     if existing:
@@ -33,7 +36,8 @@ def register(data: UserRegister, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(user)
 
-    token = create_access_token(data={"sub": str(user.id)})
+    token = create_session_token(user)
+    set_media_cookie(response, request, user)
     return TokenResponse(
         access_token=token,
         user=UserResponse.model_validate(user),
@@ -41,7 +45,10 @@ def register(data: UserRegister, db: Session = Depends(get_db)):
 
 
 @router.post("/login", response_model=TokenResponse)
-def login(data: UserLogin, db: Session = Depends(get_db)):
+def login(data: UserLogin, request: Request, response: Response, db: Session = Depends(get_db)):
+    # Per address and per account, so neither one client nor many can keep guessing a password.
+    rate_limit.check('login-ip', rate_limit.client_ip(request), 20, 300)
+    rate_limit.check('login-account', data.email.strip().lower(), 10, 900)
     user = db.query(User).filter(User.email == data.email).first()
     if not user or not verify_password(data.password, user.password_hash):
         raise HTTPException(
@@ -49,7 +56,8 @@ def login(data: UserLogin, db: Session = Depends(get_db)):
             detail="Invalid email or password",
         )
 
-    token = create_access_token(data={"sub": str(user.id)})
+    token = create_session_token(user)
+    set_media_cookie(response, request, user)
     return TokenResponse(
         access_token=token,
         user=UserResponse.model_validate(user),
@@ -57,12 +65,21 @@ def login(data: UserLogin, db: Session = Depends(get_db)):
 
 
 @router.get("/me", response_model=UserResponse)
-def get_me(current_user: User = Depends(get_current_user)):
+def get_me(request: Request, response: Response, current_user: User = Depends(get_current_user)):
+    set_media_cookie(response, request, current_user)  # refreshed on every app load
     return current_user
 
 
+@router.post("/logout")
+def logout(response: Response):
+    clear_media_cookie(response)
+    return {"detail": "Signed out"}
+
+
 @router.post("/forgot-password")
-def forgot_password(data: ForgotPasswordRequest, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+def forgot_password(data: ForgotPasswordRequest, request: Request, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+    rate_limit.check('forgot-ip', rate_limit.client_ip(request), 10, 3600)
+    rate_limit.check('forgot-account', data.email.strip().lower(), 3, 3600)
     user = db.query(User).filter(User.email == data.email).first()
     if user:
         base_url = os.environ.get("APP_BASE_URL", "http://localhost:3456").rstrip("/")
@@ -110,6 +127,8 @@ def update_email(
 @router.put("/me/password")
 def update_password(
     data: PasswordUpdate,
+    request: Request,
+    response: Response,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -118,11 +137,14 @@ def update_password(
         
     current_user.password_hash = get_password_hash(data.new_password)
     db.commit()
-    return {"detail": "Password updated successfully"}
+    # Every other session is now signed out; this one continues with a fresh token.
+    set_media_cookie(response, request, current_user)
+    return {"detail": "Password updated successfully", "access_token": create_session_token(current_user)}
 
 
 @router.delete("/me")
 def delete_account(
+    response: Response,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -138,4 +160,9 @@ def delete_account(
     except Exception:
         db.rollback()
         raise
+    from account_lifecycle import mark_deleted
+    import tts_service
+    mark_deleted(user_id)  # background audio threads must not recreate the media folder
+    tts_service.cancel_jobs(user_id)
+    clear_media_cookie(response)
     return {"detail": "Account deleted successfully"}

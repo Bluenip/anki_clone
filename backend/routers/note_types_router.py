@@ -49,7 +49,7 @@ class Definition(BaseModel):
                 for match in TOKEN.finditer(body):
                     if not match[1].strip().startswith(('#', '^', '/')):
                         render_template(match[0], {f: 'sample' for f in self.fields}, context=context)
-        css_for_web(self.css, 0)
+        css_for_web(self.css, 0, strict=True)
         if any('{{cloze:' in t.qfmt for t in self.templates) and len(self.templates) != 1:
             raise ValueError('Cloze note types require one template')
         return self

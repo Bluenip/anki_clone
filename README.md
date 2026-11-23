@@ -80,6 +80,7 @@ npm run build    # type-check and production build
    - `SMTP_USER` / `SMTP_PASSWORD` (and `SMTP_HOST`, `SMTP_PORT`, `APP_BASE_URL`) for password-reset emails.
    - `KOKORO_VOICE` (default `af_heart`; English `a*`/`b*` voices). The TTS image downloads this voice at build time and then runs offline, so rebuild it after a change: `docker compose build tts`.
    - The `tts` service needs an NVIDIA GPU and `nvidia-container-toolkit`. Without one, remove the `tts` service and set `TTS_URL=` (empty) to turn text-to-speech off.
+   - The `latex` service compiles `[latex]` blocks. It is the only container that runs without Docker's AppArmor/seccomp profiles (its sandbox needs user namespaces), so it has no volumes, no capabilities, a read-only file system, runs as `nobody` and sits on an internal network without internet access.
 4. Start services:
    ```bash
    docker compose up -d --build
@@ -87,6 +88,16 @@ npm run build    # type-check and production build
    The application will be accessible at `http://localhost:3456`.
 
 ---
+
+## 🔒 Accounts and media
+
+- Media files (`/api/media/{user}/{file}`) are served only to their signed-in owner. Images and audio
+  load with an HttpOnly, same-site cookie that holds a media-only token; it is set at sign-in and on
+  every app load (`/api/auth/me`) and cleared on sign-out.
+- Sessions are bound to the password: changing or resetting it signs every other session out.
+- Sign-in, registration and password-reset emails are rate limited per address and per account.
+- `backend/seed.py` creates development data only. It reads `SEED_EMAIL`/`SEED_PASSWORD` (optional
+  personal account) and `SEED_ADMIN_PASSWORD` from the environment; no credentials live in the repository.
 
 ## 📝 License
 This is an educational prototype and portfolio project.
@@ -98,9 +109,11 @@ PWA installation and background synchronization have been removed. Existing
 browsers automatically retire the previous service worker and its local caches.
 
 Full `[latex]...[/latex]` rendering uses `latex`, `dvipng`, `bubblewrap` and
-`prlimit`. These are installed in the backend Docker image. Linux must allow
-unprivileged user namespaces for the isolated compiler; rendering fails closed
-if the sandbox cannot start. Only TeX runtime directories and temporary output
+`prlimit`. These are installed in the backend Docker image. With Docker Compose the
+backend sends TeX source to the separate `latex` container (`LATEX_URL`), because
+the sandbox needs user namespaces that the main backend container is not given.
+Running the backend directly, Linux must allow unprivileged user namespaces for
+the isolated compiler; rendering fails closed if the sandbox cannot start. Only TeX runtime directories and temporary output
 are mounted, with no network or access to application data. Header/footer can
 be edited under Note types. Install additional trusted TeX packages in the
 server image as needed. Existing native Anki LaTeX images work without a compiler;
